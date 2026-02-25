@@ -1,0 +1,13 @@
+PyQt6
+
+PyQt6
+pyautogui 
+keyboard
+keyring
+mouse
+
+PyQt6
+requests
+Markdown
+
+PyQt6-WebEngine
