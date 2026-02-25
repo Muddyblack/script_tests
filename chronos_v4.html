@@ -5,16 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chronos Hub Ultra - React Edition</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & Friends -->
-    <script src="react.min.js"></script>
-    <script src="react-dom.min.js"></script>
-    <script src="babel.min.js"></script>
+    <script crossorigin src="react.min.js"></script>
+    <script crossorigin src="react-dom.min.js"></script>
     <!-- Framer Motion -->
     <script src="framer-motion.js"></script>
     <!-- Lucide Icons -->
     <script src="lucide.min.js"></script>
+    <!-- Babel -->
+    <script src="babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="tailwind.min.js"></script>
     <!-- QWebChannel -->
     <script src="qwebchannel.js"></script>
 
@@ -76,9 +77,39 @@
     </style>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback, useRef } = React;
-        const { motion, AnimatePresence } = FramerMotion;
-        const Lucide = window.lucide || {};
+        const { useState, useEffect, useCallback, useRef, createElement } = React;
+        const { motion, AnimatePresence } = window.Motion || { motion: 'div', AnimatePresence: ({children}) => children };
+        
+        // Simple icon component using dangerouslySetInnerHTML to avoid React DOM conflicts
+        const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+            const [svg, setSvg] = useState('');
+            
+            useEffect(() => {
+                if (window.lucide) {
+                    const iconName = name.charAt(0).toLowerCase() + name.slice(1).replace(/([A-Z])/g, '-$1').toLowerCase();
+                    const iconData = window.lucide.icons[iconName];
+                    if (iconData) {
+                        const svgString = window.lucide.createElement(iconData).outerHTML;
+                        setSvg(svgString);
+                    }
+                }
+            }, [name]);
+            
+            if (!svg) {
+                return createElement('span', { className, ...props }, '•');
+            }
+            
+            return createElement('span', { 
+                className, 
+                dangerouslySetInnerHTML: { __html: svg },
+                ...props 
+            });
+        };
+        
+        // Create Lucide proxy for easy icon access
+        const Lucide = new Proxy({}, {
+            get: (_, iconName) => (props) => createElement(Icon, { name: iconName, ...props })
+        });
 
         // Tailwind Config
         if (typeof tailwind !== 'undefined') {

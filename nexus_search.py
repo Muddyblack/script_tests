@@ -68,198 +68,6 @@ def run_workspace(ws_id):
     subprocess.Popen([sys.executable, script_path, "--launch", str(ws_id)])
 
 
-# --- CUSTOM HOTKEY RECORDER DIALOG ---
-class HotkeyCapturer(QWidget):
-    """A sleek, premium dialog that captures actual keystrokes for hotkey binding."""
-
-    finished = pyqtSignal(str)
-
-    def __init__(self, current_hk):
-        super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(500, 320)
-
-        # Main Layout
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        self.bg = QFrame()
-        self.bg.setObjectName("capturer_bg")
-        self.bg.setStyleSheet("""
-            QFrame#capturer_bg { 
-                background: #01121F; 
-                border: 2px solid #0EADCF; 
-                border-radius: 24px; 
-            }
-            QLabel { color: #CBE0F0; font-family: 'Inter', 'Segoe UI', sans-serif; }
-        """)
-
-        # Cyan Glow Effect
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(40)
-        shadow.setColor(QColor(14, 173, 207, 100))
-        shadow.setYOffset(0)
-        self.bg.setGraphicsEffect(shadow)
-
-        bg_layout = QVBoxLayout(self.bg)
-        bg_layout.setContentsMargins(35, 35, 35, 35)
-        bg_layout.setSpacing(20)
-
-        # Header with Icon
-        header_layout = QHBoxLayout()
-        icon_lbl = QLabel("⌨️")
-        icon_lbl.setStyleSheet("font-size: 38px;")
-
-        title_vbox = QVBoxLayout()
-        title = QLabel("REBIND SUMMON KEY")
-        title.setStyleSheet(
-            "font-weight: 900; font-size: 14px; color: #0EADCF; letter-spacing: 2px;"
-        )
-
-        subtitle = QLabel("INPUT NEW TACTICAL COMBINATION")
-        subtitle.setStyleSheet("color: #8295A0; font-size: 11px; font-weight: 600;")
-
-        title_vbox.addWidget(title)
-        title_vbox.addWidget(subtitle)
-        header_layout.addWidget(icon_lbl)
-        header_layout.addLayout(title_vbox)
-        header_layout.addStretch()
-        bg_layout.addLayout(header_layout)
-
-        # Key Display Area
-        self.key_box = QFrame()
-        self.key_box.setStyleSheet("""
-            QFrame {
-                background: rgba(14, 173, 207, 0.05);
-                border: 1px solid rgba(14, 173, 207, 0.3);
-                border-radius: 12px;
-            }
-        """)
-        kb_layout = QVBoxLayout(self.key_box)
-
-        self.keys_lbl = QLabel(current_hk.upper())
-        self.keys_lbl.setStyleSheet(
-            "font-size: 42px; font-weight: 900; color: #CBE0F0; letter-spacing: 3px;"
-        )
-        self.keys_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        kb_layout.addWidget(self.keys_lbl)
-
-        bg_layout.addStretch()
-        bg_layout.addWidget(self.key_box)
-        bg_layout.addStretch()
-
-        # Restart Notice
-        self.restart_lbl = QLabel("CORE RESTART INITIATED ON SAVE")
-        self.restart_lbl.setStyleSheet("""
-            color: #55FFCC; 
-            font-size: 10px; 
-            font-weight: 800; 
-            background: rgba(85, 255, 204, 0.08);
-            padding: 6px 12px;
-            border-radius: 6px;
-            letter-spacing: 1px;
-        """)
-        self.restart_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bg_layout.addWidget(self.restart_lbl)
-
-        # Footer Hints
-        hint = QLabel(
-            "Press <font color='#0EADCF'>ENTER</font> to Commit • <font color='#D95C5C'>ESC</font> to Abort"
-        )
-        hint.setStyleSheet(
-            "color: rgba(203, 224, 240, 0.4); font-size: 11px; font-weight: 600;"
-        )
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bg_layout.addWidget(hint)
-
-        layout.addWidget(self.bg)
-        self.current_parts = []
-
-    def keyPressEvent(self, event):
-        key = event.key()
-        mod = event.modifiers()
-
-        if key == Qt.Key.Key_Escape:
-            self.finished.emit("")
-            self.close()
-            return
-        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if self.current_parts:
-                self.finished.emit("+".join(self.current_parts))
-                self.close()
-            return
-
-        # Map modifiers
-        parts = []
-        if mod & Qt.KeyboardModifier.ControlModifier:
-            parts.append("ctrl")
-        if mod & Qt.KeyboardModifier.ShiftModifier:
-            parts.append("shift")
-        if mod & Qt.KeyboardModifier.AltModifier:
-            parts.append("alt")
-        if mod & Qt.KeyboardModifier.MetaModifier:
-            parts.append("windows")
-
-        # Map key
-        key_name = ""
-        # Handle special keys that don't have text representation
-        special_keys = {
-            Qt.Key.Key_F1: "f1",
-            Qt.Key.Key_F2: "f2",
-            Qt.Key.Key_F3: "f3",
-            Qt.Key.Key_F4: "f4",
-            Qt.Key.Key_F5: "f5",
-            Qt.Key.Key_F6: "f6",
-            Qt.Key.Key_F7: "f7",
-            Qt.Key.Key_F8: "f8",
-            Qt.Key.Key_F9: "f9",
-            Qt.Key.Key_F10: "f10",
-            Qt.Key.Key_F11: "f11",
-            Qt.Key.Key_F12: "f12",
-            Qt.Key.Key_Space: "space",
-            Qt.Key.Key_Tab: "tab",
-            Qt.Key.Key_Backspace: "backspace",
-            Qt.Key.Key_Delete: "delete",
-            Qt.Key.Key_Insert: "insert",
-            Qt.Key.Key_Home: "home",
-            Qt.Key.Key_End: "end",
-            Qt.Key.Key_PageUp: "pageup",
-            Qt.Key.Key_PageDown: "pagedown",
-            Qt.Key.Key_Left: "left",
-            Qt.Key.Key_Right: "right",
-            Qt.Key.Key_Up: "up",
-            Qt.Key.Key_Down: "down",
-        }
-
-        if key in special_keys:
-            key_name = special_keys[key]
-        else:
-            txt = event.text().lower()
-            if txt and txt.strip():
-                key_name = txt
-            else:
-                # Fallback to key sequence name for symbols
-                from PyQt6.QtGui import QKeySequence
-
-                key_name = QKeySequence(key).toString().lower()
-
-        # Filter out modifier names that might appear as primary keys
-        if key_name in ["ctrl", "shift", "alt", "meta", "win"]:
-            key_name = ""
-
-        if key_name and key_name not in parts:
-            parts.append(key_name)
-
-        if parts:
-            self.current_parts = parts
-            self.keys_lbl.setText(" + ".join(parts).upper())
-
-
 # --- CUSTOM SEARCH INPUT ---
 class NexusInput(QLineEdit):
     def __init__(self, parent, *args, **kwargs):
@@ -302,10 +110,12 @@ class IconWorker(QRunnable):
             if not os.path.exists(self.path):
                 return
             icon = self.nexus.icon_provider.icon(QFileInfo(self.path))
-            # Fetch at 64x64 for higher resolution/crispiness
-            pixmap = icon.pixmap(64, 64)
+            # Use 24x24 for speed - much faster to load and render
+            pixmap = icon.pixmap(24, 24)
             if not pixmap.isNull():
                 self.nexus.icon_cache[self.cache_key] = pixmap
+                # Trigger UI update on main thread
+                QTimer.singleShot(0, self.nexus.lazy_load_visible_icons)
         except Exception:
             pass
 
@@ -342,7 +152,6 @@ class NexusSearch(QWidget):
             "target_folders": [],
         }
         self.view_mode = "list"
-        self.summon_hotkey = "ctrl+shift+space"
         self.is_light_mode = False
         self.load_settings()
 
@@ -361,16 +170,21 @@ class NexusSearch(QWidget):
         self.icon_provider = QFileIconProvider()
         self.icon_cache = {}
         self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool.setMaxThreadCount(2)  # Limit to 2 workers max
         self.pending_icons = set()
 
         self.setup_ui()
         self.apply_theme()
         self.center_on_screen()
 
-        # Debounce Timer for Search
+        # Debounce Timer for Search (faster response)
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.perform_search)
+        
+        # Clear pending icons on new search
+        self.last_search_time = 0
+        self.current_candidates = []
 
         # Global Input Redirect
         keyboard.on_press(self.on_global_key)
@@ -532,10 +346,9 @@ class NexusSearch(QWidget):
                             {
                                 k: v
                                 for k, v in data.items()
-                                if k not in ["hotkey", "light_mode"]
+                                if k != "light_mode"
                             }
                         )
-                        self.summon_hotkey = data.get("hotkey", "ctrl+shift+space")
                         self.is_light_mode = data.get("light_mode", False)
         except Exception:
             pass
@@ -543,7 +356,6 @@ class NexusSearch(QWidget):
     def save_settings(self):
         try:
             settings = self.modes.copy()
-            settings["hotkey"] = self.summon_hotkey
             settings["light_mode"] = self.is_light_mode
             with open(SETTINGS_FILE, "w") as f:
                 json.dump(settings, f)
@@ -612,7 +424,7 @@ class NexusSearch(QWidget):
         self.search_input.setPlaceholderText(
             "Search Workspaces, Files, Macros, or Scripts..."
         )
-        self.search_input.textChanged.connect(lambda: self.search_timer.start(50))
+        self.search_input.textChanged.connect(lambda: self.search_timer.start(30))
         header_layout.addWidget(self.search_input)
 
         bg_layout.addLayout(header_layout)
@@ -711,6 +523,9 @@ class NexusSearch(QWidget):
 
         # Action Handler for List Item Selection
         self.results_list.currentRowChanged.connect(self.on_item_hover)
+        
+        # Lazy load icons when scrolling
+        self.results_list.verticalScrollBar().valueChanged.connect(self.lazy_load_visible_icons)
 
         # Footer / Action Hint
         footer_layout = QHBoxLayout()
@@ -890,6 +705,8 @@ class NexusSearch(QWidget):
         search = self.search_input.text().lower().strip()
         self.results_list.clear()
         self.results_tree.clear()
+        # Clear pending icon queue for faster new searches
+        self.pending_icons.clear()
         candidates = []
 
         def matches_all_terms(text, terms):
@@ -995,13 +812,6 @@ class NexusSearch(QWidget):
                     "reindex_files",
                     "📡",
                     "#60a5fa",
-                ),
-                (
-                    "Change Summon Hotkey",
-                    f"Current: {self.summon_hotkey}",
-                    "change_hotkey",
-                    "⌨️",
-                    "#fbbf24",
                 ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
@@ -1245,7 +1055,7 @@ class NexusSearch(QWidget):
                         sql = (
                             "SELECT name, path, is_dir FROM files WHERE "
                             + (" AND ".join(f_conds) if f_conds else "1")
-                            + " LIMIT 100"
+                            + " LIMIT 50"
                         )
                         cursor.execute(sql, f_params)
                         for name, path, is_dir in cursor.fetchall():
@@ -1294,57 +1104,31 @@ class NexusSearch(QWidget):
             self.populate_list_results(candidates)
 
     def populate_list_results(self, candidates):
-        for c in candidates[:100]:
+        # Store candidates for lazy loading
+        self.current_candidates = candidates[:50]
+        
+        # Limit to 50 results for blazing speed
+        for idx, c in enumerate(self.current_candidates):
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, c["data"])
+            # Store metadata for lazy loading
+            item.setData(Qt.ItemDataRole.UserRole + 1, c)
             self.results_list.addItem(item)
             row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(15)
-            file_path = c.get("file_path")
+            
             icon_label = QLabel()
-            icon_label.setFixedSize(32, 32)
-            icon_label.setScaledContents(True)
-
-            if file_path:
-                # Determine cache key: extension for generic files, path for exe/lnk
-                ext = os.path.splitext(file_path)[1].lower()
-                is_dir = (
-                    os.path.isdir(file_path) if os.path.exists(file_path) else False
-                )
-                cache_key = (
-                    "__dir__"
-                    if is_dir
-                    else (file_path if ext in [".exe", ".lnk", ".url"] else ext)
-                )
-
-                if cache_key in self.icon_cache:
-                    pix = self.icon_cache[cache_key]
-                    # Ensure high-res scaling
-                    icon_label.setPixmap(
-                        pix.scaled(
-                            32,
-                            32,
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation,
-                        )
-                    )
-                else:
-                    # Show fallback emoji immediately
-                    icon_label.setText(c.get("icon", "🔹"))
-                    icon_label.setStyleSheet("font-size: 20px; color: #9ca3af;")
-                    icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-                    # Queue background load if not already pending
-                    if cache_key not in self.pending_icons:
-                        self.pending_icons.add(cache_key)
-                        worker = IconWorker(file_path, cache_key, self)
-                        self.thread_pool.start(worker)
-            else:
-                icon_label.setText(c.get("icon", "🔹"))
-                icon_label.setStyleSheet("font-size: 24px; color: #9ca3af;")
-                icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_label.setObjectName(f"icon_{idx}")
+            icon_label.setFixedSize(24, 24)
+            icon_label.setScaledContents(False)
+            
+            # Always show emoji fallback immediately - no loading yet
+            icon_label.setText(c.get("icon", "🔹"))
+            icon_label.setStyleSheet("font-size: 18px; color: #9ca3af;")
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
             row_layout.addWidget(icon_label)
             text_container = QVBoxLayout()
             text_container.setContentsMargins(0, 0, 0, 0)
@@ -1363,6 +1147,9 @@ class NexusSearch(QWidget):
 
         if self.results_list.count() > 0:
             self.results_list.setCurrentRow(0)
+        
+        # Lazy load only visible icons after UI is rendered
+        QTimer.singleShot(0, self.lazy_load_visible_icons)
 
     def populate_tree_results(self, candidates):
         # Adapt X-Explorer tree logic for Nexus
@@ -1436,6 +1223,72 @@ class NexusSearch(QWidget):
             item = self.results_list.item(row)
             if item:
                 pass  # System is ready for future hover metadata (like status bar updates)
+    
+    def lazy_load_visible_icons(self):
+        """Load icons only for items currently visible in viewport - zero lag."""
+        if not hasattr(self, 'current_candidates'):
+            return
+            
+        # Get visible range
+        viewport = self.results_list.viewport()
+        first_visible = self.results_list.indexAt(viewport.rect().topLeft()).row()
+        last_visible = self.results_list.indexAt(viewport.rect().bottomLeft()).row()
+        
+        if first_visible < 0:
+            first_visible = 0
+        if last_visible < 0:
+            last_visible = self.results_list.count() - 1
+        
+        # Load icons for visible items + 5 above/below for smooth scrolling
+        start = max(0, first_visible - 5)
+        end = min(self.results_list.count(), last_visible + 6)
+        
+        for idx in range(start, end):
+            item = self.results_list.item(idx)
+            if not item:
+                continue
+                
+            c = item.data(Qt.ItemDataRole.UserRole + 1)
+            if not c:
+                continue
+                
+            file_path = c.get("file_path")
+            if not file_path:
+                continue
+            
+            # Get the icon label widget
+            row_widget = self.results_list.itemWidget(item)
+            if not row_widget:
+                continue
+                
+            icon_label = row_widget.findChild(QLabel, f"icon_{idx}")
+            if not icon_label:
+                continue
+            
+            # Check if already loaded (has pixmap)
+            if icon_label.pixmap() and not icon_label.pixmap().isNull():
+                continue
+            
+            # Determine cache key
+            ext = os.path.splitext(file_path)[1].lower()
+            is_dir = os.path.isdir(file_path) if os.path.exists(file_path) else False
+            cache_key = (
+                "__dir__"
+                if is_dir
+                else (file_path if ext in [".exe", ".lnk", ".url"] else ext)
+            )
+            
+            if cache_key in self.icon_cache:
+                # Icon already in cache, apply it instantly
+                icon_label.setPixmap(self.icon_cache[cache_key])
+                icon_label.setText("")
+                icon_label.setStyleSheet("")
+            elif cache_key not in self.pending_icons:
+                # Queue for background loading
+                self.pending_icons.add(cache_key)
+                worker = IconWorker(file_path, cache_key, self)
+                worker.setAutoDelete(True)
+                self.thread_pool.start(worker)
 
     def launch_selected(self):
         # Works for both List and Tree items
@@ -1458,11 +1311,6 @@ class NexusSearch(QWidget):
         # Smart Hide: Don't hide for internal UI commands like selection pickers
         should_hide = True
         if data.get("type") in ["filter_toggle", "filter_clear"]:
-            should_hide = False
-        elif data["type"] == "cmd" and data["cmd"] in [
-            "reset_position",
-            "change_hotkey",
-        ]:
             should_hide = False
 
         if should_hide:
@@ -1490,8 +1338,6 @@ class NexusSearch(QWidget):
         elif data["type"] == "cmd":
             if data["cmd"] == "reindex_files":
                 self.trigger_reindex()
-            elif data["cmd"] == "change_hotkey":
-                self.request_new_hotkey()
             elif (
                 data["cmd"].startswith("toggle_")
                 or data["cmd"].startswith("cmd_")
@@ -1582,51 +1428,6 @@ class NexusSearch(QWidget):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         xe_path = os.path.join(script_dir, "xexplorer.py")
         subprocess.Popen([sys.executable, xe_path])
-
-    def request_new_hotkey(self):
-        """Asks the user to press a key combination."""
-        self.recorder = HotkeyCapturer(self.summon_hotkey)
-        self.recorder.show()
-        # Center the recorder on the hub
-        self.recorder.move(
-            self.x() + (self.width() - self.recorder.width()) // 2,
-            self.y() + (self.height() - self.recorder.height()) // 2,
-        )
-        self.recorder.finished.connect(self.on_hotkey_recorded)
-
-    def on_hotkey_recorded(self, new_hk):
-        if new_hk:
-            self.summon_hotkey = new_hk.lower().strip()
-            self.save_settings()
-            print(f"Hotkey updated! Executing system restart to rebind hooks...")
-            self.restart_application()
-
-    def restart_application(self):
-        """
-        Bulletproof restart bridge. Spawns an external CMD wait-loop
-        to ensure process isolation and hook release.
-        """
-        try:
-            script = os.path.abspath(sys.argv[0])
-            python = sys.executable
-
-            # CMD Bridge:
-            # 1. timeout 1: Waits for this process to die
-            # 2. start: Launches fresh instance in its own process group
-            cmd_chain = f'timeout /t 1 /nobreak > NUL && start "" "{python}" "{script}"'
-
-            subprocess.Popen(
-                ["cmd.exe", "/c", cmd_chain],
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-                | subprocess.DETACHED_PROCESS,
-                shell=False,
-                close_fds=True,
-            )
-        except Exception as e:
-            print(f"Restart bridge failed: {e}")
-
-        # Kill current process immediately. No cleanup, no hanging.
-        os._exit(0)
 
     def execute_system_toggle(self, cmd):
         """Executes Windows system level toggles."""
@@ -1981,11 +1782,12 @@ def on_toggle():
     bridge.toggle_signal.emit()
 
 
-# Initial Bind
+# Bind the fixed hotkey: Ctrl+Shift+Space
+SUMMON_HOTKEY = "ctrl+shift+space"
 try:
-    keyboard.add_hotkey(nexus.summon_hotkey, on_toggle)
+    keyboard.add_hotkey(SUMMON_HOTKEY, on_toggle)
 except Exception as e:
-    print(f"Initial Hotkey bind failed: {e}")
+    print(f"Hotkey bind failed: {e}")
 
 # If launched with --summon, show immediately
 if "--summon" in sys.argv:
