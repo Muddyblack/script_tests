@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
+    QFileIconProvider,
 )
 from PyQt6.QtCore import (
     Qt,
@@ -31,8 +32,11 @@ from PyQt6.QtCore import (
     QPropertyAnimation,
     QEasingCurve,
     QSize,
+    QFileInfo,
+    QRunnable,
+    QThreadPool,
 )
-from PyQt6.QtGui import QColor, QCursor, QGuiApplication
+from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QPixmap
 
 # --- CONFIGURATION (Shared with other apps) ---
 APPDATA = os.getenv("APPDATA", ".")
@@ -66,7 +70,7 @@ def run_workspace(ws_id):
 
 # --- CUSTOM HOTKEY RECORDER DIALOG ---
 class HotkeyCapturer(QWidget):
-    """A sleek dialog that captures actual keystrokes for hotkey binding."""
+    """A sleek, premium dialog that captures actual keystrokes for hotkey binding."""
 
     finished = pyqtSignal(str)
 
@@ -78,40 +82,99 @@ class HotkeyCapturer(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(400, 200)
+        self.resize(500, 320)
 
+        # Main Layout
         layout = QVBoxLayout(self)
-        self.bg = QFrame()
-        self.bg.setStyleSheet("""
-            QFrame { 
-                background: #111827; 
-                border: 2px solid #3b82f6; 
-                border-radius: 20px; 
-            }
-            QLabel { color: #f3f4f6; font-family: 'Outfit', sans-serif; }
-        """)
-        bg_layout = QVBoxLayout(self.bg)
+        layout.setContentsMargins(10, 10, 10, 10)
 
-        title = QLabel("PRESS NEW HOTKEY COMBINATION")
-        title.setStyleSheet("font-weight: bold; font-size: 16px; color: #60a5fa;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.bg = QFrame()
+        self.bg.setObjectName("capturer_bg")
+        self.bg.setStyleSheet("""
+            QFrame#capturer_bg { 
+                background: #01121F; 
+                border: 2px solid #0EADCF; 
+                border-radius: 24px; 
+            }
+            QLabel { color: #CBE0F0; font-family: 'Inter', 'Segoe UI', sans-serif; }
+        """)
+
+        # Cyan Glow Effect
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(40)
+        shadow.setColor(QColor(14, 173, 207, 100))
+        shadow.setYOffset(0)
+        self.bg.setGraphicsEffect(shadow)
+
+        bg_layout = QVBoxLayout(self.bg)
+        bg_layout.setContentsMargins(35, 35, 35, 35)
+        bg_layout.setSpacing(20)
+
+        # Header with Icon
+        header_layout = QHBoxLayout()
+        icon_lbl = QLabel("⌨️")
+        icon_lbl.setStyleSheet("font-size: 38px;")
+
+        title_vbox = QVBoxLayout()
+        title = QLabel("REBIND SUMMON KEY")
+        title.setStyleSheet(
+            "font-weight: 900; font-size: 14px; color: #0EADCF; letter-spacing: 2px;"
+        )
+
+        subtitle = QLabel("INPUT NEW TACTICAL COMBINATION")
+        subtitle.setStyleSheet("color: #8295A0; font-size: 11px; font-weight: 600;")
+
+        title_vbox.addWidget(title)
+        title_vbox.addWidget(subtitle)
+        header_layout.addWidget(icon_lbl)
+        header_layout.addLayout(title_vbox)
+        header_layout.addStretch()
+        bg_layout.addLayout(header_layout)
+
+        # Key Display Area
+        self.key_box = QFrame()
+        self.key_box.setStyleSheet("""
+            QFrame {
+                background: rgba(14, 173, 207, 0.05);
+                border: 1px solid rgba(14, 173, 207, 0.3);
+                border-radius: 12px;
+            }
+        """)
+        kb_layout = QVBoxLayout(self.key_box)
 
         self.keys_lbl = QLabel(current_hk.upper())
         self.keys_lbl.setStyleSheet(
-            "font-size: 24px; font-weight: 800; color: #ffffff;"
+            "font-size: 42px; font-weight: 900; color: #CBE0F0; letter-spacing: 3px;"
         )
         self.keys_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        kb_layout.addWidget(self.keys_lbl)
 
+        bg_layout.addStretch()
+        bg_layout.addWidget(self.key_box)
+        bg_layout.addStretch()
+
+        # Restart Notice
+        self.restart_lbl = QLabel("CORE RESTART INITIATED ON SAVE")
+        self.restart_lbl.setStyleSheet("""
+            color: #55FFCC; 
+            font-size: 10px; 
+            font-weight: 800; 
+            background: rgba(85, 255, 204, 0.08);
+            padding: 6px 12px;
+            border-radius: 6px;
+            letter-spacing: 1px;
+        """)
+        self.restart_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bg_layout.addWidget(self.restart_lbl)
+
+        # Footer Hints
         hint = QLabel(
-            "Press Enter to Save • Esc to Cancel\n(e.g. Ctrl + Shift + Space)"
+            "Press <font color='#0EADCF'>ENTER</font> to Commit • <font color='#D95C5C'>ESC</font> to Abort"
         )
-        hint.setStyleSheet("color: #6b7280; font-size: 11px;")
+        hint.setStyleSheet(
+            "color: rgba(203, 224, 240, 0.4); font-size: 11px; font-weight: 600;"
+        )
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        bg_layout.addWidget(title)
-        bg_layout.addStretch()
-        bg_layout.addWidget(self.keys_lbl)
-        bg_layout.addStretch()
         bg_layout.addWidget(hint)
 
         layout.addWidget(self.bg)
@@ -192,8 +255,9 @@ class HotkeyCapturer(QWidget):
         if key_name and key_name not in parts:
             parts.append(key_name)
 
-        self.current_parts = parts
-        self.keys_lbl.setText(" + ".join(parts).upper())
+        if parts:
+            self.current_parts = parts
+            self.keys_lbl.setText(" + ".join(parts).upper())
 
 
 # --- CUSTOM SEARCH INPUT ---
@@ -223,6 +287,27 @@ class NexusInput(QLineEdit):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+
+# --- ICON WORKER ---
+class IconWorker(QRunnable):
+    def __init__(self, path, cache_key, nexus):
+        super().__init__()
+        self.path = path
+        self.cache_key = cache_key
+        self.nexus = nexus
+
+    def run(self):
+        try:
+            if not os.path.exists(self.path):
+                return
+            icon = self.nexus.icon_provider.icon(QFileInfo(self.path))
+            # Fetch at 64x64 for higher resolution/crispiness
+            pixmap = icon.pixmap(64, 64)
+            if not pixmap.isNull():
+                self.nexus.icon_cache[self.cache_key] = pixmap
+        except Exception:
+            pass
 
 
 # --- MAIN NEXUS SEARCH UI ---
@@ -273,6 +358,10 @@ class NexusSearch(QWidget):
         self.scan_installed_apps()
         self.scan_ssh_hosts()
         self.load_workspaces()
+        self.icon_provider = QFileIconProvider()
+        self.icon_cache = {}
+        self.thread_pool = QThreadPool.globalInstance()
+        self.pending_icons = set()
 
         self.setup_ui()
         self.apply_theme()
@@ -888,6 +977,7 @@ class NexusSearch(QWidget):
                             "score": 1000 + boost,
                             "title": app["name"],
                             "path": f"App • {app['path']}",
+                            "file_path": app["path"],
                             "icon": "📦",
                             "data": {"type": "app", "path": app["path"]},
                         }
@@ -1091,6 +1181,7 @@ class NexusSearch(QWidget):
                                     "score": score,
                                     "title": display_name,
                                     "path": f"Python Script • {f}",
+                                    "file_path": f_path,
                                     "icon": "🐍",
                                     "data": {"type": "script", "path": f_path},
                                 }
@@ -1167,6 +1258,7 @@ class NexusSearch(QWidget):
                                     "score": score,
                                     "title": format_display_name(name),
                                     "path": path,
+                                    "file_path": path,
                                     "icon": "📁" if is_dir else "📄",
                                     "data": {"type": "file", "path": path},
                                 }
@@ -1210,8 +1302,49 @@ class NexusSearch(QWidget):
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(15)
-            icon_label = QLabel(c.get("icon", "🔹"))
-            icon_label.setStyleSheet("font-size: 20px;")
+            file_path = c.get("file_path")
+            icon_label = QLabel()
+            icon_label.setFixedSize(32, 32)
+            icon_label.setScaledContents(True)
+
+            if file_path:
+                # Determine cache key: extension for generic files, path for exe/lnk
+                ext = os.path.splitext(file_path)[1].lower()
+                is_dir = (
+                    os.path.isdir(file_path) if os.path.exists(file_path) else False
+                )
+                cache_key = (
+                    "__dir__"
+                    if is_dir
+                    else (file_path if ext in [".exe", ".lnk", ".url"] else ext)
+                )
+
+                if cache_key in self.icon_cache:
+                    pix = self.icon_cache[cache_key]
+                    # Ensure high-res scaling
+                    icon_label.setPixmap(
+                        pix.scaled(
+                            32,
+                            32,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                    )
+                else:
+                    # Show fallback emoji immediately
+                    icon_label.setText(c.get("icon", "🔹"))
+                    icon_label.setStyleSheet("font-size: 20px; color: #9ca3af;")
+                    icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                    # Queue background load if not already pending
+                    if cache_key not in self.pending_icons:
+                        self.pending_icons.add(cache_key)
+                        worker = IconWorker(file_path, cache_key, self)
+                        self.thread_pool.start(worker)
+            else:
+                icon_label.setText(c.get("icon", "🔹"))
+                icon_label.setStyleSheet("font-size: 24px; color: #9ca3af;")
+                icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             row_layout.addWidget(icon_label)
             text_container = QVBoxLayout()
             text_container.setContentsMargins(0, 0, 0, 0)
@@ -1265,11 +1398,32 @@ class NexusSearch(QWidget):
                 item.setText(0, name)
                 if content["_data"]:
                     item.setData(0, Qt.ItemDataRole.UserRole, content["_data"]["data"])
-                    icon = content["_data"].get("icon", "🔹")
-                    item.setText(0, f"{icon} {name}")
+                    file_path = content["_data"].get("file_path")
+                    if file_path:
+                        ext = os.path.splitext(file_path)[1].lower()
+                        cache_key = (
+                            file_path if ext in [".exe", ".lnk", ".url"] else ext
+                        )
+                        if cache_key in self.icon_cache:
+                            item.setIcon(0, QIcon(self.icon_cache[cache_key]))
+                        else:
+                            # Use emoji fallback in tree for now, worker will fill cache for next render
+                            icon_str = content["_data"].get("icon", "🔹")
+                            item.setText(0, f"{icon_str} {name}")
+                            if cache_key not in self.pending_icons:
+                                self.pending_icons.add(cache_key)
+                                worker = IconWorker(file_path, cache_key, self)
+                                self.thread_pool.start(worker)
+                    else:
+                        icon = content["_data"].get("icon", "🔹")
+                        item.setText(0, f"{icon} {name}")
                 else:
-                    item.setText(0, f"📁 {name}")
-                    item.setForeground(0, QColor("#60a5fa"))  # Better visibility
+                    # Directory in tree with no specific data (just structure)
+                    item.setIcon(
+                        0, self.icon_provider.icon(QFileIconProvider.IconType.Folder)
+                    )
+                    item.setText(0, name)
+                    item.setForeground(0, QColor("#60a5fa"))
 
                 if content["_children"]:
                     add_items_to_tree(item, content["_children"])
@@ -1442,14 +1596,37 @@ class NexusSearch(QWidget):
 
     def on_hotkey_recorded(self, new_hk):
         if new_hk:
-            old_hk = self.summon_hotkey
             self.summon_hotkey = new_hk.lower().strip()
             self.save_settings()
-            rebind_hotkey(old_hk, self.summon_hotkey)
-            self.status_lbl.setText(f"⌨️ Hotkey updated to: {self.summon_hotkey}")
-            self.status_lbl.setStyleSheet("color: #10b981; font-weight: bold;")
-            # Re-perform search to update the label
-            self.perform_search()
+            print(f"Hotkey updated! Executing system restart to rebind hooks...")
+            self.restart_application()
+
+    def restart_application(self):
+        """
+        Bulletproof restart bridge. Spawns an external CMD wait-loop
+        to ensure process isolation and hook release.
+        """
+        try:
+            script = os.path.abspath(sys.argv[0])
+            python = sys.executable
+
+            # CMD Bridge:
+            # 1. timeout 1: Waits for this process to die
+            # 2. start: Launches fresh instance in its own process group
+            cmd_chain = f'timeout /t 1 /nobreak > NUL && start "" "{python}" "{script}"'
+
+            subprocess.Popen(
+                ["cmd.exe", "/c", cmd_chain],
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.DETACHED_PROCESS,
+                shell=False,
+                close_fds=True,
+            )
+        except Exception as e:
+            print(f"Restart bridge failed: {e}")
+
+        # Kill current process immediately. No cleanup, no hanging.
+        os._exit(0)
 
     def execute_system_toggle(self, cmd):
         """Executes Windows system level toggles."""
@@ -1802,19 +1979,6 @@ bridge.toggle_signal.connect(
 
 def on_toggle():
     bridge.toggle_signal.emit()
-
-
-def rebind_hotkey(old_hk, new_hk):
-    try:
-        keyboard.unhook_all()
-        keyboard.add_hotkey(new_hk, on_toggle)
-        # CRITICAL: re-hook the global interceptor or app will "hang/freeze"
-        # because the window exists but no longer intercepts navigation keys
-        if hasattr(nexus, "on_global_key"):
-            keyboard.on_press(nexus.on_global_key)
-        print(f"Hotkey bound to: {new_hk}")
-    except Exception as e:
-        print(f"Failed to rebind hotkey: {e}")
 
 
 # Initial Bind
