@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QFileIconProvider,
+    QMenu,
 )
 from PyQt6.QtCore import (
     Qt,
@@ -36,7 +37,8 @@ from PyQt6.QtCore import (
     QRunnable,
     QThreadPool,
 )
-from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QPixmap
+from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QIcon
+from search_engine import SearchEngine
 
 # --- CONFIGURATION (Shared with other apps) ---
 APPDATA = os.getenv("APPDATA", ".")
@@ -110,9 +112,15 @@ class IconWorker(QRunnable):
             if not os.path.exists(self.path):
                 return
             icon = self.nexus.icon_provider.icon(QFileInfo(self.path))
-            # Use 24x24 for speed - much faster to load and render
-            pixmap = icon.pixmap(24, 24)
+            # Request native highest resolution icon and smoothly downscale to eliminate pixelation
+            pixmap = icon.pixmap(256, 256)
             if not pixmap.isNull():
+                pixmap = pixmap.scaled(
+                    42,
+                    42,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
                 self.nexus.icon_cache[self.cache_key] = pixmap
                 # Trigger UI update on main thread
                 QTimer.singleShot(0, self.nexus.lazy_load_visible_icons)
@@ -150,6 +158,7 @@ class NexusSearch(QWidget):
             "files_only": False,
             "folders_only": False,
             "target_folders": [],
+            "content": False,
         }
         self.view_mode = "list"
         self.is_light_mode = False
@@ -164,11 +173,14 @@ class NexusSearch(QWidget):
         self.ssh_hosts = []
         self.process_cache = []
         self.last_proc_update = 0
-        self.scan_installed_apps()
+        self.installed_apps = []
+        self.load_apps_cache()
+
         self.scan_ssh_hosts()
         self.load_workspaces()
         self.icon_provider = QFileIconProvider()
         self.icon_cache = {}
+        self.search_engine = SearchEngine([X_EXPLORER_DB, DB_PATH])
         self.thread_pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(2)  # Limit to 2 workers max
         self.pending_icons = set()
@@ -177,17 +189,40 @@ class NexusSearch(QWidget):
         self.apply_theme()
         self.center_on_screen()
 
+        # Run slow app scanning in background
+        threading.Thread(target=self.scan_installed_apps_bg, daemon=True).start()
+
         # Debounce Timer for Search (faster response)
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.perform_search)
-        
+
         # Clear pending icons on new search
         self.last_search_time = 0
         self.current_candidates = []
 
         # Global Input Redirect
         keyboard.on_press(self.on_global_key)
+
+    def load_apps_cache(self):
+        cache_file = os.path.join(APPDATA, "nexus_apps_cache.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r") as f:
+                    self.installed_apps = json.load(f)
+            except Exception:
+                pass
+
+    def scan_installed_apps_bg(self):
+        # Initial wait so it does not block immediate startup processing
+        time.sleep(2)
+        self.scan_installed_apps()
+        try:
+            cache_file = os.path.join(APPDATA, "nexus_apps_cache.json")
+            with open(cache_file, "w") as f:
+                json.dump(self.installed_apps, f)
+        except Exception:
+            pass
 
     def scan_installed_apps(self):
         """Scan Windows Start Menu for application shortcuts."""
@@ -200,7 +235,8 @@ class NexusSearch(QWidget):
                 os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs"
             ),
         ]
-        self.installed_apps = []
+
+        apps = []
         for p in paths:
             if not os.path.exists(p):
                 continue
@@ -208,9 +244,8 @@ class NexusSearch(QWidget):
                 for f in files:
                     if f.lower().endswith((".lnk", ".url")):
                         name = f.rsplit(".", 1)[0]
-                        self.installed_apps.append(
-                            {"name": name, "path": os.path.join(root, f)}
-                        )
+                        apps.append({"name": name, "path": os.path.join(root, f)})
+        self.installed_apps = apps
 
     def scan_ssh_hosts(self):
         """Parse ~/.ssh/config for professional SSH sessions."""
@@ -231,6 +266,11 @@ class NexusSearch(QWidget):
     def on_global_key(self, event):
         """Expert-level focus management: redirect keys to Nexus if visible."""
         if not self.isVisible():
+            return
+
+        # If the window IS active, let the standard QLineEdit/QListWidget events handle it.
+        # Otherwise, we trigger everything twice.
+        if self.isActiveWindow():
             return
 
         # If Nexus is visible but NOT active, intercept major control keys
@@ -343,11 +383,7 @@ class NexusSearch(QWidget):
                     data = json.load(f)
                     if isinstance(data, dict):
                         self.modes.update(
-                            {
-                                k: v
-                                for k, v in data.items()
-                                if k != "light_mode"
-                            }
+                            {k: v for k, v in data.items() if k != "light_mode"}
                         )
                         self.is_light_mode = data.get("light_mode", False)
         except Exception:
@@ -508,6 +544,8 @@ class NexusSearch(QWidget):
         self.results_list = QListWidget()
         self.results_list.setObjectName("nexus_list")
         self.results_list.itemDoubleClicked.connect(self.launch_selected)
+        self.results_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.results_list.customContextMenuRequested.connect(self.show_context_menu)
 
         # Results Tree
         self.results_tree = QTreeWidget()
@@ -516,6 +554,10 @@ class NexusSearch(QWidget):
         self.results_tree.setHeaderHidden(True)
         self.results_tree.setIndentation(20)
         self.results_tree.itemDoubleClicked.connect(self.launch_selected)
+        self.results_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.results_tree.customContextMenuRequested.connect(
+            self.show_tree_context_menu
+        )
 
         self.results_stack.addWidget(self.results_list)
         self.results_stack.addWidget(self.results_tree)
@@ -523,9 +565,11 @@ class NexusSearch(QWidget):
 
         # Action Handler for List Item Selection
         self.results_list.currentRowChanged.connect(self.on_item_hover)
-        
+
         # Lazy load icons when scrolling
-        self.results_list.verticalScrollBar().valueChanged.connect(self.lazy_load_visible_icons)
+        self.results_list.verticalScrollBar().valueChanged.connect(
+            self.lazy_load_visible_icons
+        )
 
         # Footer / Action Hint
         footer_layout = QHBoxLayout()
@@ -619,6 +663,63 @@ class NexusSearch(QWidget):
         else:
             super().keyPressEvent(event)
 
+    def show_context_menu(self, pos):
+        item = self.results_list.itemAt(pos)
+        if not item:
+            return
+        data = item.data(Qt.ItemDataRole.UserRole)
+        self._show_common_menu(pos, data, self.results_list)
+
+    def show_tree_context_menu(self, pos):
+        item = self.results_tree.itemAt(pos)
+        if not item:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        self._show_common_menu(pos, data, self.results_tree)
+
+    def _show_common_menu(self, pos, data, parent_widget):
+        if not data:
+            return
+        menu = QMenu(self)
+        if self.is_light_mode:
+            menu.setStyleSheet(
+                "QMenu { background-color: #ffffff; color: #111827; border: 1px solid #d1d5db; border-radius: 8px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background-color: #3b82f6; color: white; }"
+            )
+        else:
+            menu.setStyleSheet(
+                "QMenu { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background-color: #3b82f6; color: white; }"
+            )
+
+        path = data.get("path")
+
+        if path:
+            copy_path = menu.addAction("🔗 Copy Path")
+            copy_name = menu.addAction("📄 Copy File Name")
+            open_loc = menu.addAction("📁 Open File Location")
+            search_here = menu.addAction("🎯 Search ONLY in this Folder")
+
+            action = menu.exec(parent_widget.mapToGlobal(pos))
+            if action == copy_path:
+                QApplication.clipboard().setText(path)
+                self.status_lbl.setText(f"Copied path: {path}")
+            elif action == copy_name:
+                QApplication.clipboard().setText(os.path.basename(path))
+                self.status_lbl.setText("Copied file name to clipboard")
+            elif action == open_loc:
+                if os.path.exists(path):
+                    dir_path = path if os.path.isdir(path) else os.path.dirname(path)
+                    os.startfile(dir_path)
+            elif action == search_here:
+                dir_path = path if os.path.isdir(path) else os.path.dirname(path)
+                self.modes["target_folders"] = [dir_path]
+                self.modes["files"] = True
+                self.search_input.setText("")
+                self.search_input.setFocus()
+                self.status_lbl.setText(
+                    f"Locked Search to: {os.path.basename(dir_path)}"
+                )
+                self.save_settings()
+
     def focusOutEvent(self, event):
         """Auto-hide when clicking outside reliably."""
         # Use a tiny delay to see if focus actually landed on a child widget
@@ -676,16 +777,9 @@ class NexusSearch(QWidget):
         self.setWindowOpacity(0)
         self.show()
         self.raise_()
+        self.show()
+        self.raise_()
         self.activateWindow()
-
-        # Bind temporary global navigation to ensure it works even without focus
-        try:
-            keyboard.add_hotkey("esc", self.hide)
-            keyboard.add_hotkey("up", lambda: self.navigate_results(-1))
-            keyboard.add_hotkey("down", lambda: self.navigate_results(1))
-            keyboard.add_hotkey("enter", self.launch_selected)
-        except (ValueError, KeyError, OSError):
-            pass
 
         # Super-Aggressive Focus Logic: Multiple stages to ensure focus on Windows
         self.summon_and_focus()
@@ -744,6 +838,7 @@ class NexusSearch(QWidget):
             ":t": "toggles",
             ":ssh": "ssh",
             ":a": "apps",
+            ":c": "content",
         }
         active_modes = self.modes.copy()
         search_term = search
@@ -1025,56 +1120,55 @@ class NexusSearch(QWidget):
             except Exception:
                 pass
 
-        # 6. File Search (X-Explorer DB)
-        # 6. File Search (X-Explorer DB + Fallback DB)
+        # 6. File Search (Centralized Engine)
         if active_modes.get("files"):
-            for database in [X_EXPLORER_DB, DB_PATH]:
-                if not os.path.exists(database):
-                    continue
-                try:
-                    with sqlite3.connect(database) as conn:
-                        cursor = conn.cursor()
-                        f_conds, f_params = [], []
-                        if terms:
-                            f_conds.append(
-                                "(" + " AND ".join(["name LIKE ?" for _ in terms]) + ")"
-                            )
-                            f_params.extend([f"%{t}%" for t in terms])
+            files_only = active_modes.get("files_only", False)
+            folders_only = active_modes.get("folders_only", False)
+            target_folders = active_modes.get("target_folders", [])
 
-                        if active_modes.get("files_only"):
-                            f_conds.append("is_dir = 0")
-                        elif active_modes.get("folders_only"):
-                            f_conds.append("is_dir = 1")
+            # Use the shared search engine for blazing fast, consistent results
+            results = self.search_engine.search_files(
+                query_terms=terms,
+                target_folders=target_folders,
+                files_only=files_only,
+                folders_only=folders_only,
+                limit=100,
+            )
 
-                        target_folders = active_modes.get("target_folders", [])
-                        if target_folders:
-                            path_conds = ["path LIKE ?" for _ in target_folders]
-                            f_params.extend([f"{p}%" for p in target_folders])
-                            f_conds.append(f"({' OR '.join(path_conds)})")
+            for f_path, is_dir, f_name in results:
+                score = 200 + (50 if is_dir else 0)
+                if search_term and f_name.lower() == search_term:
+                    score += 500
+                score += self.get_usage_boost(f"file_{f_path}")
 
-                        sql = (
-                            "SELECT name, path, is_dir FROM files WHERE "
-                            + (" AND ".join(f_conds) if f_conds else "1")
-                            + " LIMIT 50"
-                        )
-                        cursor.execute(sql, f_params)
-                        for name, path, is_dir in cursor.fetchall():
-                            score = 200 + (50 if is_dir else 0)
-                            if search_term and name.lower() == search_term:
-                                score += 500
-                            score += self.get_usage_boost(f"file_{path}")
-                            candidates.append(
-                                {
-                                    "score": score,
-                                    "title": format_display_name(name),
-                                    "path": path,
-                                    "file_path": path,
-                                    "icon": "📁" if is_dir else "📄",
-                                    "data": {"type": "file", "path": path},
-                                }
-                            )
-                except Exception:
-                    pass
+                candidates.append(
+                    {
+                        "score": score,
+                        "title": format_display_name(f_name),
+                        "path": f_path,
+                        "file_path": f_path,
+                        "icon": "📁" if is_dir else "📄",
+                        "data": {"type": "file", "path": f_path},
+                    }
+                )
+
+        # 6.5. Content Search
+        if active_modes.get("content") and terms:
+            target_folders = active_modes.get("target_folders", [])
+            results = self.search_engine.search_content(
+                query_terms=terms, target_folders=target_folders, limit=50
+            )
+            for f_path, is_dir, f_name in results:
+                candidates.append(
+                    {
+                        "score": 150,
+                        "title": f"📄 {f_name}",
+                        "path": f"Found in content • {f_path}",
+                        "file_path": f_path,
+                        "icon": "📄",
+                        "data": {"type": "file", "path": f_path},
+                    }
+                )
 
         # 7. Processes
         if active_modes.get("processes") and terms:
@@ -1106,7 +1200,8 @@ class NexusSearch(QWidget):
     def populate_list_results(self, candidates):
         # Store candidates for lazy loading
         self.current_candidates = candidates[:50]
-        
+
+        self.results_list.setUpdatesEnabled(False)
         # Limit to 50 results for blazing speed
         for idx, c in enumerate(self.current_candidates):
             item = QListWidgetItem()
@@ -1116,19 +1211,20 @@ class NexusSearch(QWidget):
             self.results_list.addItem(item)
             row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(15)
-            
+            # Add horizontal padding so items don't touch the edges
+            row_layout.setContentsMargins(15, 0, 15, 0)
+            row_layout.setSpacing(18)
+
             icon_label = QLabel()
             icon_label.setObjectName(f"icon_{idx}")
-            icon_label.setFixedSize(24, 24)
-            icon_label.setScaledContents(False)
-            
+            icon_label.setFixedSize(42, 42)
+            icon_label.setScaledContents(True)  # Make sure icons scale beautifully
+
             # Always show emoji fallback immediately - no loading yet
             icon_label.setText(c.get("icon", "🔹"))
-            icon_label.setStyleSheet("font-size: 18px; color: #9ca3af;")
+            icon_label.setStyleSheet("font-size: 22px; color: #9ca3af;")
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
+
             row_layout.addWidget(icon_label)
             text_container = QVBoxLayout()
             text_container.setContentsMargins(0, 0, 0, 0)
@@ -1142,16 +1238,21 @@ class NexusSearch(QWidget):
             text_container.addWidget(title_lbl)
             text_container.addWidget(path_lbl)
             row_layout.addLayout(text_container, stretch=1)
-            item.setSizeHint(QSize(row_widget.sizeHint().width(), 62))
+
+            # Balanced item height for 40px icons
+            item.setSizeHint(QSize(row_widget.sizeHint().width(), 70))
             self.results_list.setItemWidget(item, row_widget)
 
         if self.results_list.count() > 0:
             self.results_list.setCurrentRow(0)
-        
+
+        self.results_list.setUpdatesEnabled(True)
+
         # Lazy load only visible icons after UI is rendered
         QTimer.singleShot(0, self.lazy_load_visible_icons)
 
     def populate_tree_results(self, candidates):
+        self.results_tree.setUpdatesEnabled(False)
         # Adapt X-Explorer tree logic for Nexus
         tree_data = {}
         for c in candidates[:150]:  # More items in tree is okay
@@ -1217,58 +1318,59 @@ class NexusSearch(QWidget):
                     item.setExpanded(True)
 
         add_items_to_tree(None, tree_data)
+        self.results_tree.setUpdatesEnabled(True)
 
     def on_item_hover(self, row):
         if row >= 0:
             item = self.results_list.item(row)
             if item:
                 pass  # System is ready for future hover metadata (like status bar updates)
-    
+
     def lazy_load_visible_icons(self):
         """Load icons only for items currently visible in viewport - zero lag."""
-        if not hasattr(self, 'current_candidates'):
+        if not hasattr(self, "current_candidates"):
             return
-            
+
         # Get visible range
         viewport = self.results_list.viewport()
         first_visible = self.results_list.indexAt(viewport.rect().topLeft()).row()
         last_visible = self.results_list.indexAt(viewport.rect().bottomLeft()).row()
-        
+
         if first_visible < 0:
             first_visible = 0
         if last_visible < 0:
             last_visible = self.results_list.count() - 1
-        
+
         # Load icons for visible items + 5 above/below for smooth scrolling
         start = max(0, first_visible - 5)
         end = min(self.results_list.count(), last_visible + 6)
-        
+
         for idx in range(start, end):
             item = self.results_list.item(idx)
             if not item:
                 continue
-                
+
             c = item.data(Qt.ItemDataRole.UserRole + 1)
             if not c:
                 continue
-                
+
             file_path = c.get("file_path")
             if not file_path:
                 continue
-            
+
             # Get the icon label widget
             row_widget = self.results_list.itemWidget(item)
             if not row_widget:
                 continue
-                
+
             icon_label = row_widget.findChild(QLabel, f"icon_{idx}")
             if not icon_label:
                 continue
-            
+
             # Check if already loaded (has pixmap)
             if icon_label.pixmap() and not icon_label.pixmap().isNull():
                 continue
-            
+
             # Determine cache key
             ext = os.path.splitext(file_path)[1].lower()
             is_dir = os.path.isdir(file_path) if os.path.exists(file_path) else False
@@ -1277,7 +1379,7 @@ class NexusSearch(QWidget):
                 if is_dir
                 else (file_path if ext in [".exe", ".lnk", ".url"] else ext)
             )
-            
+
             if cache_key in self.icon_cache:
                 # Icon already in cache, apply it instantly
                 icon_label.setPixmap(self.icon_cache[cache_key])

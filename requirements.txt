@@ -1,13 +1,11 @@
 PyQt6
-
-PyQt6
-pyautogui 
 keyboard
-keyring
 mouse
+watchdog
 
-PyQt6
+
+pyautogui 
+keyring
 requests
 Markdown
-
 PyQt6-WebEngine

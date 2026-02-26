@@ -19,14 +19,24 @@ from PyQt6.QtWidgets import (
     QFrame,
     QFileDialog,
     QMenu,
-    QListWidgetItem,
-    QButtonGroup,
     QTreeWidget,
     QTreeWidgetItem,
     QStackedWidget,
+    QListWidgetItem,
+    QButtonGroup,
 )
-from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt
+from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt, QSize
 from PyQt6.QtGui import QIcon
+
+from search_engine import SearchEngine
+
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
 
 # --- CONFIGURATION & PERSISTENCE ---
 DB_PATH = os.path.join(os.getenv("APPDATA", "."), "x_explorer_cache.db")
@@ -139,6 +149,56 @@ class IndexerWorker(QThread):
         self.finished.emit(total_indexed)
 
 
+# --- LIVE FILE WATCHER ---
+class LiveCacheUpdater(FileSystemEventHandler):
+    def __init__(self, ignore_list):
+        self.ignore_list = [i.lower() for i in ignore_list]
+        self._conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        self._cursor = self._conn.cursor()
+
+    def _should_ignore(self, path):
+        path_lower = path.lower()
+        name_lower = os.path.basename(path).lower()
+        for ig in self.ignore_list:
+            if ig in name_lower or ig in path_lower:
+                return True
+        return False
+
+    def on_created(self, event):
+        if self._should_ignore(event.src_path):
+            return
+        is_dir = 1 if event.is_directory else 0
+        name = os.path.basename(event.src_path)
+        parent = os.path.dirname(event.src_path)
+        now = int(time.time())
+        try:
+            self._cursor.execute(
+                "INSERT OR REPLACE INTO files VALUES (?, ?, ?, ?, ?)",
+                (event.src_path, name, parent, is_dir, now),
+            )
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Database might be locked, skip this minor update
+
+    def on_deleted(self, event):
+        try:
+            self._cursor.execute("DELETE FROM files WHERE path=?", (event.src_path,))
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+    def on_moved(self, event):
+        self.on_deleted(event)
+
+        # Craft a fake creation event for the destination
+        class FakeEvent:
+            def __init__(self, path, is_dir):
+                self.src_path = path
+                self.is_directory = is_dir
+
+        self.on_created(FakeEvent(event.dest_path, event.is_directory))
+
+
 # --- MAIN UI ---
 class XExplorer(QMainWindow):
     def __init__(self):
@@ -155,10 +215,30 @@ class XExplorer(QMainWindow):
         self.setWindowIcon(QIcon("assets/xexplorer.png"))
         self.update_stats()
 
+        # Watchdog Observer Reference
+        self.observer = None
+        if WATCHDOG_AVAILABLE:
+            self.start_live_watchers()
+
+        self.search_engine = SearchEngine(DB_PATH)
+
         # Search Debounce Timer
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.perform_search)
+
+        QTimer.singleShot(100, self.check_args)
+
+    def check_args(self):
+        if "--index" in sys.argv or "--daemon" in sys.argv:
+            self.hide()
+            self.start_indexing()
+            if "--daemon" not in sys.argv:
+                self.worker.finished.connect(lambda: QApplication.quit())
+            else:
+                self.daemon_timer = QTimer()
+                self.daemon_timer.timeout.connect(self.start_indexing)
+                self.daemon_timer.start(3600000)  # Re-index every 1 hr
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -270,11 +350,14 @@ class XExplorer(QMainWindow):
         self.btn_files.setCheckable(True)
         self.btn_folders = QPushButton("Folders")
         self.btn_folders.setCheckable(True)
+        self.btn_content = QPushButton("Content")
+        self.btn_content.setCheckable(True)
 
         for btn, ftype in [
             (self.btn_all, "all"),
             (self.btn_files, "files"),
             (self.btn_folders, "folders"),
+            (self.btn_content, "content"),
         ]:
             btn.setFlat(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -838,15 +921,18 @@ class XExplorer(QMainWindow):
 
         self.update_stats()
         duration = time.time() - self.start_time
-        QMessageBox.information(
-            self,
-            "Indexing Complete",
-            f"🚀 <b>Indexing finished!</b>\n\n"
-            f"Items processed: {count:,}\n"
-            f"Duration: {duration:.1f}s\n"
-            f"Total index size: {total_count:,} items\n\n"
-            f"Last Run: {now_str}",
-        )
+
+        # Don't show dialogue if running in background
+        if "--daemon" not in sys.argv and "--index" not in sys.argv:
+            QMessageBox.information(
+                self,
+                "Indexing Complete",
+                f"🚀 <b>Indexing finished!</b>\n\n"
+                f"Items processed: {count:,}\n"
+                f"Duration: {duration:.1f}s\n"
+                f"Total index size: {total_count:,} items\n\n"
+                f"Last Run: {now_str}",
+            )
 
     def clear_index(self):
         reply = QMessageBox.question(
@@ -878,6 +964,9 @@ class XExplorer(QMainWindow):
             cursor.execute("SELECT value FROM settings WHERE key='last_indexed'")
             res = cursor.fetchone()
             last_indexed = res[0] if res else "Never"
+
+            if WATCHDOG_AVAILABLE and self.observer and self.observer.is_alive():
+                last_indexed += " (Live Sync Active)"
 
             conn.close()
             self.status_label.setText(
@@ -923,90 +1012,125 @@ class XExplorer(QMainWindow):
             return
 
         start_time = time.time()
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-
-        # Split query into terms for multi-word search (AND logic)
         terms = [t for t in query.split() if t]
 
         if not terms:
-            conn.close()
             return
 
-        sql = "SELECT path, is_dir FROM files WHERE "
-        conditions = []
-        params = []
-
-        for term in terms:
-            conditions.append("name LIKE ?")
-            params.append(f"%{term}%")
-
-        sql += " AND ".join(conditions)
-
-        if self.filter_type == "files":
-            sql += " AND is_dir = 0"
-        elif self.filter_type == "folders":
-            sql += " AND is_dir = 1"
-
         # Check for managed folder filtering
-        # If items are selected (highlighted), prioritize those.
-        # Otherwise, filter results by folders that are CHECKED.
         selected_items = self.folder_list.selectedItems()
         filter_paths = []
 
         if selected_items:
             for item in selected_items:
                 path = item.data(Qt.ItemDataRole.UserRole)
-                if not path:
-                    path = item.text()
-                filter_paths.append(path)
+                filter_paths.append(path if path else item.text())
         else:
-            # Default to only searching checked folders
             for i in range(self.folder_list.count()):
                 item = self.folder_list.item(i)
                 if item.checkState() == Qt.CheckState.Checked:
                     path = item.data(Qt.ItemDataRole.UserRole)
-                    if not path:
-                        path = item.text()
-                    filter_paths.append(path)
+                    filter_paths.append(path if path else item.text())
 
-        if filter_paths:
-            folder_conditions = []
-            for path in filter_paths:
-                folder_conditions.append("path LIKE ?")
-                params.append(f"{path}%")
-            sql += f" AND ({' OR '.join(folder_conditions)})"
-        elif self.folder_list.count() > 0:
+        if not filter_paths and self.folder_list.count() > 0:
             # If folders exist but NONE are checked/selected, return no results
-            sql += " AND 0"
+            self.results_list.clear()
+            self.results_tree.clear()
+            self.status_label.setText("No folders selected/checked.")
+            return
 
-        sql += " LIMIT 500"
+        files_only = self.filter_type == "files"
+        folders_only = self.filter_type == "folders"
 
-        cursor.execute(sql, params)
-        results = cursor.fetchall()
-        conn.close()
+        if self.filter_type == "content":
+            results = self.search_engine.search_content(
+                query_terms=terms, target_folders=filter_paths
+            )
+        else:
+            # results come as (path, is_dir, name)
+            results = self.search_engine.search_files(
+                query_terms=terms,
+                target_folders=filter_paths,
+                files_only=files_only,
+                folders_only=folders_only,
+            )
+            # Standardize back to (path, is_dir) for populator functions
+            results = [(r[0], r[1]) for r in results]
 
         if self.view_mode == "flat":
             self.populate_flat_results(results)
         else:
+            # Standardize content search tuples back to (path, is_dir) for tree
+            if self.filter_type == "content":
+                results = [(r[0], r[1]) for r in results]
             self.populate_tree_results(results)
 
         elapsed = (time.time() - start_time) * 1000
         self.status_label.setText(f"Found {len(results)} items in {elapsed:.1f}ms")
 
+    def format_display_name(self, name, max_len=80):
+        if not name:
+            return ""
+        if len(name) <= max_len:
+            return name
+        half = (max_len - 3) // 2
+        return f"{name[:half]}...{name[-half:]}"
+
     def populate_flat_results(self, results):
+        self.results_list.setUpdatesEnabled(False)
         self.results_list.clear()
-        for path, is_dir in results:
-            icon = "📁 " if is_dir else "📄 "
-            item = QListWidgetItem(icon + path)
+        for path, is_dir in results[:100]:  # Cap at 100 rendering for extreme speed
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, path)
             item.setToolTip(f"{'Folder' if is_dir else 'File'}: {path}")
             self.results_list.addItem(item)
 
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(15, 0, 15, 0)
+            row_layout.setSpacing(18)
+
+            icon_label = QLabel()
+            icon_label.setFixedSize(42, 42)
+            icon_label.setText("📁" if is_dir else "📄")
+            icon_label.setStyleSheet(
+                "font-size: 28px; color: #60a5fa;"
+                if is_dir
+                else "font-size: 28px; color: #9ca3af;"
+            )
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            row_layout.addWidget(icon_label)
+
+            text_container = QVBoxLayout()
+            text_container.setContentsMargins(0, 0, 0, 0)
+            text_container.setSpacing(2)
+
+            title = os.path.basename(path)
+            title_lbl = QLabel(f"<b>{title}</b>")
+            title_lbl.setStyleSheet("font-size: 14px;")
+
+            path_lbl = QLabel(self.format_display_name(path, max_len=100))
+            if not self.dark_mode:
+                path_lbl.setStyleSheet("color: #6b7280; font-size: 12px;")
+            else:
+                path_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
+
+            text_container.addWidget(title_lbl)
+            text_container.addWidget(path_lbl)
+            row_layout.addLayout(text_container, stretch=1)
+
+            item.setSizeHint(QSize(row_widget.sizeHint().width(), 70))
+            self.results_list.setItemWidget(item, row_widget)
+
+        self.results_list.setUpdatesEnabled(True)
+
     def populate_tree_results(self, results):
+        self.results_tree.setUpdatesEnabled(False)
         self.results_tree.clear()
         root_nodes = {}
 
-        for path, is_dir in results:
+        for path, is_dir in results[:300]:  # Trees handle volume better
             parts = path.replace("\\", "/").split("/")
             current_parent = self.results_tree.invisibleRootItem()
 
@@ -1023,6 +1147,7 @@ class XExplorer(QMainWindow):
                     )
                     root_nodes[path_so_far] = new_item
                     current_parent = new_item
+        self.results_tree.setUpdatesEnabled(True)
 
     def show_tree_context_menu(self, pos):
         item = self.results_tree.itemAt(pos)
@@ -1100,7 +1225,9 @@ class XExplorer(QMainWindow):
 
         action = menu.exec(self.results_list.mapToGlobal(pos))
 
-        path = item.text()[2:]  # Remove emoji
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if not path:
+            return
         if action == open_action:
             self.open_file(item)
         elif action == explore_action:
@@ -1112,7 +1239,9 @@ class XExplorer(QMainWindow):
             QApplication.clipboard().setText(path)
 
     def open_file(self, item):
-        path = item.text()[2:]  # Remove emoji
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if not path:
+            return
         if os.path.exists(path):
             os.startfile(path)
         else:
@@ -1122,9 +1251,49 @@ class XExplorer(QMainWindow):
                 "File or folder no longer exists or network is unreachable.",
             )
 
+    def start_live_watchers(self):
+        """Initializes watchdog to actively monitor managed folders."""
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
+
+        active_folders = []
+        for i in range(self.folder_list.count()):
+            item = self.folder_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                path = item.data(Qt.ItemDataRole.UserRole)
+                if path and os.path.exists(path):
+                    active_folders.append(path)
+
+        if not active_folders:
+            return
+
+        ignores = []
+        for i in range(self.ignore_list_widget.count()):
+            item = self.ignore_list_widget.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                ignores.append(item.text())
+
+        self.observer = Observer()
+        handler = LiveCacheUpdater(ignores)
+
+        for folder in active_folders:
+            try:
+                self.observer.schedule(handler, folder, recursive=True)
+            except Exception:
+                # Some system folders might reject recursive hooks
+                pass
+
+        self.observer.start()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = XExplorer()
-    window.show()
+    if (
+        "--no-ui" not in sys.argv
+        and "--daemon" not in sys.argv
+        and "--index" not in sys.argv
+    ):
+        window.show()
     sys.exit(app.exec())
