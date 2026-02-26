@@ -152,7 +152,7 @@ class XExplorer(QMainWindow):
         self.setup_ui()
         self.load_settings()
         self.apply_modern_theme()
-        self.setWindowIcon(QIcon("xexplorer.png"))
+        self.setWindowIcon(QIcon("assets/xexplorer.png"))
         self.update_stats()
 
         # Search Debounce Timer
