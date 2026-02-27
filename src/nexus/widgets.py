@@ -143,17 +143,31 @@ class NexusInput(QLineEdit):
                 return h[len(text) :]
         return ""
 
+    def _accept_suggestion(self):
+        """Accept the inline ghost suggestion."""
+        suggestion = self._get_suggestion()
+        if suggestion:
+            self.setText(self.text() + suggestion)
+            return True
+        return False
+
+    def event(self, event):
+        """Intercept Tab before Qt uses it for focus navigation."""
+        from PyQt6.QtCore import QEvent
+
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Tab:
+            if self._accept_suggestion():
+                return True
+        return super().event(event)
+
     def keyPressEvent(self, event):
         key = event.key()
-        suggestion = self._get_suggestion()
 
-        if suggestion and (
-            key == Qt.Key.Key_Tab
-            or (key == Qt.Key.Key_Right and self.cursorPosition() == len(self.text()))
-        ):
-            self.setText(self.text() + suggestion)
-            event.accept()
-        elif key == Qt.Key.Key_Down:
+        if key == Qt.Key.Key_Right and self.cursorPosition() == len(self.text()):
+            if self._accept_suggestion():
+                event.accept()
+                return
+        if key == Qt.Key.Key_Down:
             self.nexus.navigate_results(1)
             event.accept()
         elif key == Qt.Key.Key_Up:
@@ -177,44 +191,27 @@ class NexusInput(QLineEdit):
     def paintEvent(self, event):
         super().paintEvent(event)
         suggestion = self._get_suggestion()
-        if suggestion:
-            painter = QPainter(self)
+        if not suggestion:
+            return
 
-            # Use a dark/light mode appropriate ghost color
-            if getattr(self.nexus, "is_light_mode", False):
-                painter.setPen(QColor(156, 163, 175, 180))  # gray-400
-            else:
-                painter.setPen(QColor(107, 114, 128, 160))  # gray-500
+        painter = QPainter(self)
 
-            font = self.font()
-            painter.setFont(font)
+        # Ghost color for dark / light mode
+        if getattr(self.nexus, "is_light_mode", False):
+            painter.setPen(QColor(156, 163, 175, 180))  # gray-400
+        else:
+            painter.setPen(QColor(107, 114, 128, 160))  # gray-500
 
-            # Calculate where the actual text ends to draw the suffix
-            fm = self.fontMetrics()
-            text = self.text()
-            # The exact text rect differs by OS, we get the cursor rect for the safest base position
-            cursor_rect = self.cursorRect()
+        painter.setFont(self.font())
 
-            # Fallback if cursor rect acting weird
-            if cursor_rect.x() < 0:
-                return
+        # Use cursorRect() — it already accounts for CSS padding,
+        # margins, and scroll offset inside the QLineEdit.
+        cr = self.cursorRect()
+        x_pos = cr.right() + 1
+        y_pos = cr.top() + self.fontMetrics().ascent()
 
-            # Note: We align the drawing using the current baseline or bounding box
-            # QLineEdit has text margins and contents margins.
-            margins = self.textMargins()
-            cm = self.contentsMargins()
-            left_offset = (
-                cm.left() + margins.left() + 2
-            )  # The +2 is QLineEdit's internal padding
-
-            x_pos = left_offset + fm.horizontalAdvance(text)
-
-            # The baseline can be approximated by height
-            rect = self.rect()
-            y_pos = (rect.height() + fm.ascent() - fm.descent()) // 2
-
-            painter.drawText(x_pos, y_pos, suggestion)
-            painter.end()
+        painter.drawText(x_pos, y_pos, suggestion)
+        painter.end()
 
 
 # ---------------------------------------------------------------------------
