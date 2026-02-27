@@ -201,6 +201,42 @@ def launch_regex_helper(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.regex_helper.regex_helper"])
 
 
+def launch_file_ops(nexus) -> None:
+    """Launch the Nexus File Ops tool."""
+    nexus.status_lbl.setText("📂 Launching File Ops...")
+    subprocess.Popen([sys.executable, "-m", "src.file_ops.file_ops"])
+
+
+def launch_archiver(nexus) -> None:
+    """Launch the Nexus Archiver tool."""
+    nexus.status_lbl.setText("📦 Launching Archiver...")
+    subprocess.Popen([sys.executable, "-m", "src.archiver.archiver"])
+
+
+def launch_color_picker(nexus) -> None:
+    """Launch the Nexus Color Picker tool."""
+    nexus.status_lbl.setText("🎨 Launching Color Picker...")
+    subprocess.Popen([sys.executable, "-m", "src.color_picker.color_picker"])
+
+
+def launch_base64_tool(nexus) -> None:
+    """Launch the System Base-64 tool."""
+    nexus.status_lbl.setText("🔢 Launching Base64 Tool...")
+    subprocess.Popen([sys.executable, "-m", "src.base64_tool.base64_tool"])
+
+
+def launch_ip_calculator(nexus) -> None:
+    """Launch the Nexus IP Calculator."""
+    nexus.status_lbl.setText("🌐 Launching IP Calculator...")
+    subprocess.Popen([sys.executable, "-m", "src.ip_calculator.ip_calculator"])
+
+
+def launch_chronos(nexus) -> None:
+    """Launch the Chronos Hub."""
+    nexus.status_lbl.setText("⏳ Launching Chronos Hub...")
+    subprocess.Popen([sys.executable, "-m", "src.chronos.chronos"])
+
+
 def run_macro(nexus, macro_id: int) -> None:
     """Execute a Ghost Typist macro in a background thread."""
 
@@ -241,7 +277,8 @@ def log_to_chronos(nexus, text: str) -> None:
         impact, text = "Low", text[2:]
 
     try:
-        db_path = os.path.join(os.getenv("APPDATA", "."), "chronos_achievements.db")
+        appdata = os.getenv("APPDATA", ".")
+        db_path = os.path.join(appdata, ".chronos_app", "chronos_data.db")
         now = datetime.datetime.now()
         with sqlite3.connect(db_path) as conn:
             conn.execute(

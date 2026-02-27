@@ -35,6 +35,13 @@ def get_dark_theme() -> str:
             font-size: 9px;
             font-family: 'Outfit', 'Inter', 'Segoe UI';
         }
+        QLabel#nexus_clock {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 11px;
+            font-weight: 500;
+            font-family: 'Outfit', 'Inter', 'Segoe UI';
+            margin-right: 4px;
+        }
         QLabel#nexus_logo {
             background: transparent;
             border: none;
@@ -278,6 +285,13 @@ def get_light_theme() -> str:
             color: rgba(0, 0, 0, 0.3);
             font-size: 9px;
             font-family: 'Outfit', 'Inter', 'Segoe UI';
+        }
+        QLabel#nexus_clock {
+            color: rgba(0, 0, 0, 0.4);
+            font-size: 11px;
+            font-weight: 500;
+            font-family: 'Outfit', 'Inter', 'Segoe UI';
+            margin-right: 4px;
         }
         QLabel#nexus_logo {
             background: transparent;

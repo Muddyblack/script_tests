@@ -23,11 +23,13 @@ requires-python = ">=3.9"
 nexus = "src.nexus.app:main"
 xexplorer = "src.xexplorer.xexplorer:main"
 regex-helper = "src.regex_helper.regex_helper:main"
+file-ops = "src.file_ops.file_ops:main"
+archiver = "src.archiver.archiver:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["src.nexus", "src.xexplorer", "src.common", "src.regex_helper"]
+packages = ["src.nexus", "src.xexplorer", "src.common", "src.regex_helper", "src.file_ops", "src.archiver"]
 package-dir = {"" = "."}

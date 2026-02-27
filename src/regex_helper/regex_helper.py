@@ -556,72 +556,72 @@ class RegexSandbox(QMainWindow):
             self.setStyleSheet("""
                 QMainWindow { background-color: #0b0e14; }
                 QWidget { background-color: #0b0e14; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; }
-                
-                QFrame#sidebar { 
-                    background-color: #121620; 
-                    border-right: 1px solid #1e293b; 
+
+                QFrame#sidebar {
+                    background-color: #121620;
+                    border-right: 1px solid #1e293b;
                 }
-                
+
                 QLabel#section_title { color: #94a3b8; font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }
                 QLabel#mode_label { color: #94a3b8; }
-                
-                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox { 
-                    background-color: #1a1f2e; 
-                    border: 1px solid #334155; 
-                    padding: 12px; 
-                    border-radius: 8px; 
+
+                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+                    background-color: #1a1f2e;
+                    border: 1px solid #334155;
+                    padding: 12px;
+                    border-radius: 8px;
                     color: #ffffff;
                     font-size: 13px;
                 }
                 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus { border: 1px solid #3b82f6; background-color: #0f172a; }
                 QComboBox::drop-down { border: none; }
-                
+
                 QCheckBox { color: #94a3b8; spacing: 8px; }
                 QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #334155; background-color: #0f172a; }
                 QCheckBox::indicator:checked { background-color: #3b82f6; border: 1.5px solid #3b82f6; }
-                
-                QPushButton { 
-                    background-color: #1e293b; 
-                    border: 1px solid #334155; 
-                    padding: 8px 12px; 
-                    border-radius: 6px; 
-                    font-weight: 600; 
+
+                QPushButton {
+                    background-color: #1e293b;
+                    border: 1px solid #334155;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    font-weight: 600;
                     color: #f8fafc;
                     font-size: 11px;
                 }
                 QPushButton:hover { background-color: #334155; border: 1px solid #475569; }
                 QPushButton:pressed { background-color: #0f172a; }
-                
-                QPushButton#accent_btn { 
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6); 
-                    color: white; 
+
+                QPushButton#accent_btn {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6);
+                    color: white;
                     border: none;
                     font-size: 12px;
                 }
                 QPushButton#accent_btn:hover { background: #3b82f6; }
-                
-                QPushButton#danger_btn { 
-                    background-color: rgba(239, 68, 68, 0.1); 
-                    color: #f87171; 
-                    border: 1px solid rgba(239, 68, 68, 0.2); 
+
+                QPushButton#danger_btn {
+                    background-color: rgba(239, 68, 68, 0.1);
+                    color: #f87171;
+                    border: 1px solid rgba(239, 68, 68, 0.2);
                 }
                 QPushButton#danger_btn:hover { background-color: rgba(239, 68, 68, 0.2); }
 
-                QListWidget { 
-                    background-color: transparent; 
-                    border: none; 
-                    outline: none; 
+                QListWidget {
+                    background-color: transparent;
+                    border: none;
+                    outline: none;
                 }
-                QListWidget::item { 
+                QListWidget::item {
                     background-color: #1a1f2e;
-                    padding: 6px 10px; 
-                    border-radius: 5px; 
-                    margin-bottom: 3px; 
+                    padding: 6px 10px;
+                    border-radius: 5px;
+                    margin-bottom: 3px;
                     border: 1px solid transparent;
                 }
                 QListWidget::item:hover { background-color: #242b3d; border: 1px solid #334155; }
                 QListWidget::item:selected { background-color: #1e293b; color: #3b82f6; border: 1px solid #3b82f6; }
-                
+
                 QTabWidget::pane { border: 1px solid #1e293b; top: -1px; background-color: #0b0e14; }
                 QTabBar::tab { background: #121620; border: 1px solid #1e293b; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: #94a3b8; font-weight: bold; margin-right: 2px; }
                 QTabBar::tab:selected { background: #0b0e14; color: #3b82f6; border-bottom: 2px solid #3b82f6; }
@@ -635,12 +635,12 @@ class RegexSandbox(QMainWindow):
                 QProgressBar { background-color: #1a1f2e; border: none; border-radius: 2px; }
                 QProgressBar::chunk { background-color: #3b82f6; border-radius: 2px; }
 
-                QScrollBar:vertical { 
-                    border: none; background: transparent; 
+                QScrollBar:vertical {
+                    border: none; background: transparent;
                     width: 4px; margin: 0px;
                 }
-                QScrollBar::handle:vertical { 
-                    background: #334155; border-radius: 2px; min-height: 40px; 
+                QScrollBar::handle:vertical {
+                    background: #334155; border-radius: 2px; min-height: 40px;
                 }
                 QScrollBar::handle:vertical:hover { background: #475569; }
                 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
@@ -652,87 +652,87 @@ class RegexSandbox(QMainWindow):
             self.setStyleSheet("""
                 QMainWindow { background-color: #f8fafc; }
                 QWidget { background-color: #f8fafc; color: #1e293b; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
-                
-                QFrame#sidebar { 
-                    background-color: #ffffff; 
-                    border-right: 1px solid #e2e8f0; 
+
+                QFrame#sidebar {
+                    background-color: #ffffff;
+                    border-right: 1px solid #e2e8f0;
                 }
-                
+
                 QLabel#section_title { color: #64748b; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }
                 QLabel#mode_label { color: #64748b; }
-                
-                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox { 
-                    background-color: #ffffff; 
-                    border: 1px solid #e2e8f0; 
-                    padding: 12px; 
-                    border-radius: 8px; 
+
+                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+                    background-color: #ffffff;
+                    border: 1px solid #e2e8f0;
+                    padding: 12px;
+                    border-radius: 8px;
                     color: #1e293b;
                     font-size: 14px;
                 }
                 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus { border: 1px solid #3b82f6; background-color: #f1f5f9; }
                 QComboBox::drop-down { border: none; }
-                
+
                 QCheckBox { color: #64748b; spacing: 8px; }
                 QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #cbd5e1; background-color: #ffffff; }
                 QCheckBox::indicator:checked { background-color: #3b82f6; border: 1.5px solid #3b82f6; }
-                
-                QPushButton { 
-                    background-color: #f1f5f9; 
-                    border: 1px solid #e2e8f0; 
-                    padding: 8px 12px; 
-                    border-radius: 6px; 
-                    font-weight: 600; 
+
+                QPushButton {
+                    background-color: #f1f5f9;
+                    border: 1px solid #e2e8f0;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    font-weight: 600;
                     color: #475569;
                     font-size: 12px;
                 }
                 QPushButton:hover { background-color: #e2e8f0; border: 1px solid #cbd5e1; }
                 QPushButton:pressed { background-color: #cbd5e1; }
-                
-                QPushButton#accent_btn { 
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6); 
-                    color: white; 
+
+                QPushButton#accent_btn {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6);
+                    color: white;
                     border: none;
                 }
                 QPushButton#accent_btn:hover { background: #1d4ed8; }
-                
-                QPushButton#danger_btn { 
-                    background-color: #fef2f2; 
-                    color: #ef4444; 
-                    border: 1px solid #fee2e2; 
+
+                QPushButton#danger_btn {
+                    background-color: #fef2f2;
+                    color: #ef4444;
+                    border: 1px solid #fee2e2;
                 }
                 QPushButton#danger_btn:hover { background-color: #fee2e2; }
 
-                QListWidget { 
-                    background-color: transparent; 
-                    border: none; 
-                    outline: none; 
+                QListWidget {
+                    background-color: transparent;
+                    border: none;
+                    outline: none;
                 }
-                QListWidget::item { 
+                QListWidget::item {
                     background-color: #ffffff;
-                    padding: 6px 10px; 
-                    border-radius: 6px; 
-                    margin-bottom: 4px; 
+                    padding: 6px 10px;
+                    border-radius: 6px;
+                    margin-bottom: 4px;
                     border: 1px solid #f1f5f9;
                 }
                 QListWidget::item:hover { background-color: #f1f5f9; border: 1px solid #e2e8f0; }
                 QListWidget::item:selected { background-color: #eff6ff; color: #2563eb; border: 1px solid #3b82f6; }
-                
+
                 QTabWidget::pane { border: 1px solid #e2e8f0; top: -1px; background-color: #f8fafc; }
                 QTabBar::tab { background: #f1f5f9; border: 1px solid #e2e8f0; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: #64748b; font-weight: bold; margin-right: 2px; }
                 QTabBar::tab:selected { background: #f8fafc; color: #2563eb; border-bottom: 2px solid #2563eb; }
-                
+
                 QTableWidget { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; color: #1e293b; gridline-color: transparent; }
                 QHeaderView::section { background-color: #f1f5f9; padding: 8px; border: none; font-weight: bold; color: #64748b; border-bottom: 1px solid #e2e8f0; }
 
                 QProgressBar { background-color: #e2e8f0; border: none; border-radius: 2px; }
                 QProgressBar::chunk { background-color: #3b82f6; border-radius: 2px; }
 
-                QScrollBar:vertical { 
-                    border: none; background: rgba(0,0,0,0.03); 
+                QScrollBar:vertical {
+                    border: none; background: rgba(0,0,0,0.03);
                     width: 4px; border-radius: 2px;
                 }
-                QScrollBar::handle:vertical { 
-                    background: #e2e8f0; border-radius: 2px; min-height: 30px; 
+                QScrollBar::handle:vertical {
+                    background: #e2e8f0; border-radius: 2px; min-height: 30px;
                 }
                 QScrollBar::handle:vertical:hover { background: #cbd5e1; }
                 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
@@ -937,20 +937,24 @@ class RegexSandbox(QMainWindow):
         elif mode == "Exact Match":
             comment = f"# Escaped Literal Match for: {raw_pattern}"
 
+        test_str_content = self.text_input.toPlainText()[:150]
+        ellipsis = "..." if len(self.text_input.toPlainText()) > 150 else ""
+        triple_quote = '"""'
+
         code = f"""import re
 
 {comment}
 regex = r"{pattern_str}"
 
 # Your Target String
-test_str = \"\"\"{self.text_input.toPlainText()[:150]}{"..." if len(self.text_input.toPlainText()) > 150 else ""}\"\"\"
+test_str = {triple_quote}{test_str_content}{ellipsis}{triple_quote}
 
 # Find Matches
 matches = re.finditer(regex, test_str{flag_str})
 
 for matchNum, match in enumerate(matches, start=1):
     print(f"Match {{matchNum}} found at {{match.start()}}-{{match.end()}}: {{match.group()}}")
-    
+
     # Iterate through capture groups
     for groupNum in range(0, len(match.groups())):
         groupNum = groupNum + 1
@@ -978,11 +982,14 @@ for matchNum, match in enumerate(matches, start=1):
         elif mode == "Exact Match":
             comment = f"// Escaped Literal Match for: {raw_pattern}"
 
+        test_str_content = self.text_input.toPlainText()[:150].replace("`", "\\`")
+        ellipsis = "..." if len(self.text_input.toPlainText()) > 150 else ""
+
         code = f"""{comment}
 const regex = /{pattern_str}/{js_flags};
 
 // Your Target String
-const str = `{self.text_input.toPlainText()[:150].replace("`", "\\`")}{"..." if len(self.text_input.toPlainText()) > 150 else ""}`;
+const str = `{test_str_content}{ellipsis}`;
 
 let m;
 
@@ -991,7 +998,7 @@ while ((m = regex.exec(str)) !== null) {{
     if (m.index === regex.lastIndex) {{
         regex.lastIndex++;
     }}
-    
+
     // The result can be accessed through the `m`-variable.
     m.forEach((match, groupIndex) => {{
         console.log(`Found match, group ${{groupIndex}}: ${{match}}`);
@@ -1126,7 +1133,7 @@ while ((m = regex.exec(str)) !== null) {{
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO patterns (name, pattern, flags, test_string, mode) 
+                INSERT INTO patterns (name, pattern, flags, test_string, mode)
                 VALUES (?, ?, ?, ?, ?)
             """,
                 (name.strip(), pattern, flags, test_str, mode),

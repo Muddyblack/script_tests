@@ -14,6 +14,7 @@ import webbrowser
 
 import keyboard
 from PyQt6.QtCore import (
+    QDateTime,
     QEasingCurve,
     QPropertyAnimation,
     QSize,
@@ -63,6 +64,24 @@ from .system_commands import (
 )
 from .system_commands import (
     kill_process as _kill_proc,
+)
+from .system_commands import (
+    launch_archiver as _launch_archiver,
+)
+from .system_commands import (
+    launch_base64_tool as _launch_base64_tool,
+)
+from .system_commands import (
+    launch_chronos as _launch_chronos,
+)
+from .system_commands import (
+    launch_color_picker as _launch_color_picker,
+)
+from .system_commands import (
+    launch_file_ops as _launch_file_ops,
+)
+from .system_commands import (
+    launch_ip_calculator as _launch_ip_calculator,
 )
 from .system_commands import (
     launch_regex_helper as _launch_regex,
@@ -163,6 +182,11 @@ class NexusSearch(QWidget):
         self.search_timer.timeout.connect(self.perform_search)
 
         self.last_search_time = 0
+        # Clock timer — live updates
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(1000)
+        self.update_clock()
         self.current_candidates = []
 
         # Global input redirect
@@ -477,6 +501,11 @@ class NexusSearch(QWidget):
         brand_lbl.setObjectName("nexus_brand")
         brand_row.addWidget(brand_lbl)
         brand_row.addStretch()
+
+        self.clock_lbl = QLabel()
+        self.clock_lbl.setObjectName("nexus_clock")
+        brand_row.addWidget(self.clock_lbl)
+
         ver_lbl = QLabel("v2")
         ver_lbl.setObjectName("nexus_version")
         brand_row.addWidget(ver_lbl)
@@ -537,6 +566,14 @@ class NexusSearch(QWidget):
         self.btn_pick_folders.setObjectName("mode_btn")
         self.btn_pick_folders.clicked.connect(self.show_folder_picker)
 
+        self.btn_reset_path = QPushButton("✖ Reset Path")
+        self.btn_reset_path.setObjectName("mode_btn")
+        self.btn_reset_path.setToolTip("Clear all folder search filters")
+        self.btn_reset_path.clicked.connect(self.clear_folder_filters)
+        # Highlight if filter is active
+        if self.modes.get("target_folders"):
+            self.btn_reset_path.setStyleSheet("color: #ef4444; font-weight: bold;")
+
         self.btn_view_toggle = QPushButton("Tree View")
         self.btn_view_toggle.setCheckable(True)
         self.btn_view_toggle.setObjectName("mode_btn")
@@ -546,6 +583,7 @@ class NexusSearch(QWidget):
         fb_layout.addWidget(self.btn_d_only)
         fb_layout.addWidget(self.btn_view_toggle)
         fb_layout.addWidget(self.btn_pick_folders)
+        fb_layout.addWidget(self.btn_reset_path)
         left_layout.addWidget(self.filter_bar)
 
         self.splitter.addWidget(self.left_panel)
@@ -671,7 +709,24 @@ class NexusSearch(QWidget):
             self.btn_f_only.setChecked(False)
         self.modes[mode] = checked
         self.save_settings()
+        self.update_reset_path_style()
         self.perform_search()
+
+    def clear_folder_filters(self):
+        """Reset path-specific folder filters."""
+        self.modes["target_folders"] = []
+        self.save_settings()
+        self.update_reset_path_style()
+        self.status_lbl.setText("✓ Folder filters cleared")
+        self.perform_search()
+
+    def update_reset_path_style(self):
+        """Update Reset Path button style based on filter state."""
+        if hasattr(self, "btn_reset_path"):
+            if self.modes.get("target_folders"):
+                self.btn_reset_path.setStyleSheet("color: #ef4444; font-weight: bold;")
+            else:
+                self.btn_reset_path.setStyleSheet("")
 
     def show_folder_picker(self):
         managed = []
@@ -829,6 +884,13 @@ class NexusSearch(QWidget):
                     f"Locked Search to: {os.path.basename(dir_path)}"
                 )
                 self.save_settings()
+
+    # ------------------------------------------------------------------
+    # Clock
+    # ------------------------------------------------------------------
+    def update_clock(self):
+        """Update the live clock label."""
+        self.clock_lbl.setText(QDateTime.currentDateTime().toString("HH:mm:ss"))
 
     # ------------------------------------------------------------------
     # Window management
@@ -1048,6 +1110,48 @@ class NexusSearch(QWidget):
                     "🔬",
                     "#f472b6",
                 ),
+                (
+                    "Base64 Encoder/Decoder",
+                    "Encode and decode text strings",
+                    "base64_tool",
+                    "🔢",
+                    "#4f46e5",
+                ),
+                (
+                    "IP Calculator",
+                    "IP Subnet Calculator with CIDR support",
+                    "ip_calculator",
+                    "🌐",
+                    "#0ea5e9",
+                ),
+                (
+                    "Color Picker",
+                    "Hex & RGB preview + color tool",
+                    "color_picker",
+                    "🎨",
+                    "#8b5cf6",
+                ),
+                (
+                    "File Ops",
+                    "Fast copy • move • delete",
+                    "file_ops",
+                    "📂",
+                    "#22c55e",
+                ),
+                (
+                    "Chronos Hub",
+                    "Achievement & Mission Tracker",
+                    "chronos_hub",
+                    "⏳",
+                    "#fbbf24",
+                ),
+                (
+                    "Archiver",
+                    "Zip • tar • 7z compress & extract",
+                    "archiver",
+                    "📦",
+                    "#a78bfa",
+                ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
                 if not terms or matches_all_terms(title, t_terms):
@@ -1207,6 +1311,12 @@ class NexusSearch(QWidget):
                 PROJECT_ROOT,
                 os.path.join(PROJECT_ROOT, "src", "xexplorer"),
                 os.path.join(PROJECT_ROOT, "src", "regex_helper"),
+                os.path.join(PROJECT_ROOT, "src", "file_ops"),
+                os.path.join(PROJECT_ROOT, "src", "archiver"),
+                os.path.join(PROJECT_ROOT, "src", "color_picker"),
+                os.path.join(PROJECT_ROOT, "src", "base64_tool"),
+                os.path.join(PROJECT_ROOT, "src", "ip_calculator"),
+                os.path.join(PROJECT_ROOT, "src", "chronos"),
                 os.path.join(APPDATA, "scripts"),
             ]
             for spath in script_paths:
@@ -1640,6 +1750,18 @@ class NexusSearch(QWidget):
                 _trigger_reindex(self)
             elif data["cmd"] == "regex_helper":
                 _launch_regex(self)
+            elif data["cmd"] == "file_ops":
+                _launch_file_ops(self)
+            elif data["cmd"] == "archiver":
+                _launch_archiver(self)
+            elif data["cmd"] == "color_picker":
+                _launch_color_picker(self)
+            elif data["cmd"] == "base64_tool":
+                _launch_base64_tool(self)
+            elif data["cmd"] == "ip_calculator":
+                _launch_ip_calculator(self)
+            elif data["cmd"] == "chronos_hub":
+                _launch_chronos(self)
             elif (
                 data["cmd"].startswith("toggle_")
                 or data["cmd"].startswith("cmd_")
