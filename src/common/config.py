@@ -10,6 +10,7 @@ GHOST_TYPIST_DB = os.path.join(APPDATA, "ghost_typist.db")
 SETTINGS_FILE = os.path.join(APPDATA, "nexus_settings.json")
 USAGE_FILE = os.path.join(APPDATA, "nexus_usage.json")
 APPS_CACHE_FILE = os.path.join(APPDATA, "nexus_apps_cache.json")
+SEARCH_HISTORY_FILE = os.path.join(APPDATA, "nexus_history.json")
 
 # --- HOTKEY ---
 SUMMON_HOTKEY = "ctrl+shift+space"

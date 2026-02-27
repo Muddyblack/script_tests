@@ -22,11 +22,12 @@ requires-python = ">=3.9"
 [project.scripts]
 nexus = "src.nexus.app:main"
 xexplorer = "src.xexplorer.xexplorer:main"
+regex-helper = "src.regex_helper.regex_helper:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["src.nexus", "src.xexplorer", "src.common"]
+packages = ["src.nexus", "src.xexplorer", "src.common", "src.regex_helper"]
 package-dir = {"" = "."}

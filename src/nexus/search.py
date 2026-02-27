@@ -33,6 +33,8 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QSizePolicy,
+    QSplitter,
     QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -45,7 +47,9 @@ from src.common.config import (
     APPS_CACHE_FILE,
     DB_PATH,
     GHOST_TYPIST_DB,
+    ICON_PATH,
     PROJECT_ROOT,
+    SEARCH_HISTORY_FILE,
     SETTINGS_FILE,
     USAGE_FILE,
     X_EXPLORER_DB,
@@ -61,6 +65,9 @@ from .system_commands import (
     kill_process as _kill_proc,
 )
 from .system_commands import (
+    launch_regex_helper as _launch_regex,
+)
+from .system_commands import (
     log_to_chronos as _log_to_chronos,
 )
 from .system_commands import (
@@ -74,7 +81,7 @@ from .system_commands import (
 )
 from .themes import get_dark_theme, get_light_theme
 from .utils import format_display_name, run_workspace
-from .widgets import IconWorker, NexusInput
+from .widgets import IconWorker, NexusInput, RainbowFrame
 
 
 class NexusSearch(QWidget):
@@ -92,7 +99,8 @@ class NexusSearch(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(800, 680)
+        self.setMinimumSize(960, 700)
+        self.resize(960, 700)
 
         # Window state
         self.dragging = False
@@ -112,14 +120,18 @@ class NexusSearch(QWidget):
             "folders_only": False,
             "target_folders": [],
             "content": False,
+            "side_panel_visible": True,
         }
         self.view_mode = "list"
         self.is_light_mode = False
         self.load_settings()
 
-        # Usage history
         self.usage_stats = {}
         self.load_usage()
+
+        # Search text history for auto-completion
+        self.search_history = []
+        self.load_search_history()
 
         # Data cache
         self.workspaces = []
@@ -177,16 +189,18 @@ class NexusSearch(QWidget):
             pass
 
     def scan_installed_apps(self):
-        """Scan Windows Start Menu for application shortcuts."""
+        """Scan Windows Start Menu and Desktop for application shortcuts."""
         paths = [
             os.path.join(
                 os.environ.get("PROGRAMDATA", "C:\\ProgramData"),
-                r"Microsoft\Windows\Start Menu\Programs",
+                r"Microsoft\Windows\Start Menu",
             ),
             os.path.join(
                 os.environ.get("APPDATA", ""),
-                r"Microsoft\Windows\Start Menu\Programs",
+                r"Microsoft\Windows\Start Menu",
             ),
+            os.path.join(os.environ.get("PUBLIC", "C:\\Users\\Public"), "Desktop"),
+            os.path.join(os.environ.get("USERPROFILE", ""), "Desktop"),
         ]
         apps = []
         for p in paths:
@@ -371,6 +385,35 @@ class NexusSearch(QWidget):
         return min(count * 50, 600)
 
     # ------------------------------------------------------------------
+    # Search history (raw text)
+    # ------------------------------------------------------------------
+    def load_search_history(self):
+        try:
+            if os.path.exists(SEARCH_HISTORY_FILE):
+                with open(SEARCH_HISTORY_FILE) as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        self.search_history = data
+        except Exception:
+            self.search_history = []
+
+    def record_search(self, raw_text):
+        """Save a search string to history to enable autocomplete."""
+        text = raw_text.strip()
+        if not text:
+            return
+        # Move to front
+        if text in self.search_history:
+            self.search_history.remove(text)
+        self.search_history.insert(0, text)
+        self.search_history = self.search_history[:100]  # Keep 100 max
+        try:
+            with open(SEARCH_HISTORY_FILE, "w") as f:
+                json.dump(self.search_history, f)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
     # Workspace loading
     # ------------------------------------------------------------------
     def load_workspaces(self):
@@ -386,53 +429,76 @@ class NexusSearch(QWidget):
             self.workspaces = []
 
     # ------------------------------------------------------------------
-    # UI setup
+    # UI setup  (redesigned: side-panel + rainbow input + action buttons)
     # ------------------------------------------------------------------
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(16, 16, 16, 16)
 
         self.bg_frame = QFrame()
         self.bg_frame.setObjectName("nexus_bg")
 
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(40)
+        shadow.setBlurRadius(50)
         shadow.setXOffset(0)
-        shadow.setYOffset(12)
-        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setYOffset(10)
+        shadow.setColor(QColor(0, 0, 0, 200))
         self.bg_frame.setGraphicsEffect(shadow)
 
         bg_layout = QVBoxLayout(self.bg_frame)
-        bg_layout.setContentsMargins(25, 20, 25, 12)
-        bg_layout.setSpacing(12)
+        bg_layout.setContentsMargins(0, 0, 0, 0)
+        bg_layout.setSpacing(0)
 
-        # Header
-        header_layout = QHBoxLayout()
-        self.search_input = NexusInput(self)
-        self.search_input.setObjectName("nexus_search")
-        self.search_input.setPlaceholderText(
-            "Search Workspaces, Files, Macros, or Scripts..."
-        )
-        self.search_input.textChanged.connect(lambda: self.search_timer.start(30))
-        header_layout.addWidget(self.search_input)
-        bg_layout.addLayout(header_layout)
+        # ── QSplitter: left panel | right content ──
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setObjectName("nexus_splitter")
+        self.splitter.setHandleWidth(3)
+        self.splitter.setChildrenCollapsible(False)
 
-        # Mode bar
-        mode_layout = QHBoxLayout()
-        mode_layout.setSpacing(10)
+        # ── Left Panel (branding + sources, full height) ──
+        self.left_panel = QWidget()
+        self.left_panel.setObjectName("left_panel")
+        self.left_panel.setMinimumWidth(130)
+        self.left_panel.setMaximumWidth(250)
+        left_layout = QVBoxLayout(self.left_panel)
+        left_layout.setContentsMargins(16, 14, 10, 10)
+        left_layout.setSpacing(10)
+
+        # Brand row (inside left panel)
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(8)
+        if os.path.exists(ICON_PATH):
+            logo_lbl = QLabel()
+            logo_lbl.setObjectName("nexus_logo")
+            pix = QIcon(ICON_PATH).pixmap(20, 20)
+            logo_lbl.setPixmap(pix)
+            brand_row.addWidget(logo_lbl)
+        brand_lbl = QLabel("NEXUS")
+        brand_lbl.setObjectName("nexus_brand")
+        brand_row.addWidget(brand_lbl)
+        brand_row.addStretch()
+        ver_lbl = QLabel("v2")
+        ver_lbl.setObjectName("nexus_version")
+        brand_row.addWidget(ver_lbl)
+        left_layout.addLayout(brand_row)
+
+        # Sources header
+        panel_hdr = QLabel("SOURCES")
+        panel_hdr.setObjectName("panel_header")
+        left_layout.addWidget(panel_hdr)
+
+        # Mode buttons
         self.mode_btns = {}
-
         modes_metadata = [
-            ("apps", "📦 Apps"),
-            ("workspaces", "🚀 Workspaces"),
-            ("files", "📄 Files"),
-            ("macros", "⌨️ Macros"),
-            ("scripts", "🐍 Scripts"),
-            ("ssh", "🔗 SSH"),
-            ("processes", "💥 Processes"),
-            ("toggles", "⚙️ Toggles"),
+            ("apps", "Apps"),
+            ("workspaces", "Workspaces"),
+            ("files", "Files"),
+            ("macros", "Macros"),
+            ("scripts", "Scripts"),
+            ("ssh", "SSH"),
+            ("processes", "Processes"),
+            ("toggles", "System"),
         ]
-
         for key, label in modes_metadata:
             btn = QPushButton(label)
             btn.setCheckable(True)
@@ -440,18 +506,18 @@ class NexusSearch(QWidget):
             btn.setObjectName("mode_btn")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, k=key: self.toggle_mode(k, checked))
-            mode_layout.addWidget(btn)
+            left_layout.addWidget(btn)
             self.mode_btns[key] = btn
 
-        mode_layout.addStretch()
-        bg_layout.addLayout(mode_layout)
+        left_layout.addStretch()
 
-        # File filter bar
+        # File filter sub-buttons
         self.filter_bar = QFrame()
         self.filter_bar.setObjectName("filter_bar")
         self.filter_bar.setVisible(self.modes.get("files", False))
-        filter_layout = QHBoxLayout(self.filter_bar)
-        filter_layout.setContentsMargins(10, 0, 10, 0)
+        fb_layout = QVBoxLayout(self.filter_bar)
+        fb_layout.setContentsMargins(0, 4, 0, 0)
+        fb_layout.setSpacing(3)
 
         self.btn_f_only = QPushButton("Just Files")
         self.btn_f_only.setCheckable(True)
@@ -467,28 +533,54 @@ class NexusSearch(QWidget):
             lambda c: self.toggle_sub_mode("folders_only", c)
         )
 
-        self.btn_pick_folders = QPushButton("Pick Search Folders...")
+        self.btn_pick_folders = QPushButton("Pick Folder…")
         self.btn_pick_folders.setObjectName("mode_btn")
         self.btn_pick_folders.clicked.connect(self.show_folder_picker)
 
-        self.btn_view_toggle = QPushButton("🌲 Tree")
+        self.btn_view_toggle = QPushButton("Tree View")
         self.btn_view_toggle.setCheckable(True)
         self.btn_view_toggle.setObjectName("mode_btn")
         self.btn_view_toggle.clicked.connect(self.toggle_view_mode)
 
-        lbl = QLabel("Filters:")
-        lbl.setObjectName("filter_label")
-        filter_layout.addWidget(lbl)
-        filter_layout.addWidget(self.btn_f_only)
-        filter_layout.addWidget(self.btn_d_only)
-        filter_layout.addWidget(self.btn_view_toggle)
-        filter_layout.addStretch()
-        filter_layout.addWidget(self.btn_pick_folders)
+        fb_layout.addWidget(self.btn_f_only)
+        fb_layout.addWidget(self.btn_d_only)
+        fb_layout.addWidget(self.btn_view_toggle)
+        fb_layout.addWidget(self.btn_pick_folders)
+        left_layout.addWidget(self.filter_bar)
 
-        bg_layout.addLayout(QHBoxLayout())  # Spacer
-        bg_layout.addWidget(self.filter_bar)
+        self.splitter.addWidget(self.left_panel)
 
-        # Results container
+        # ── Right Panel (input + results + footer) ──
+        right_panel = QWidget()
+        right_panel.setObjectName("right_panel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(12, 14, 16, 10)
+        right_layout.setSpacing(10)
+
+        # Toggle button (in right panel top-left, visible when panel hidden)
+        top_bar = QHBoxLayout()
+        self.btn_side_toggle = QPushButton("☰")
+        self.btn_side_toggle.setObjectName("panel_toggle")
+        self.btn_side_toggle.setFixedSize(28, 24)
+        self.btn_side_toggle.setToolTip("Toggle Sources Panel")
+        self.btn_side_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_side_toggle.clicked.connect(self.toggle_side_panel)
+        top_bar.addWidget(self.btn_side_toggle)
+        top_bar.addStretch()
+        right_layout.addLayout(top_bar)
+
+        # Rainbow-wrapped search input
+        self.rainbow_frame = RainbowFrame()
+        self.search_input = NexusInput(self)
+        self.search_input.setObjectName("nexus_search")
+        self.search_input.setPlaceholderText(
+            "Search apps, files, scripts, workspaces …"
+        )
+        self.search_input.textChanged.connect(lambda: self.search_timer.start(30))
+        self.rainbow_frame._content_layout.addWidget(self.search_input)
+        right_layout.addWidget(self.rainbow_frame)
+
+        # Results area
         self.results_stack = QStackedWidget()
         self.results_stack.setObjectName("results_stack")
 
@@ -511,7 +603,7 @@ class NexusSearch(QWidget):
 
         self.results_stack.addWidget(self.results_list)
         self.results_stack.addWidget(self.results_tree)
-        bg_layout.addWidget(self.results_stack)
+        right_layout.addWidget(self.results_stack, stretch=1)
 
         self.results_list.currentRowChanged.connect(self.on_item_hover)
         self.results_list.verticalScrollBar().valueChanged.connect(
@@ -520,17 +612,31 @@ class NexusSearch(QWidget):
 
         # Footer
         footer_layout = QHBoxLayout()
-        self.status_lbl = QLabel("Ready to launch...")
+        self.status_lbl = QLabel("Nexus Engine Ready …")
         self.status_lbl.setObjectName("status_text")
-        footer_layout.addWidget(self.status_lbl)
-        footer_layout.addStretch()
+        self.status_lbl.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        footer_layout.addWidget(self.status_lbl, stretch=1)
 
-        hint_lbl = QLabel("Enter to Run • Esc to Hide")
+        hint_lbl = QLabel("Enter ↵  Launch  •  Esc  Hide")
         hint_lbl.setObjectName("hint_text")
         footer_layout.addWidget(hint_lbl)
+        right_layout.addLayout(footer_layout)
 
-        bg_layout.addLayout(footer_layout)
+        self.splitter.addWidget(right_panel)
+
+        # Splitter proportions
+        self.splitter.setStretchFactor(0, 0)  # left panel fixed
+        self.splitter.setStretchFactor(1, 1)  # right panel expands
+        self.splitter.setSizes([160, 760])
+
+        bg_layout.addWidget(self.splitter)
         main_layout.addWidget(self.bg_frame)
+
+        # Initial side panel visibility from settings
+        is_visible = self.modes.get("side_panel_visible", True)
+        self.left_panel.setVisible(is_visible)
 
     # ------------------------------------------------------------------
     # Mode toggles
@@ -547,8 +653,14 @@ class NexusSearch(QWidget):
     def toggle_view_mode(self, checked):
         self.view_mode = "tree" if checked else "list"
         self.results_stack.setCurrentIndex(1 if checked else 0)
-        self.btn_view_toggle.setText("📄 List" if checked else "🌲 Tree")
+        self.btn_view_toggle.setText("List View" if checked else "Tree View")
         self.perform_search()
+
+    def toggle_side_panel(self):
+        is_visible = self.left_panel.isVisible()
+        self.left_panel.setVisible(not is_visible)
+        self.modes["side_panel_visible"] = not is_visible
+        self.save_settings()
 
     def toggle_sub_mode(self, mode, checked):
         if mode == "files_only" and checked:
@@ -645,6 +757,16 @@ class NexusSearch(QWidget):
         if not item:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            # Intermediate folder node — reconstruct path from tree hierarchy
+            parts = []
+            node = item
+            while node:
+                parts.insert(0, node.text(0))
+                node = node.parent()
+            folder_path = os.sep.join(parts)
+            if os.path.isdir(folder_path):
+                data = {"type": "file", "path": folder_path}
         self._show_common_menu(pos, data, self.results_tree)
 
     def _show_common_menu(self, pos, data, parent_widget):
@@ -682,10 +804,11 @@ class NexusSearch(QWidget):
             if action == copy_path:
                 norm_path = os.path.normpath(path)
                 QApplication.clipboard().setText(norm_path)
-                self.status_lbl.setText(f"Copied path: {norm_path}")
+                short = norm_path if len(norm_path) < 50 else "…" + norm_path[-45:]
+                self.status_lbl.setText(f"✓ Copied path: {short}")
             elif action == copy_name:
                 QApplication.clipboard().setText(os.path.basename(path))
-                self.status_lbl.setText("Copied file name to clipboard")
+                self.status_lbl.setText("✓ Copied file name to clipboard")
             elif action == open_loc:
                 norm_path = os.path.normpath(path)
                 if os.path.exists(norm_path):
@@ -755,6 +878,9 @@ class NexusSearch(QWidget):
         self.anim.setEndValue(1)
         self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.anim.start()
+
+        # Trigger rainbow glow on the search input
+        self.rainbow_frame.trigger_animation()
 
     # ------------------------------------------------------------------
     # Search engine
@@ -912,8 +1038,15 @@ class NexusSearch(QWidget):
                     "Re-index Files (X-Explorer)",
                     "Refresh file search cache",
                     "reindex_files",
-                    "📡",
+                    "▸",
                     "#60a5fa",
+                ),
+                (
+                    "Regex Helper",
+                    "Offline Pattern Tester",
+                    "regex_helper",
+                    "🔬",
+                    "#f472b6",
                 ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
@@ -922,7 +1055,7 @@ class NexusSearch(QWidget):
                         {
                             "score": score_base,
                             "title": title,
-                            "path": f"System Command • {path}",
+                            "path": f"System • {path}",
                             "icon": icon,
                             "color": color,
                             "data": {"type": "cmd", "cmd": cmd},
@@ -931,101 +1064,101 @@ class NexusSearch(QWidget):
 
             power_commands = [
                 (
-                    "Toggle Dark/Light Mode",
-                    "System Theme Preference",
+                    "Toggle Dark / Light Mode",
+                    "Theme",
                     "toggle_dark_mode",
-                    "🌓",
+                    "◐",
                     ["dark", "light", "theme", "night"],
                 ),
                 (
                     "Toggle Hidden Files",
-                    "Explorer View Settings",
+                    "Explorer",
                     "toggle_hidden_files",
-                    "👁️",
+                    "◉",
                     ["hidden", "files", "view", "explorer"],
                 ),
                 (
                     "Toggle Desktop Icons",
-                    "Show/Hide Desktop Shortcuts",
+                    "Desktop",
                     "toggle_desktop_icons",
-                    "🔳",
+                    "▦",
                     ["icons", "desktop", "shortcuts"],
                 ),
                 (
                     "Toggle System Mute",
-                    "Audio Master Control",
+                    "Audio",
                     "toggle_mute",
-                    "🔇",
+                    "◉",
                     ["mute", "audio", "volume", "sound"],
                 ),
                 (
-                    "Show/Hide Desktop",
-                    "Minimize All Windows",
+                    "Show / Hide Desktop",
+                    "Windows",
                     "toggle_desktop",
-                    "🖥️",
+                    "▣",
                     ["desktop", "reveal", "hide"],
                 ),
                 (
                     "Restart Windows Explorer",
-                    "Refresh UI & Taskbar",
+                    "System",
                     "restart_explorer",
-                    "🔄",
+                    "↻",
                     ["restart", "explorer", "refresh", "taskbar"],
                 ),
                 (
                     "Flush DNS Cache",
-                    "Network Reset Utility",
+                    "Network",
                     "flush_dns",
-                    "🌐",
+                    "↻",
                     ["dns", "flush", "network", "reset"],
                 ),
                 (
                     "Lock Workstation",
-                    "Secure Current Session",
+                    "Security",
                     "cmd_lock",
-                    "🔒",
+                    "▸",
                     ["lock", "security", "sign out"],
                 ),
                 (
                     "Put PC to Sleep",
-                    "Low Power Standby",
+                    "Power",
                     "cmd_sleep",
-                    "💤",
+                    "▸",
                     ["sleep", "standby", "power"],
                 ),
                 (
                     "Restart Computer",
-                    "Full System Reboot",
+                    "Power",
                     "cmd_restart",
-                    "♻️",
+                    "↻",
                     ["restart", "reboot", "power"],
                 ),
                 (
                     "Shutdown System",
-                    "Power Off Complete",
+                    "Power",
                     "cmd_shutdown",
-                    "🛑",
+                    "■",
                     ["shutdown", "power off", "exit"],
                 ),
                 (
                     "Windows Settings",
-                    "System Dashboard",
+                    "ms-settings",
                     "ms-settings:default",
-                    "⚙️",
+                    "▸",
                     ["settings", "config", "windows"],
                 ),
                 (
                     "Display Settings",
-                    "Resolution & Brightness",
+                    "ms-settings",
                     "ms-settings:display",
-                    "📺",
+                    "▸",
                     ["display", "monitor", "resolution", "brightness"],
                 ),
                 (
                     "Wi-Fi Settings",
-                    "Wireless Connections",
+                    "ms-settings",
                     "ms-settings:network-wifi",
-                    "📶",
+                    "▸",
                     ["wifi", "internet", "wireless"],
                 ),
             ]
@@ -1042,9 +1175,9 @@ class NexusSearch(QWidget):
                         {
                             "score": score,
                             "title": title,
-                            "path": f"System Control • {path}",
+                            "path": f"System › {path}",
                             "icon": icon,
-                            "color": "#a855f7",
+                            "color": "#94a3b8",
                             "data": {"type": "cmd", "cmd": cmd},
                         }
                     )
@@ -1073,7 +1206,7 @@ class NexusSearch(QWidget):
             script_paths = [
                 PROJECT_ROOT,
                 os.path.join(PROJECT_ROOT, "src", "xexplorer"),
-                os.path.join(PROJECT_ROOT, "src", "nexus"),
+                os.path.join(PROJECT_ROOT, "src", "regex_helper"),
                 os.path.join(APPDATA, "scripts"),
             ]
             for spath in script_paths:
@@ -1154,13 +1287,16 @@ class NexusSearch(QWidget):
                     score += 500
                 score += self.get_usage_boost(f"file_{f_path}")
 
+                # UNC / network paths get a globe icon
+                icon = "🌐" if self._is_unc_path(f_path) else "📁" if is_dir else "📄"
+
                 candidates.append(
                     {
                         "score": score,
                         "title": format_display_name(f_name),
                         "path": f_path,
                         "file_path": f_path,
-                        "icon": "📁" if is_dir else "📄",
+                        "icon": icon,
                         "data": {"type": "file", "path": f_path},
                     }
                 )
@@ -1213,6 +1349,33 @@ class NexusSearch(QWidget):
     # ------------------------------------------------------------------
     # Result population
     # ------------------------------------------------------------------
+    def _is_unc_path(self, path: str) -> bool:
+        """Return True if *path* is a UNC / network path."""
+        return path.startswith("\\\\") or path.startswith("//")
+
+    def _action_copy_path(self, path: str):
+        norm = os.path.normpath(path)
+        QApplication.clipboard().setText(norm)
+        short = norm if len(norm) < 50 else "…" + norm[-45:]
+        self.status_lbl.setText(f"✓ Copied: {short}")
+
+    def _action_copy_dir(self, path: str):
+        d = path if os.path.isdir(path) else os.path.dirname(path)
+        norm = os.path.normpath(d)
+        QApplication.clipboard().setText(norm)
+        short = norm if len(norm) < 50 else "…" + norm[-45:]
+        self.status_lbl.setText(f"✓ Copied: {short}")
+
+    def _action_open_folder(self, path: str):
+        norm = os.path.normpath(path)
+        if os.path.exists(norm):
+            if os.path.isdir(norm):
+                os.startfile(norm)
+            else:
+                subprocess.Popen(f'explorer /select,"{norm}"')
+        else:
+            self.status_lbl.setText("Path not found on disk")
+
     def populate_list_results(self, candidates):
         self.current_candidates = candidates[:50]
         self.results_list.setUpdatesEnabled(False)
@@ -1225,35 +1388,70 @@ class NexusSearch(QWidget):
 
             row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(15, 0, 15, 0)
-            row_layout.setSpacing(18)
+            row_layout.setContentsMargins(12, 0, 8, 0)
+            row_layout.setSpacing(14)
 
+            # -- Icon (UNC-aware) --
             icon_label = QLabel()
             icon_label.setObjectName(f"icon_{idx}")
-            icon_label.setFixedSize(42, 42)
+            icon_label.setFixedSize(38, 38)
             icon_label.setScaledContents(True)
-            icon_label.setText(c.get("icon", "🔹"))
-            icon_label.setStyleSheet("font-size: 22px; color: #9ca3af;")
+
+            icon_text = c.get("icon", "🔹")
+            file_path = c.get("file_path") or c["data"].get("path", "")
+            if file_path and self._is_unc_path(file_path):
+                icon_text = "🌐"  # network directory
+            icon_label.setText(icon_text)
+            icon_label.setStyleSheet("font-size: 20px; color: #9ca3af;")
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             row_layout.addWidget(icon_label)
+
+            # -- Text column --
             text_container = QVBoxLayout()
             text_container.setContentsMargins(0, 0, 0, 0)
-            text_container.setSpacing(2)
+            text_container.setSpacing(1)
 
             title_lbl = QLabel(c["title"])
             title_lbl.setObjectName("item_title")
             if "color" in c:
                 title_lbl.setStyleSheet(f"color: {c['color']};")
 
-            path_lbl = QLabel(format_display_name(c.get("path", ""), max_len=80))
+            display_path = c.get("path", "")
+            # Show UNC prefix hint
+            if file_path and self._is_unc_path(file_path):
+                display_path = f"🌐 {display_path}"
+            path_lbl = QLabel(format_display_name(display_path, max_len=72))
             path_lbl.setObjectName("item_path")
 
             text_container.addWidget(title_lbl)
             text_container.addWidget(path_lbl)
             row_layout.addLayout(text_container, stretch=1)
 
-            item.setSizeHint(QSize(row_widget.sizeHint().width(), 70))
+            # -- Inline action buttons (only for items with a path) --
+            path_val = c["data"].get("path", "")
+            if path_val and c["data"].get("type") in ("file", "app", "script", None):
+                btn_copy = QPushButton("📋")
+                btn_copy.setObjectName("action_btn")
+                btn_copy.setToolTip("Copy path")
+                btn_copy.setFixedSize(30, 26)
+                btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn_copy.clicked.connect(
+                    lambda _, p=path_val: self._action_copy_path(p)
+                )
+                row_layout.addWidget(btn_copy)
+
+                btn_dir = QPushButton("📂")
+                btn_dir.setObjectName("action_btn")
+                btn_dir.setToolTip("Open containing folder")
+                btn_dir.setFixedSize(30, 26)
+                btn_dir.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn_dir.clicked.connect(
+                    lambda _, p=path_val: self._action_open_folder(p)
+                )
+                row_layout.addWidget(btn_dir)
+
+            item.setSizeHint(QSize(row_widget.sizeHint().width(), 62))
             self.results_list.setItemWidget(item, row_widget)
 
         if self.results_list.count() > 0:
@@ -1414,6 +1612,8 @@ class NexusSearch(QWidget):
             should_hide = False
 
         if should_hide:
+            # Save the successful search string
+            self.record_search(self.search_input.text())
             self.hide()
 
         if data.get("type") == "filter_toggle":
@@ -1438,6 +1638,8 @@ class NexusSearch(QWidget):
         elif data["type"] == "cmd":
             if data["cmd"] == "reindex_files":
                 _trigger_reindex(self)
+            elif data["cmd"] == "regex_helper":
+                _launch_regex(self)
             elif (
                 data["cmd"].startswith("toggle_")
                 or data["cmd"].startswith("cmd_")

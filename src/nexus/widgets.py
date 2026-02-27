@@ -1,16 +1,126 @@
-"""Reusable Qt widgets: custom input, icon loader, signal bridge."""
+"""Reusable Qt widgets: custom input, icon loader, signal bridge, rainbow frame."""
 
 import os
 
 from PyQt6.QtCore import (
     QFileInfo,
     QObject,
+    QRectF,
     QRunnable,
     Qt,
     QTimer,
     pyqtSignal,
 )
-from PyQt6.QtWidgets import QLineEdit
+from PyQt6.QtGui import (
+    QColor,
+    QConicalGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+)
+from PyQt6.QtWidgets import QFrame, QLineEdit, QVBoxLayout
+
+
+# ---------------------------------------------------------------------------
+# Rainbow glow frame — wraps the input and paints a one-shot animated border
+# ---------------------------------------------------------------------------
+class RainbowFrame(QFrame):
+    """Wraps a child widget with a one-time rainbow sweep animation.
+
+    When ``trigger_animation()`` is called the frame paints a
+    rotating conical gradient border that fades out after ~1.5 s.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("rainbow_frame")
+        self._angle = 0.0
+        self._opacity = 0.0
+        self._running = False
+        self._border_radius = 16
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)  # ~60 fps
+        self._timer.timeout.connect(self._tick)
+
+        self._fade_timer = QTimer(self)
+        self._fade_timer.setSingleShot(True)
+        self._fade_timer.timeout.connect(self._start_fade)
+
+        self._content_layout = QVBoxLayout(self)
+        self._content_layout.setContentsMargins(3, 3, 3, 3)
+        self._content_layout.setSpacing(0)
+
+    # -- public api ---------------------------------------------------------
+    def trigger_animation(self):
+        """Start (or restart) the rainbow sweep."""
+        self._angle = 0.0
+        self._opacity = 1.0
+        self._running = True
+        self._timer.start()
+        self._fade_timer.start(1200)  # start fading after 1.2 s
+
+    # -- internals ----------------------------------------------------------
+    def _tick(self):
+        self._angle = (self._angle + 4) % 360
+        if self._opacity <= 0:
+            self._running = False
+            self._timer.stop()
+            self._opacity = 0.0
+        self.update()
+
+    def _start_fade(self):
+        self._fade_step = QTimer(self)
+        self._fade_step.setInterval(16)
+        self._fade_step.timeout.connect(self._do_fade)
+        self._fade_step.start()
+
+    def _do_fade(self):
+        self._opacity -= 0.03
+        if self._opacity <= 0:
+            self._opacity = 0
+            self._fade_step.stop()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._running and self._opacity <= 0:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Build rounded-rect path
+        rect = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        path = QPainterPath()
+        path.addRoundedRect(rect, self._border_radius, self._border_radius)
+
+        # Conical gradient rotates
+        cx, cy = rect.center().x(), rect.center().y()
+        gradient = QConicalGradient(cx, cy, self._angle)
+
+        # Google-AI style rainbow: blue -> purple -> pink -> orange -> yellow -> green -> blue
+        colors = [
+            (0.00, QColor(66, 133, 244)),  # Blue
+            (0.15, QColor(102, 102, 241)),  # Indigo
+            (0.30, QColor(171, 71, 188)),  # Purple
+            (0.45, QColor(236, 64, 122)),  # Pink
+            (0.60, QColor(255, 152, 0)),  # Orange
+            (0.75, QColor(76, 175, 80)),  # Green
+            (0.90, QColor(0, 188, 212)),  # Teal
+            (1.00, QColor(66, 133, 244)),  # Blue (wrap)
+        ]
+        for stop, color in colors:
+            c = QColor(color)
+            c.setAlphaF(self._opacity * 0.85)
+            gradient.setColorAt(stop, c)
+
+        pen = QPen()
+        pen.setWidthF(2.5)
+        pen.setBrush(gradient)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
+        painter.end()
 
 
 # ---------------------------------------------------------------------------
@@ -23,9 +133,27 @@ class NexusInput(QLineEdit):
         super().__init__(*args, **kwargs)
         self.nexus = parent
 
+    def _get_suggestion(self):
+        text = self.text()
+        if not text:
+            return ""
+        # Check history from nexus
+        for h in getattr(self.nexus, "search_history", []):
+            if h.lower().startswith(text.lower()) and len(h) > len(text):
+                return h[len(text) :]
+        return ""
+
     def keyPressEvent(self, event):
         key = event.key()
-        if key == Qt.Key.Key_Down:
+        suggestion = self._get_suggestion()
+
+        if suggestion and (
+            key == Qt.Key.Key_Tab
+            or (key == Qt.Key.Key_Right and self.cursorPosition() == len(self.text()))
+        ):
+            self.setText(self.text() + suggestion)
+            event.accept()
+        elif key == Qt.Key.Key_Down:
             self.nexus.navigate_results(1)
             event.accept()
         elif key == Qt.Key.Key_Up:
@@ -45,6 +173,48 @@ class NexusInput(QLineEdit):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        suggestion = self._get_suggestion()
+        if suggestion:
+            painter = QPainter(self)
+
+            # Use a dark/light mode appropriate ghost color
+            if getattr(self.nexus, "is_light_mode", False):
+                painter.setPen(QColor(156, 163, 175, 180))  # gray-400
+            else:
+                painter.setPen(QColor(107, 114, 128, 160))  # gray-500
+
+            font = self.font()
+            painter.setFont(font)
+
+            # Calculate where the actual text ends to draw the suffix
+            fm = self.fontMetrics()
+            text = self.text()
+            # The exact text rect differs by OS, we get the cursor rect for the safest base position
+            cursor_rect = self.cursorRect()
+
+            # Fallback if cursor rect acting weird
+            if cursor_rect.x() < 0:
+                return
+
+            # Note: We align the drawing using the current baseline or bounding box
+            # QLineEdit has text margins and contents margins.
+            margins = self.textMargins()
+            cm = self.contentsMargins()
+            left_offset = (
+                cm.left() + margins.left() + 2
+            )  # The +2 is QLineEdit's internal padding
+
+            x_pos = left_offset + fm.horizontalAdvance(text)
+
+            # The baseline can be approximated by height
+            rect = self.rect()
+            y_pos = (rect.height() + fm.ascent() - fm.descent()) // 2
+
+            painter.drawText(x_pos, y_pos, suggestion)
+            painter.end()
 
 
 # ---------------------------------------------------------------------------

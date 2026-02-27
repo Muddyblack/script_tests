@@ -195,6 +195,12 @@ def trigger_reindex(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.xexplorer.xexplorer"])
 
 
+def launch_regex_helper(nexus) -> None:
+    """Launch the Regex Helper tool."""
+    nexus.status_lbl.setText("🔬 Launching Regex Helper...")
+    subprocess.Popen([sys.executable, "-m", "src.regex_helper.regex_helper"])
+
+
 def run_macro(nexus, macro_id: int) -> None:
     """Execute a Ghost Typist macro in a background thread."""
 
