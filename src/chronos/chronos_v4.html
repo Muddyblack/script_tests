@@ -4,652 +4,2033 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chronos Pro - Intelligence Hub</title>
-    <!-- Libraries -->
+    <title>Chronos Pro</title>
     <script crossorigin src="react.min.js"></script>
     <script crossorigin src="react-dom.min.js"></script>
-    <!-- Framer Motion -->
     <script src="framer-motion.js"></script>
-    <!-- Lucide Icons -->
     <script src="lucide.min.js"></script>
-    <!-- Babel -->
     <script src="babel.min.js"></script>
-    <!-- Tailwind CSS -->
     <script src="tailwind.min.js"></script>
-    <!-- QWebChannel -->
     <script src="qwebchannel.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
+        /* ── WARM DARK PALETTE ─────────────────────────────────────────────── */
         :root {
-            color-scheme: dark;
-            --bg-base: #01121F;
-            --bg-surface: #021A2C;
-            --bg-surface-hover: #03233A;
-            --text-main: #CBE0F0;
-            --text-muted: #8295A0;
-            --border-color: #254D6A;
-            --accent-cyan: #0EADCF;
-            --accent-teal: #55FFCC;
-            --accent-purple: #aa82ff;
-            --accent-red: #D95C5C;
+            /* Backgrounds — warm, not cold. Like a lit study at night */
+            --bg: #111009;
+            --bg-1: #19160E;
+            --bg-2: #201C13;
+            --bg-3: #2A2519;
+            --bg-4: #332E20;
+
+            /* Borders */
+            --border: rgba(255, 235, 180, 0.07);
+            --border-h: rgba(255, 235, 180, 0.14);
+            --border-hh: rgba(255, 235, 180, 0.22);
+
+            /* Text — warm whites, not blue-grey */
+            --text: #F0E8D8;
+            --text-2: #8C8070;
+            --text-3: #4E4638;
+
+            /* Accent palette — amber-led, warm */
+            --gold: #E8B84B;
+            --gold-dim: rgba(232, 184, 75, 0.10);
+            --gold-glow: rgba(232, 184, 75, 0.20);
+            --teal: #4ECDC4;
+            --teal-dim: rgba(78, 205, 196, 0.09);
+            --rose: #E87070;
+            --rose-dim: rgba(232, 112, 112, 0.09);
+            --sage: #7EC8A0;
+            --sage-dim: rgba(126, 200, 160, 0.09);
+            --lavender: #B8A0E8;
+            --lav-dim: rgba(184, 160, 232, 0.09);
+            --sky: #78B4E0;
+            --sky-dim: rgba(120, 180, 224, 0.09);
+
+            /* Shadows */
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6);
+
+            /* Grain */
+            --grain-opacity: 0.035;
         }
 
-        html.light-mode {
-            color-scheme: light;
-            --bg-base: #F8FAFC;
-            --bg-surface: #FFFFFF;
-            --bg-surface-hover: #F1F5F9;
-            --text-main: #0F172A;
-            --text-muted: #64748B;
-            --border-color: #E2E8F0;
-            --accent-cyan: #0284C7;
-            --accent-teal: #0D9488;
-            --accent-purple: #7C3AED;
-            --accent-red: #DC2626;
+        html.light {
+            --bg: #FAF7F0;
+            --bg-1: #FFFFFF;
+            --bg-2: #F5F1E8;
+            --bg-3: #EDE8DC;
+            --bg-4: #E4DDD0;
+            --border: rgba(60, 48, 20, 0.09);
+            --border-h: rgba(60, 48, 20, 0.16);
+            --border-hh: rgba(60, 48, 20, 0.26);
+            --text: #1A160A;
+            --text-2: #6B5E48;
+            --text-3: #A09078;
+            --gold: #B8880A;
+            --gold-dim: rgba(184, 136, 10, 0.10);
+            --gold-glow: rgba(184, 136, 10, 0.18);
+            --teal: #0D8A82;
+            --teal-dim: rgba(13, 138, 130, 0.09);
+            --rose: #C44040;
+            --rose-dim: rgba(196, 64, 64, 0.09);
+            --sage: #2E8A52;
+            --sage-dim: rgba(46, 138, 82, 0.09);
+            --lavender: #6A46C4;
+            --lav-dim: rgba(106, 70, 196, 0.09);
+            --sky: #2870B4;
+            --sky-dim: rgba(40, 112, 180, 0.09);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.10);
+            --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.14);
+            --grain-opacity: 0.02;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-base);
-            color: var(--text-main);
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: 'Instrument Sans', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            transition: background 0.4s, color 0.4s;
+            position: relative;
         }
 
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
-
-        input:focus, textarea:focus, select:focus { outline: none; }
-
-        /* Remove numeric arrows */
-        input[type=number]::-webkit-outer-spin-button,
-        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number] { -moz-appearance: textfield; }
-
-        /* Pulse for High Impact */
-        .pulse-high {
-            box-shadow: 0 0 0 0 rgba(217, 92, 92, 0.4);
-            animation: pulse-red 2s infinite;
-        }
-        @keyframes pulse-red {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(217, 92, 92, 0.7); }
-            70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(217, 92, 92, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(217, 92, 92, 0); }
+        /* Grain overlay — gives depth, not harshness */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: var(--grain-opacity);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            background-size: 256px;
         }
 
-        /* Focus Mode Mechanics */
-        .focus-active .sidebar-layer { transform: translateX(-100%); opacity: 0; pointer-events: none; }
-        .focus-active .dim-other-elements { opacity: 0.1; filter: blur(4px); pointer-events: none; scale: 0.98; }
-        .focus-active .focused-mission { opacity: 1 !important; filter: none !important; pointer-events: auto !important; scale: 1.05 !important; z-index: 100; }
+        /* Ambient warm glow — very subtle */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(232, 184, 75, 0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(78, 205, 196, 0.03) 0%, transparent 60%);
+        }
 
-        /* Markdown UI */
-        .markdown-render p { margin-bottom: 0.75rem; }
-        .markdown-render code { font-family: 'JetBrains Mono', monospace; background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
-        .markdown-render ul { list-style: disc; margin-left: 1.5rem; margin-bottom: 0.75rem; }
+        #root {
+            position: relative;
+            z-index: 1;
+        }
 
-        .obsidian-chip {
+        ::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-h);
+            border-radius: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-hh);
+        }
+
+        input,
+        textarea,
+        select {
+            outline: none;
+            font-family: inherit;
+        }
+
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+        }
+
+        select option {
+            background: var(--bg-1);
+            color: var(--text);
+        }
+
+        /* ── COMPONENTS ─────────────────────────────────────────────────────── */
+
+        .card {
+            background: var(--bg-1);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-inset {
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .serif {
+            font-family: 'Instrument Serif', serif;
+        }
+
+        .kbd {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            background: var(--bg-surface-hover);
-            border: 1px solid var(--border-color);
+            padding: 1px 5px;
+            background: var(--bg-3);
+            border: 1px solid var(--border-h);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text-3);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 7px;
             border-radius: 6px;
-            font-size: 0.7rem;
-            color: var(--accent-purple);
-            text-decoration: none !important;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 100px;
+            font-size: 10px;
             font-weight: 600;
-            margin: 4px 0;
+            background: var(--bg-3);
+            color: var(--text-2);
+            border: 1px solid var(--border);
+        }
+
+        .section-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--text-3);
+        }
+
+        /* ── NAV ────────────────────────────────────────────────────────────── */
+        .nav-item {
+            cursor: pointer;
+            border-radius: 10px;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .nav-item:hover:not(.active) {
+            background: var(--bg-2);
+        }
+
+        .nav-item.active {
+            background: var(--bg-3);
+        }
+
+        /* ── INPUTS ─────────────────────────────────────────────────────────── */
+        .input-field {
+            width: 100%;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 11px 15px;
+            font-size: 14px;
+            color: var(--text);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .input-field:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px var(--gold-dim);
+        }
+
+        .input-field::placeholder {
+            color: var(--text-3);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 18px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: none;
+            text-transform: uppercase;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-gold {
+            background: var(--gold);
+            color: #111009;
+        }
+
+        .btn-ghost {
+            background: var(--bg-3);
+            color: var(--text-2);
+            border: 1px solid var(--border);
+        }
+
+        .btn-danger {
+            background: var(--rose-dim);
+            color: var(--rose);
+        }
+
+        /* ── CHECKBOX ───────────────────────────────────────────────────────── */
+        .check {
+            width: 18px;
+            height: 18px;
+            border-radius: 6px;
+            border: 1.5px solid var(--border-h);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
             transition: all 0.2s;
         }
-        .obsidian-chip:hover { border-color: var(--accent-purple); background: var(--bg-surface); }
 
-        select option { background-color: var(--bg-surface); color: var(--text-main); }
+        .check:hover:not(.done) {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px var(--gold-dim);
+        }
+
+        .check.done {
+            background: var(--sage);
+            border-color: var(--sage);
+        }
+
+        /* ── FOCUS MODE ─────────────────────────────────────────────────────── */
+        .focus-mode .can-dim {
+            opacity: 0.07;
+            filter: blur(3px);
+            pointer-events: none;
+            transition: all 0.5s;
+        }
+
+        .focus-mode .sidebar-wrap {
+            opacity: 0.05;
+            pointer-events: none;
+            transition: all 0.5s;
+        }
+
+        .focus-mode .no-dim {
+            opacity: 1 !important;
+            filter: none !important;
+            pointer-events: auto !important;
+        }
+
+        /* ── ANIMATIONS ─────────────────────────────────────────────────────── */
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0;
+            }
+
+            100% {
+                background-position: 200% 0;
+            }
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 50%, var(--bg-2) 75%);
+            background-size: 200%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes breathe {
+
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.15);
+            }
+        }
+
+        .breathe {
+            animation: breathe 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                box-shadow: 0 0 0 0 rgba(232, 112, 112, 0.5);
+            }
+
+            70% {
+                box-shadow: 0 0 0 8px rgba(232, 112, 112, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(232, 112, 112, 0);
+            }
+        }
+
+        .pulse-ring {
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes float-in {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .float-in {
+            animation: float-in 0.25s ease-out forwards;
+        }
+
+        @keyframes check-pop {
+            0% {
+                transform: scale(1);
+            }
+
+            40% {
+                transform: scale(1.3) rotate(-5deg);
+            }
+
+            70% {
+                transform: scale(0.9) rotate(3deg);
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        .check-pop {
+            animation: check-pop 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+        }
+
+        @keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide-up {
+            animation: slide-up 0.3s ease-out;
+        }
+
+        /* ── PROGRESS ───────────────────────────────────────────────────────── */
+        .progress-track {
+            height: 3px;
+            background: var(--bg-3);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ── TASK ───────────────────────────────────────────────────────────── */
+        .task-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            transition: background 0.15s;
+            position: relative;
+        }
+
+        .task-row:hover {
+            background: var(--bg-2);
+        }
+
+        .task-row.focused {
+            background: var(--bg-1);
+            box-shadow: var(--shadow-md);
+        }
+
+        .task-row.done {
+            opacity: 0.4;
+        }
+
+        .task-row.done .task-title {
+            text-decoration: line-through;
+            color: var(--text-3);
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .task-row:hover .task-actions {
+            opacity: 1;
+        }
+
+        .action-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.12s;
+            color: var(--text-3);
+            background: transparent;
+            border: none;
+        }
+
+        .action-btn:hover {
+            background: var(--bg-3);
+            color: var(--text);
+        }
+
+        /* ── CONTEXT MENU ───────────────────────────────────────────────────── */
+        .ctx-menu {
+            position: fixed;
+            z-index: 9999;
+            background: var(--bg-1);
+            border: 1px solid var(--border-h);
+            border-radius: 13px;
+            box-shadow: var(--shadow-lg);
+            padding: 5px;
+            min-width: 210px;
+        }
+
+        .ctx-item {
+            padding: 8px 11px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.1s;
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .ctx-item:hover {
+            background: var(--bg-3);
+        }
+
+        .ctx-item.danger {
+            color: var(--rose);
+        }
+
+        .ctx-sep {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 2px;
+        }
+
+        .ctx-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-3);
+            padding: 6px 11px 3px;
+        }
+
+        /* ── TOOLTIP ────────────────────────────────────────────────────────── */
+        [data-tip] {
+            position: relative;
+        }
+
+        [data-tip]:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: calc(100% + 7px);
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            background: var(--bg-3);
+            color: var(--text);
+            padding: 4px 9px;
+            border-radius: 7px;
+            font-size: 10px;
+            font-weight: 600;
+            border: 1px solid var(--border-h);
+            pointer-events: none;
+            z-index: 999;
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* ── POMODORO ───────────────────────────────────────────────────────── */
+        .pomo-ring {
+            transform: rotate(-90deg);
+            transform-origin: center;
+        }
+
+        .pomo-track {
+            fill: none;
+            stroke: var(--bg-3);
+            stroke-width: 3;
+        }
+
+        .pomo-fill {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s linear;
+        }
+
+        /* ── EMPTY STATE ────────────────────────────────────────────────────── */
+        .empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 64px 24px;
+            gap: 10px;
+            opacity: 0.35;
+        }
+
+        /* ── MODAL ──────────────────────────────────────────────────────────── */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(12px);
+        }
+
+        /* ── QUICK CAPTURE ──────────────────────────────────────────────────── */
+        .quick-bar {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            width: 580px;
+            max-width: calc(100vw - 48px);
+        }
+
+        /* ── STREAK ─────────────────────────────────────────────────────────── */
+        .streak-flame {
+            font-size: 20px;
+            filter: drop-shadow(0 0 6px rgba(232, 184, 75, 0.5));
+        }
+
+        /* ── SETTINGS ROW ───────────────────────────────────────────────────── */
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .settings-row:last-child {
+            border-bottom: none;
+        }
+
+        /* ── OBSIDIAN CHIP ──────────────────────────────────────────────────── */
+        .obsidian-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--lavender);
+            font-size: 11px;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--lav-dim);
+            border: 1px solid rgba(184, 160, 232, 0.18);
+            transition: all 0.15s;
+        }
+
+        .obsidian-link:hover {
+            background: rgba(184, 160, 232, 0.16);
+        }
+
+        /* ── MARKDOWN ───────────────────────────────────────────────────────── */
+        .md p {
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.75;
+            color: var(--text-2);
+        }
+
+        .md h1,
+        .md h2,
+        .md h3 {
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+
+        .md h1 {
+            font-size: 16px;
+        }
+
+        .md h2 {
+            font-size: 14px;
+        }
+
+        .md h3 {
+            font-size: 13px;
+        }
+
+        .md ul,
+        .md ol {
+            margin-left: 18px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: var(--text-2);
+        }
+
+        .md li {
+            margin-bottom: 3px;
+        }
+
+        .md code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-3);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--gold);
+        }
+
+        .md strong {
+            color: var(--text);
+            font-weight: 700;
+        }
+
+        .md blockquote {
+            border-left: 2px solid var(--border-hh);
+            padding-left: 12px;
+            color: var(--text-3);
+            font-style: italic;
+            margin-bottom: 8px;
+        }
+
+        .md a {
+            color: var(--sky);
+            text-decoration: none;
+        }
+
+        .md a:hover {
+            text-decoration: underline;
+        }
+
+        /* ── PRIORITY STRIPE ────────────────────────────────────────────────── */
+        .priority-stripe {
+            position: absolute;
+            left: 0;
+            top: 8px;
+            bottom: 8px;
+            width: 2.5px;
+            border-radius: 99px;
+        }
+
+        /* ── SCROLL FADE ────────────────────────────────────────────────────── */
+        .scroll-fade {
+            position: relative;
+        }
+
+        .scroll-fade::after {
+            content: '';
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            display: block;
+            pointer-events: none;
+            background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
+        }
+
+        /* ── COMPACT SIDEBAR ────────────────────────────────────────────────── */
+        .sidebar-wrap {
+            width: 220px;
+            flex-shrink: 0;
+        }
+
+        @keyframes celebrate {
+            0% {
+                transform: scale(1) rotate(0deg);
+            }
+
+            25% {
+                transform: scale(1.4) rotate(-10deg);
+            }
+
+            50% {
+                transform: scale(1.2) rotate(10deg);
+            }
+
+            75% {
+                transform: scale(1.1) rotate(-5deg);
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        .celebrate {
+            animation: celebrate 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+        }
     </style>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback, useRef, useMemo } = React;
+        const { useState, useEffect, useCallback, useRef, useMemo, memo } = React;
         const { motion, AnimatePresence } = window.Motion;
 
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        base: 'var(--bg-base)',
-                        surface: 'var(--bg-surface)',
-                        'surface-hover': 'var(--bg-surface-hover)',
-                        main: 'var(--text-main)',
-                        muted: 'var(--text-muted)',
-                        border: 'var(--border-color)',
-                        cyan: 'var(--accent-cyan)',
-                        teal: 'var(--accent-teal)',
-                        purple: 'var(--accent-purple)',
-                        red: 'var(--accent-red)',
+                        bg: 'var(--bg)', bg1: 'var(--bg-1)', bg2: 'var(--bg-2)', bg3: 'var(--bg-3)',
+                        text1: 'var(--text)', text2: 'var(--text-2)', text3: 'var(--text-3)',
+                        gold: 'var(--gold)', teal: 'var(--teal)', rose: 'var(--rose)',
+                        sage: 'var(--sage)', lav: 'var(--lavender)', sky: 'var(--sky)',
                     }
                 }
             }
         };
 
-        const App = () => {
-            const [activeTab, setActiveTab] = useState('missions');
+        // ─── UTILS ──────────────────────────────────────────────────────────────────
+        const fmt = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return `${h > 0 ? h + ':' : ''}${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`; };
+        const fmtDate = (iso) => { if (!iso) return null; return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+        const fmtRelDate = (iso) => {
+            if (!iso) return null;
+            const d = new Date(iso), now = new Date();
+            const diff = Math.floor((d - now) / 86400000);
+            if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, cls: 'overdue' };
+            if (diff === 0) return { label: 'Today', cls: 'due-soon' };
+            if (diff === 1) return { label: 'Tomorrow', cls: 'due-soon' };
+            if (diff <= 7) return { label: `${diff}d`, cls: '' };
+            return { label: fmtDate(iso), cls: '' };
+        };
+        const PC = {
+            High: { color: 'var(--rose)', bg: 'var(--rose-dim)', label: '↑ High', stripe: 'var(--rose)' },
+            Medium: { color: 'var(--gold)', bg: 'var(--gold-dim)', label: '→ Med', stripe: 'var(--gold)' },
+            Low: { color: 'var(--text-3)', bg: 'var(--bg-3)', label: '↓ Low', stripe: 'var(--border-h)' },
+        };
+        const groupByDate = (tasks) => {
+            const now = new Date(); now.setHours(0, 0, 0, 0);
+            const G = { Overdue: [], Today: [], Tomorrow: [], 'This Week': [], Later: [], 'No Date': [] };
+            tasks.forEach(t => {
+                if (!t.due_date) { G['No Date'].push(t); return; }
+                const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
+                const diff = Math.floor((d - now) / 86400000);
+                if (diff < 0) G.Overdue.push(t);
+                else if (diff === 0) G.Today.push(t);
+                else if (diff === 1) G.Tomorrow.push(t);
+                else if (diff <= 7) G['This Week'].push(t);
+                else G.Later.push(t);
+            });
+            return G;
+        };
+        const md = (text) => {
+            if (!text) return '';
+            let h = text
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/^### (.+)/gm, '<h3>$1</h3>').replace(/^## (.+)/gm, '<h2>$1</h2>').replace(/^# (.+)/gm, '<h1>$1</h1>')
+                .replace(/^> (.+)/gm, '<blockquote>$1</blockquote>')
+                .replace(/^[-*] (.+)/gm, '<li>$1</li>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/(obsidian:\/\/open\?[^\s<]+)/g, '<a href="$1" class="obsidian-link">⬡ Obsidian</a>');
+            if (!h.match(/^<[hublp]/)) h = '<p>' + h + '</p>';
+            return h;
+        };
+        const greet = () => {
+            const h = new Date().getHours();
+            if (h < 5) return 'Still up?';
+            if (h < 12) return 'Good morning';
+            if (h < 17) return 'Good afternoon';
+            if (h < 21) return 'Good evening';
+            return 'Good night';
+        };
+
+        // ─── BRIDGE ─────────────────────────────────────────────────────────────────
+        const useBridge = () => {
+            const [ready, setReady] = useState(false);
             const [data, setData] = useState({ achievements: [], tasks: [], settings: {} });
-            const [bridgeReady, setBridgeReady] = useState(false);
-            const pyBridgeRef = useRef(null);
-
-            // Pro State
-            const [focusTaskId, setFocusTaskId] = useState(null);
-            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('chronos-theme') !== 'light');
-            const [timers, setTimers] = useState({}); // {taskId: seconds}
-
+            const ref = useRef(null);
+            const refresh = useCallback(async () => { if (!ref.current) return; try { const r = await ref.current.get_all_data(); if (r) setData(JSON.parse(r)); } catch (e) { } }, []);
             useEffect(() => {
-                const root = document.documentElement;
-                root.classList.toggle('light-mode', !isDarkMode);
-                document.body.classList.toggle('focus-active', !!focusTaskId);
-                localStorage.setItem('chronos-theme', isDarkMode ? 'dark' : 'light');
-            }, [isDarkMode, focusTaskId]);
+                const setup = () => { if (typeof QWebChannel !== 'undefined' && typeof qt !== 'undefined') { new QWebChannel(qt.webChannelTransport, (c) => { ref.current = c.objects.pyBridge; setReady(true); refresh(); ref.current.data_updated.connect(refresh); }); } else setTimeout(setup, 200); };
+                setup();
+            }, []);
+            const call = useCallback(async (m, ...a) => { if (ready && ref.current) { try { return await ref.current[m](...a); } catch (e) { } } }, [ready]);
+            return { ready, data, refresh, call };
+        };
 
-            // Shift+F to exit focus
+        // ─── CONTEXT MENU ────────────────────────────────────────────────────────────
+        const CtxMenu = ({ items, pos, onClose }) => {
             useEffect(() => {
-                const handleKey = (e) => {
-                    if (e.shiftKey && e.key === 'F') setFocusTaskId(null);
-                };
-                window.addEventListener('keydown', handleKey);
-                return () => window.removeEventListener('keydown', handleKey);
-            }, []);
-
-            const setupBridge = useCallback(() => {
-                if (typeof QWebChannel !== 'undefined' && typeof qt !== 'undefined') {
-                    new QWebChannel(qt.webChannelTransport, (c) => {
-                        pyBridgeRef.current = c.objects.pyBridge;
-                        setBridgeReady(true);
-                        refreshData();
-                        pyBridgeRef.current.data_updated.connect(refreshData);
-                    });
-                } else {
-                    setTimeout(setupBridge, 200);
-                }
-            }, []);
-
-            const refreshData = async () => {
-                if (!pyBridgeRef.current) return;
-                const raw = await pyBridgeRef.current.get_all_data();
-                if (raw) setData(JSON.parse(raw));
-            };
-
-            useEffect(() => { setupBridge(); }, [setupBridge]);
-
-            const safeCall = async (method, ...args) => {
-                if (bridgeReady && pyBridgeRef.current) return await pyBridgeRef.current[method](...args);
-                return null;
-            };
-
+                const h = (e) => { if (!e.target.closest('.ctx-menu')) onClose(); };
+                setTimeout(() => document.addEventListener('click', h), 0);
+                return () => document.removeEventListener('click', h);
+            }, [onClose]);
+            const style = { top: Math.min(pos.y, window.innerHeight - 300), left: Math.min(pos.x, window.innerWidth - 230) };
             return (
-                <div className="flex h-screen w-screen overflow-hidden bg-base text-main">
-                    <Sidebar
-                        activeTab={activeTab}
-                        setActiveTab={setActiveTab}
-                        isDarkMode={isDarkMode}
-                        toggleTheme={() => setIsDarkMode(!isDarkMode)}
-                    />
-
-                    <main className="flex-1 flex flex-col relative overflow-hidden">
-                        {focusTaskId && (
-                            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-3 bg-surface/80 backdrop-blur px-5 py-2 rounded-full border border-purple/30 shadow-2xl">
-                                <div className="w-2 h-2 rounded-full bg-purple animate-ping" />
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-purple">Deep Focus Active</span>
-                                <button onClick={() => setFocusTaskId(null)} className="text-[10px] font-bold text-muted hover:text-main ml-4">Exit</button>
-                            </div>
-                        )}
-
-                        <AnimatePresence mode="wait">
-                            {activeTab === 'missions' && (
-                                <MissionsPage
-                                    key="missions"
-                                    data={data}
-                                    safeCall={safeCall}
-                                    focusTaskId={focusTaskId}
-                                    setFocusTaskId={setFocusTaskId}
-                                    timers={timers}
-                                    setTimers={setTimers}
-                                />
-                            )}
-                            {activeTab === 'log' && <VictoriesPage key="log" data={data} safeCall={safeCall} />}
-                            {activeTab === 'analytics' && <AnalyticsPage key="analytics" data={data} safeCall={safeCall} />}
-                            {activeTab === 'settings' && <SettingsPage key="settings" data={data} safeCall={safeCall} />}
-                        </AnimatePresence>
-                    </main>
+                <div className="ctx-menu float-in" style={style}>
+                    {items.map((item, i) => item === 'sep' ? <div key={i} className="ctx-sep" /> : item.label ? <div key={i} onClick={() => { item.action(); onClose(); }} className={`ctx-item ${item.danger ? 'danger' : ''}`}><span style={{ opacity: .65, fontSize: 13 }}>{item.icon}</span>{item.label}{item.kbd && <span className="kbd ml-auto">{item.kbd}</span>}</div> : <div key={i} className="ctx-label">{item.heading}</div>)}
                 </div>
             );
         };
 
-        const Sidebar = ({ activeTab, setActiveTab, isDarkMode, toggleTheme }) => {
-            const navItems = [
-                { id: 'missions', label: 'Missions', color: 'bg-cyan' },
-                { id: 'log', label: 'Victories', color: 'bg-teal' },
-                { id: 'analytics', label: 'Intelligence', color: 'bg-purple' },
-                { id: 'settings', label: 'Core', color: 'bg-muted' },
+        // ─── POMODORO WIDGET ─────────────────────────────────────────────────────────
+        const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 };
+        const PomodoroWidget = () => {
+            const [mode, setMode] = useState('work'); // work|short|long
+            const [secs, setSecs] = useState(POMO_DURATIONS.work);
+            const [running, setRunning] = useState(false);
+            const [sessions, setSessions] = useState(0);
+            const [celebrateNum, setCelebrateNum] = useState(false);
+            const ref = useRef(null);
+            const total = POMO_DURATIONS[mode];
+            const pct = (secs / total);
+            const circ = 2 * Math.PI * 28;
+
+            useEffect(() => {
+                if (running) { ref.current = setInterval(() => setSecs(s => { if (s <= 1) { clearInterval(ref.current); setRunning(false); if (mode === 'work') { setSessions(n => n + 1); setCelebrateNum(true); setTimeout(() => setCelebrateNum(false), 600); } return 0; } return s - 1; }), 1000); }
+                else clearInterval(ref.current);
+                return () => clearInterval(ref.current);
+            }, [running]);
+
+            const switchMode = (m) => { setMode(m); setSecs(POMO_DURATIONS[m]); setRunning(false); };
+            const reset = () => { setSecs(POMO_DURATIONS[mode]); setRunning(false); };
+
+            const modeColor = { work: 'var(--rose)', short: 'var(--sage)', long: 'var(--teal)' }[mode];
+
+            return (
+                <div className="card p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="section-label">Pomodoro</div>
+                        <div className={`flex items-center gap-1 text-xs font-bold mono ${celebrateNum ? 'celebrate' : ''}`} style={{ color: 'var(--gold)' }}>
+                            {sessions > 0 && <>🍅 {sessions}</>}
+                        </div>
+                    </div>
+
+                    {/* Mode tabs */}
+                    <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--bg-2)' }}>
+                        {[['work', 'Focus'], ['short', 'Short'], ['long', 'Long']].map(([m, l]) => (
+                            <button key={m} onClick={() => switchMode(m)}
+                                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                style={{ background: mode === m ? 'var(--bg-1)' : 'transparent', color: mode === m ? modeColor : 'var(--text-3)', boxShadow: mode === m ? 'var(--shadow-sm)' : 'none' }}>
+                                {l}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Ring + time */}
+                    <div className="flex items-center justify-center gap-6">
+                        <div style={{ position: 'relative', width: 80, height: 80 }}>
+                            <svg width="80" height="80" className="pomo-ring">
+                                <circle cx="40" cy="40" r="28" className="pomo-track" />
+                                <circle cx="40" cy="40" r="28" className="pomo-fill"
+                                    stroke={modeColor} strokeDasharray={circ}
+                                    strokeDashoffset={circ * (1 - pct)} />
+                            </svg>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span className="mono text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(secs)}</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <button onClick={() => setRunning(!running)}
+                                className="btn btn-ghost w-24 text-xs"
+                                style={running ? { background: 'var(--rose-dim)', color: 'var(--rose)', borderColor: 'transparent' } : {}}>
+                                {running ? '⏸ Pause' : secs === total ? '▶ Start' : '▶ Resume'}
+                            </button>
+                            <button onClick={reset} className="btn btn-ghost w-24 text-xs">↺ Reset</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ─── DAILY FOCUS WIDGET ──────────────────────────────────────────────────────
+        const DailyFocusWidget = ({ tasks, safeCall }) => {
+            const [note, setNote] = useState(() => localStorage.getItem('chronos-daily-note') || '');
+            const today = useMemo(() => {
+                const now = new Date(); now.setHours(0, 0, 0, 0);
+                return tasks.filter(t => {
+                    if (!t.due_date || t.status === 'Completed') return false;
+                    const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
+                    return d.getTime() === now.getTime();
+                });
+            }, [tasks]);
+            const overdue = useMemo(() => tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(); }), [tasks]);
+
+            const saveNote = (v) => { setNote(v); localStorage.setItem('chronos-daily-note', v); };
+
+            return (
+                <div className="card p-5 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <div>
+                            <div className="font-bold text-base" style={{ color: 'var(--text)' }}>{greet()}</div>
+                            <div className="text-xs" style={{ color: 'var(--text-3)' }}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+                        </div>
+                    </div>
+
+                    {overdue.length > 0 && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold pulse-ring"
+                            style={{ background: 'var(--rose-dim)', color: 'var(--rose)', border: '1px solid rgba(232,112,112,0.2)' }}>
+                            ⚠ {overdue.length} overdue
+                        </div>
+                    )}
+
+                    {today.length > 0 ? (
+                        <div className="space-y-1.5">
+                            <div className="section-label">Today's focus</div>
+                            {today.slice(0, 3).map(t => (
+                                <div key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--bg-2)' }}>
+                                    <button onClick={() => safeCall('update_task_status', t.id, 'Completed')}
+                                        className="check" style={{ width: 14, height: 14, borderRadius: 4 }}>
+                                    </button>
+                                    <span className="text-xs font-medium flex-1 truncate" style={{ color: 'var(--text)' }}>{t.content}</span>
+                                </div>
+                            ))}
+                            {today.length > 3 && <div className="text-xs" style={{ color: 'var(--text-3)', paddingLeft: 4 }}>+{today.length - 3} more</div>}
+                        </div>
+                    ) : (
+                        <div className="text-xs" style={{ color: 'var(--text-3)' }}>No tasks scheduled for today ✓</div>
+                    )}
+
+                    <div className="space-y-1.5">
+                        <div className="section-label">Daily note</div>
+                        <textarea value={note} onChange={e => saveNote(e.target.value)} rows={2}
+                            className="input-field resize-none text-xs"
+                            placeholder="Intentions for today..." />
+                    </div>
+                </div>
+            );
+        };
+
+        // ─── STREAK TRACKER ──────────────────────────────────────────────────────────
+        const StreakWidget = ({ achievements }) => {
+            const streak = useMemo(() => {
+                if (!achievements.length) return 0;
+                const dates = new Set(achievements.map(a => a.created_at ? new Date(a.created_at).toDateString() : ''));
+                let count = 0, d = new Date();
+                while (dates.has(d.toDateString())) { count++; d.setDate(d.getDate() - 1); }
+                return count;
+            }, [achievements]);
+
+            const weekDots = useMemo(() => {
+                const dates = new Set(achievements.map(a => a.created_at ? new Date(a.created_at).toDateString() : ''));
+                return Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(); d.setDate(d.getDate() - 6 + i);
+                    return { date: d, active: dates.has(d.toDateString()), isToday: d.toDateString() === new Date().toDateString() };
+                });
+            }, [achievements]);
+
+            return (
+                <div className="card p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="section-label">Streak</div>
+                        {streak > 0 && <span className="streak-flame">🔥 {streak}d</span>}
+                    </div>
+                    <div className="flex items-end gap-2 justify-center">
+                        {weekDots.map((d, i) => (
+                            <div key={i} className="flex flex-col items-center gap-1.5">
+                                <div className="rounded-md" style={{
+                                    width: 24, height: 24,
+                                    background: d.active ? 'var(--gold)' : d.isToday ? 'var(--border-hh)' : 'var(--bg-3)',
+                                    border: d.isToday ? '1.5px solid var(--gold)' : '1.5px solid transparent',
+                                    opacity: d.active ? 1 : 0.4,
+                                    boxShadow: d.active ? '0 0 8px var(--gold-glow)' : 'none',
+                                    transition: 'all 0.3s',
+                                }} />
+                                <span className="text-xs" style={{ color: 'var(--text-3)', fontSize: 9 }}>
+                                    {d.date.toLocaleDateString('en-US', { weekday: 'narrow' })}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    {streak === 0 && <div className="text-xs text-center" style={{ color: 'var(--text-3)' }}>Log a victory to start your streak</div>}
+                </div>
+            );
+        };
+
+        // ─── ADD TASK MODAL ───────────────────────────────────────────────────────────
+        const AddTaskModal = ({ onAdd, onClose, parentId = 0 }) => {
+            const [content, setContent] = useState('');
+            const [priority, setPriority] = useState('Medium');
+            const [dueDate, setDueDate] = useState('');
+            const [notes, setNotes] = useState('');
+            const [tags, setTags] = useState('');
+            const ref = useRef(null);
+            useEffect(() => { ref.current?.focus(); }, []);
+
+            const submit = () => {
+                if (!content.trim()) return;
+                onAdd({ content: content.trim(), priority, due_date: dueDate, notes, tags: tags.split(',').map(t => t.trim()).filter(Boolean), parent_id: parentId });
+                onClose();
+            };
+
+            return (
+                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+                    <motion.div initial={{ y: 20, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 10, opacity: 0, scale: 0.98 }}
+                        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                        className="card w-full max-w-lg p-6 space-y-5" style={{ boxShadow: 'var(--shadow-lg)' }}>
+
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-base" style={{ color: 'var(--text)' }}>
+                                {parentId ? 'Add Subtask' : 'New Task'}
+                            </h3>
+                            <button onClick={onClose} className="action-btn">✕</button>
+                        </div>
+
+                        <input ref={ref} value={content} onChange={e => setContent(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(); if (e.key === 'Escape') onClose(); }}
+                            className="input-field text-[15px] font-medium" placeholder="What needs to get done?" />
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                                <div className="section-label">Priority</div>
+                                <div className="flex gap-1.5">
+                                    {['High', 'Medium', 'Low'].map(p => (
+                                        <button key={p} onClick={() => setPriority(p)}
+                                            className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
+                                            style={{ background: priority === p ? PC[p].bg : 'var(--bg-3)', color: priority === p ? PC[p].color : 'var(--text-3)', border: `1px solid ${priority === p ? PC[p].color + '44' : 'var(--border)'}`, transform: priority === p ? 'translateY(-1px)' : 'none' }}>
+                                            {p}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="section-label">Due Date</div>
+                                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                                    className="input-field py-2 text-sm" style={{ colorScheme: 'dark' }} />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="section-label">Tags</div>
+                            <input value={tags} onChange={e => setTags(e.target.value)}
+                                className="input-field py-2.5 text-sm" placeholder="design, backend, review…" />
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="section-label">Notes <span style={{ color: 'var(--text-3)', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>— markdown ok</span></div>
+                            <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                                className="input-field text-sm resize-none" rows={3}
+                                placeholder="Context, links, details…" />
+                        </div>
+
+                        <div className="flex gap-2.5">
+                            <button onClick={onClose} className="btn btn-ghost flex-1">Cancel</button>
+                            <button onClick={submit} className="btn btn-gold flex-1" style={{ fontSize: 13 }}>Create Task</button>
+                        </div>
+                    </motion.div>
+                </div>
+            );
+        };
+
+        // ─── TASK NODE ────────────────────────────────────────────────────────────────
+        const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode, isSelected, onSelect, timers, setTimers, onAddSub }) => {
+            const [expanded, setExpanded] = useState(false);
+            const [localNotes, setLocalNotes] = useState(task.notes || '');
+            const [editing, setEditing] = useState(false);
+            const [editVal, setEditVal] = useState(task.content || '');
+            const [timerOn, setTimerOn] = useState(false);
+            const [ctx, setCtx] = useState(null);
+            const [checking, setChecking] = useState(false);
+            const intervalRef = useRef(null);
+            const isDone = task.status === 'Completed';
+            const pc = PC[task.priority] || PC.Medium;
+            const due = fmtRelDate(task.due_date);
+
+            useEffect(() => {
+                if (timerOn) intervalRef.current = setInterval(() => setTimers(p => ({ ...p, [task.id]: (p[task.id] || 0) + 1 })), 1000);
+                else clearInterval(intervalRef.current);
+                return () => clearInterval(intervalRef.current);
+            }, [timerOn]);
+
+            const handleCheck = () => {
+                setChecking(true);
+                setTimeout(() => { safeCall('update_task_status', task.id, isDone ? 'Pending' : 'Completed'); setChecking(false); }, 350);
+            };
+
+            const saveEdit = () => { if (editVal.trim() !== task.content) safeCall('update_task', task.id, editVal, localNotes, task.links || ''); setEditing(false); };
+            const handleCtx = (e) => { e.preventDefault(); e.stopPropagation(); setCtx({ x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 300) }); };
+
+            return (
+                <div className={`relative ${depth > 0 ? 'ml-6' : ''}`}>
+                    {depth > 0 && <div style={{ position: 'absolute', left: -12, top: 0, bottom: 0, width: 1, background: 'var(--border)' }} />}
+
+                    <div className={`task-row ${isDone ? 'done' : ''} ${isFocused ? 'focused no-dim' : ''} can-dim`}
+                        style={isFocused ? { boxShadow: 'var(--shadow-md)', ringColor: 'var(--gold)' } : {}}
+                        onContextMenu={handleCtx}>
+
+                        {/* Priority stripe */}
+                        {!isDone && <div className="priority-stripe" style={{ background: pc.stripe }} />}
+
+                        {selMode && (
+                            <button onClick={onSelect} style={{
+                                width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 2,
+                                border: `1.5px solid ${isSelected ? 'var(--gold)' : 'var(--border-h)'}`,
+                                background: isSelected ? 'var(--gold)' : 'transparent',
+                                cursor: 'pointer', transition: 'all 0.15s',
+                            }}>
+                                {isSelected && <span style={{ color: 'var(--bg)', fontSize: 9, display: 'block', textAlign: 'center', fontWeight: 900 }}>✓</span>}
+                            </button>
+                        )}
+
+                        {/* Checkbox */}
+                        <button onClick={handleCheck} className={`check mt-0.5 ${isDone ? 'done' : ''} ${checking ? 'check-pop' : ''}`} style={{ flexShrink: 0 }}>
+                            {isDone && <span style={{ color: 'var(--bg)', fontSize: 10, fontWeight: 900 }}>✓</span>}
+                        </button>
+
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex items-start gap-3">
+                                {editing ? (
+                                    <input value={editVal} onChange={e => setEditVal(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(false); }}
+                                        onBlur={saveEdit} autoFocus
+                                        className="flex-1 bg-transparent text-sm font-medium border-b"
+                                        style={{ color: 'var(--text)', borderColor: 'var(--gold)' }} />
+                                ) : (
+                                    <span className="task-title text-sm font-medium leading-snug cursor-default flex-1"
+                                        style={{ color: 'var(--text)' }} onClick={() => setExpanded(!expanded)}>
+                                        {task.content}
+                                    </span>
+                                )}
+
+                                <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                                    {timers[task.id] > 0 && (
+                                        <span className={`mono text-xs font-semibold px-2 py-0.5 rounded-lg ${timerOn ? 'breathe' : ''}`}
+                                            style={{ background: 'var(--lav-dim)', color: 'var(--lavender)', border: '1px solid rgba(184,160,232,0.2)' }}>
+                                            {fmt(timers[task.id])}
+                                        </span>
+                                    )}
+                                    <div className="task-actions">
+                                        <button className="action-btn" data-tip={timerOn ? 'Stop timer' : 'Time it'}
+                                            onClick={() => setTimerOn(!timerOn)}
+                                            style={timerOn ? { background: 'var(--lav-dim)', color: 'var(--lavender)' } : {}}>⏱</button>
+                                        {onFocus && !isFocused && !isDone && (
+                                            <button className="action-btn" data-tip="Focus" onClick={onFocus}>⌖</button>
+                                        )}
+                                        {isFocused && (
+                                            <button className="action-btn" data-tip="Exit focus" onClick={onFocus} style={{ color: 'var(--gold)' }}>⌖</button>
+                                        )}
+                                        <button className="action-btn" data-tip="More" onClick={handleCtx}>···</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                                {task.priority && task.priority !== 'Medium' && (
+                                    <span className="badge" style={{ background: pc.bg, color: pc.color, fontSize: 9 }}>{pc.label}</span>
+                                )}
+                                {due && (
+                                    <span className="text-xs font-semibold flex items-center gap-1"
+                                        style={{ color: due.cls === 'overdue' ? 'var(--rose)' : due.cls === 'due-soon' ? 'var(--gold)' : 'var(--text-3)' }}>
+                                        📅 {due.label}
+                                    </span>
+                                )}
+                                {task.tags && task.tags.filter && task.tags.filter(Boolean).map(tag => (
+                                    <span key={tag} className="tag">#{tag}</span>
+                                ))}
+                                {task.children && task.children.length > 0 && (
+                                    <span className="text-xs mono" style={{ color: 'var(--text-3)' }}>
+                                        {task.children.filter(c => c.status === 'Completed').length}/{task.children.length} done
+                                    </span>
+                                )}
+                            </div>
+
+                            {task.children && task.children.length > 0 && (
+                                <div className="progress-track" style={{ width: 80 }}>
+                                    <div className="progress-fill" style={{ width: `${(task.children.filter(c => c.status === 'Completed').length / task.children.length) * 100}%`, background: 'var(--sage)' }} />
+                                </div>
+                            )}
+
+                            <AnimatePresence>
+                                {expanded && (
+                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                                        <div className="pt-3 space-y-3">
+                                            {task.notes && <div className="md" dangerouslySetInnerHTML={{ __html: md(task.notes) }} />}
+                                            <textarea value={localNotes} onChange={e => setLocalNotes(e.target.value)}
+                                                onBlur={() => safeCall('update_task', task.id, task.content, localNotes, task.links || '')}
+                                                className="w-full resize-none rounded-xl p-3 text-xs mono"
+                                                style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)', minHeight: 70, lineHeight: 1.8 }}
+                                                placeholder="Add notes… (Markdown & Obsidian links supported)" />
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => onAddSub(task.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>+ Subtask</button>
+                                                <button onClick={() => { setEditing(true); setExpanded(false); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>Edit</button>
+                                                <button onClick={() => safeCall('delete_item', task.id, 'task')} className="btn btn-danger ml-auto" style={{ fontSize: 11, padding: '6px 12px' }}>Delete</button>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {task.children && task.children.length > 0 && !expanded && (
+                                <div className="space-y-0.5 mt-1">
+                                    {task.children.map(c => <TaskNode key={c.id} task={c} depth={depth + 1} safeCall={safeCall} timers={timers} setTimers={setTimers} onAddSub={onAddSub} />)}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {ctx && <CtxMenu pos={ctx} onClose={() => setCtx(null)} items={[
+                        { heading: 'Actions' },
+                        { icon: '✏', label: 'Edit title', action: () => { setEditing(true); setExpanded(false); } },
+                        { icon: '↳', label: 'Add subtask', action: () => onAddSub(task.id) },
+                        { icon: isDone ? '↩' : '✓', label: isDone ? 'Mark pending' : 'Mark complete', action: () => safeCall('update_task_status', task.id, isDone ? 'Pending' : 'Completed') },
+                        'sep',
+                        { icon: '⌖', label: isFocused ? 'Exit focus' : 'Focus mode', action: onFocus || (() => { }) },
+                        { icon: '⏱', label: timerOn ? 'Stop timer' : 'Start timer', action: () => setTimerOn(!timerOn) },
+                        'sep',
+                        { icon: '✕', label: 'Delete task', danger: true, action: () => safeCall('delete_item', task.id, 'task') },
+                    ]} />}
+                </div>
+            );
+        });
+
+        // ─── QUICK CAPTURE (⌘K style) ─────────────────────────────────────────────────
+        const QuickCapture = ({ onAdd, onClose }) => {
+            const [val, setVal] = useState('');
+            const [hint, setHint] = useState('');
+            const ref = useRef(null);
+            useEffect(() => { ref.current?.focus(); }, []);
+
+            const parseQuick = (text) => {
+                // Parse: "Fix bug !high #backend due:tomorrow"
+                let content = text, priority = 'Medium', tags = [], due = '';
+                const pM = text.match(/!(?:high|h)\b/i); if (pM) { priority = 'High'; content = content.replace(pM[0], ''); }
+                const pL = text.match(/!(?:low|l)\b/i); if (pL) { priority = 'Low'; content = content.replace(pL[0], ''); }
+                const tagMs = [...text.matchAll(/#(\w+)/g)]; tagMs.forEach(m => { tags.push(m[1]); content = content.replace(m[0], ''); });
+                const dM = text.match(/due:(\S+)/i);
+                if (dM) {
+                    const dv = dM[1].toLowerCase();
+                    const d = new Date();
+                    if (dv === 'today') due = d.toISOString().slice(0, 10);
+                    else if (dv === 'tomorrow') { d.setDate(d.getDate() + 1); due = d.toISOString().slice(0, 10); }
+                    else if (dv.match(/\d{4}-\d{2}-\d{2}/)) due = dv;
+                    content = content.replace(dM[0], '');
+                }
+                return { content: content.trim(), priority, tags, due_date: due };
+            };
+
+            useEffect(() => {
+                const p = parseQuick(val);
+                const hints = [];
+                if (p.priority !== 'Medium') hints.push(`${p.priority} priority`);
+                if (p.tags.length) hints.push(p.tags.map(t => `#${t}`).join(' '));
+                if (p.due_date) hints.push(`due ${p.due_date}`);
+                setHint(hints.join(' · '));
+            }, [val]);
+
+            const submit = () => {
+                if (!val.trim()) return;
+                const parsed = parseQuick(val);
+                onAdd(parsed);
+                onClose();
+            };
+
+            return (
+                <div className="modal-overlay" style={{ alignItems: 'flex-end', paddingBottom: '10vh' }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+                    <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
+                        className="quick-bar">
+                        <div className="card p-3 space-y-2" style={{ boxShadow: 'var(--shadow-lg)' }}>
+                            <div className="flex items-center gap-3">
+                                <span style={{ color: 'var(--gold)', fontSize: 18 }}>⚡</span>
+                                <input ref={ref} value={val} onChange={e => setVal(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
+                                    className="flex-1 bg-transparent text-sm font-medium"
+                                    style={{ color: 'var(--text)' }}
+                                    placeholder="Quick capture… (!high, #tag, due:tomorrow)" />
+                                <kbd className="kbd">↵</kbd>
+                            </div>
+                            {hint && <div className="text-xs px-7" style={{ color: 'var(--gold)', opacity: 0.7 }}>{hint}</div>}
+                            <div className="text-xs px-7" style={{ color: 'var(--text-3)' }}>
+                                Use <span className="kbd">!high</span> <span className="kbd">#tag</span> <span className="kbd">due:tomorrow</span> — press <span className="kbd">Esc</span> to dismiss
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            );
+        };
+
+        // ─── MISSIONS PAGE ────────────────────────────────────────────────────────────
+        const MissionsPage = ({ data, safeCall, focusId, setFocusId, timers, setTimers }) => {
+            const [showAdd, setShowAdd] = useState(false);
+            const [showQuick, setShowQuick] = useState(false);
+            const [addParentId, setAddParentId] = useState(0);
+            const [selMode, setSelMode] = useState(false);
+            const [selected, setSelected] = useState([]);
+            const [view, setView] = useState('list');
+            const [filter, setFilter] = useState('all');
+            const [showDone, setShowDone] = useState(false);
+            const [search, setSearch] = useState('');
+            const [showSidebar, setShowSidebar] = useState(true);
+
+            // ⌘K shortcut
+            useEffect(() => {
+                const h = (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowQuick(true); } };
+                window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+            }, []);
+
+            const buildTree = (tasks, pid = 0) => tasks.filter(t => t.parent_id === pid).map(t => ({ ...t, children: buildTree(tasks, t.id) }));
+
+            const filtered = useMemo(() => {
+                let t = data.tasks.filter(t => t.status !== 'Completed');
+                if (search) t = t.filter(t => t.content.toLowerCase().includes(search.toLowerCase()) || t.tags?.some(tag => tag.includes(search.toLowerCase())));
+                const now = new Date(); now.setHours(0, 0, 0, 0);
+                if (filter === 'today') t = t.filter(t => { if (!t.due_date) return false; const d = new Date(t.due_date); d.setHours(0, 0, 0, 0); return d <= now; });
+                if (filter === 'high') t = t.filter(t => t.priority === 'High');
+                if (filter === 'nodate') t = t.filter(t => !t.due_date);
+                return t;
+            }, [data.tasks, filter, search]);
+
+            const tree = useMemo(() => buildTree(filtered), [filtered]);
+            const groups = useMemo(() => groupByDate(filtered), [filtered]);
+            const done = useMemo(() => [...data.tasks.filter(t => t.status === 'Completed')].sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0)), [data.tasks]);
+
+            const stats = useMemo(() => {
+                const total = data.tasks.length, comp = data.tasks.filter(t => t.status === 'Completed').length;
+                const overdue = data.tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(); }).length;
+                return { total, comp, active: total - comp, overdue, momentum: total > 0 ? Math.round((comp / total) * 100) : 0 };
+            }, [data.tasks]);
+
+            const handleAdd = ({ content, priority, due_date, notes, tags }) => {
+                safeCall('add_task', content, 0, notes, tags?.join(',') || '', priority, due_date, addParentId);
+            };
+
+            const toggleSel = (id) => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+            const bulkAction = (action) => {
+                selected.forEach(id => { if (action === 'complete') safeCall('update_task_status', id, 'Completed'); if (action === 'delete') safeCall('delete_item', id, 'task'); });
+                setSelected([]); setSelMode(false);
+            };
+
+            const FILTERS = [{ id: 'all', l: 'All' }, { id: 'today', l: 'Today' }, { id: 'high', l: 'High' }, { id: 'nodate', l: 'Unscheduled' }];
+            const GROUP_COLORS = { Overdue: 'var(--rose)', Today: 'var(--gold)', Tomorrow: 'var(--sky)', 'This Week': 'var(--sage)', Later: 'var(--text-3)', 'No Date': 'var(--text-3)' };
+
+            return (
+                <div className="flex-1 flex overflow-hidden">
+                    {/* Main panel */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {/* Header */}
+                        <div className="flex-shrink-0 px-7 pt-7 pb-4 space-y-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Tasks</h2>
+                                    <span className="section-label">{stats.active} active · {stats.comp} done</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {/* Search */}
+                                    <div className="relative">
+                                        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontSize: 13 }}>⌕</span>
+                                        <input value={search} onChange={e => setSearch(e.target.value)}
+                                            className="input-field text-sm" style={{ paddingLeft: 30, height: 36, width: 180 }}
+                                            placeholder="Search…" />
+                                    </div>
+                                    <button onClick={() => setShowQuick(true)} className="btn btn-ghost" style={{ fontSize: 11, height: 36, gap: 4 }}>
+                                        ⚡ Quick <span className="kbd" style={{ fontSize: 9 }}>⌘K</span>
+                                    </button>
+                                    <button onClick={() => { setSelMode(!selMode); setSelected([]); }}
+                                        className="btn btn-ghost" style={{
+                                            fontSize: 11, height: 36,
+                                            background: selMode ? 'var(--gold-dim)' : 'var(--bg-3)',
+                                            color: selMode ? 'var(--gold)' : 'var(--text-2)'
+                                        }}>
+                                        {selMode ? '✕ Cancel' : '☑ Select'}
+                                    </button>
+                                    <button onClick={() => setShowSidebar(!showSidebar)} className="btn btn-ghost" style={{ fontSize: 11, height: 36 }} data-tip="Toggle widgets">⊞</button>
+                                </div>
+                            </div>
+
+                            {/* Overdue banner */}
+                            {stats.overdue > 0 && (
+                                <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-semibold pulse-ring"
+                                    style={{ background: 'var(--rose-dim)', color: 'var(--rose)', border: '1px solid rgba(232,112,112,0.2)' }}>
+                                    ⚠ {stats.overdue} overdue {stats.overdue === 1 ? 'task' : 'tasks'} — don't let them slip
+                                </div>
+                            )}
+
+                            {/* Filter + view row */}
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-0.5 p-1 rounded-xl" style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
+                                    {FILTERS.map(f => (
+                                        <button key={f.id} onClick={() => setFilter(f.id)}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                            style={{ background: filter === f.id ? 'var(--bg-1)' : 'transparent', color: filter === f.id ? 'var(--text)' : 'var(--text-3)', boxShadow: filter === f.id ? 'var(--shadow-sm)' : 'none', transition: 'all 0.15s' }}>
+                                            {f.l}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-0.5 p-1 rounded-xl ml-auto" style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
+                                    {[['list', '≡ List'], ['grouped', '⊞ Grouped']].map(([v, l]) => (
+                                        <button key={v} onClick={() => setView(v)}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                            style={{ background: view === v ? 'var(--bg-1)' : 'transparent', color: view === v ? 'var(--text)' : 'var(--text-3)' }}>
+                                            {l}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Momentum bar */}
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
+                                    <span>Momentum</span><span className="mono font-bold" style={{ color: 'var(--gold)' }}>{stats.momentum}%</span>
+                                </div>
+                                <div className="progress-track" style={{ height: 4 }}>
+                                    <div className="progress-fill" style={{ width: `${stats.momentum}%`, background: `linear-gradient(90deg, var(--gold), var(--teal))` }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Task list */}
+                        <div className="flex-1 overflow-y-auto px-5 pb-28 space-y-0.5">
+                            {view === 'grouped' ? (
+                                Object.entries(groups).filter(([, t]) => t.length > 0).map(([grp, tasks]) => (
+                                    <div key={grp} className="mb-5">
+                                        <div className="flex items-center gap-2 px-3 py-2 section-label">
+                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: GROUP_COLORS[grp] || 'var(--text-3)', flexShrink: 0 }} />
+                                            {grp} <span className="ml-auto">{tasks.length}</span>
+                                        </div>
+                                        {tasks.map(task => (
+                                            <TaskNode key={task.id} task={task} safeCall={safeCall}
+                                                isFocused={focusId === task.id} onFocus={() => setFocusId(focusId === task.id ? null : task.id)}
+                                                selMode={selMode} isSelected={selected.includes(task.id)} onSelect={() => toggleSel(task.id)}
+                                                timers={timers} setTimers={setTimers} onAddSub={(pid) => { setAddParentId(pid); setShowAdd(true); }} />
+                                        ))}
+                                    </div>
+                                ))
+                            ) : tree.length === 0 ? (
+                                <div className="empty">
+                                    <div style={{ fontSize: 40 }}>✓</div>
+                                    <div className="text-sm font-bold" style={{ color: 'var(--text-3)' }}>Clear queue</div>
+                                    <div className="text-xs" style={{ color: 'var(--text-3)' }}>Use ⚡ quick capture or + below</div>
+                                </div>
+                            ) : (
+                                tree.map(task => (
+                                    <TaskNode key={task.id} task={task} safeCall={safeCall}
+                                        isFocused={focusId === task.id} onFocus={() => setFocusId(focusId === task.id ? null : task.id)}
+                                        selMode={selMode} isSelected={selected.includes(task.id)} onSelect={() => toggleSel(task.id)}
+                                        timers={timers} setTimers={setTimers} onAddSub={(pid) => { setAddParentId(pid); setShowAdd(true); }} />
+                                ))
+                            )}
+
+                            {/* Completed section */}
+                            {done.length > 0 && (
+                                <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+                                    <button onClick={() => setShowDone(!showDone)}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl section-label hover:bg-bg2 transition-colors">
+                                        <span style={{ transition: 'transform 0.2s', display: 'inline-block', transform: showDone ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                                        Completed
+                                        <span className="ml-auto font-bold">{done.length}</span>
+                                    </button>
+                                    <AnimatePresence>
+                                        {showDone && (
+                                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                                                <div className="mt-2 space-y-0.5 opacity-45">
+                                                    {done.map(task => (
+                                                        <div key={task.id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-bg2 transition-colors">
+                                                            <button onClick={() => safeCall('update_task_status', task.id, 'Pending')}
+                                                                className="check done" style={{ width: 16, height: 16 }}>
+                                                                <span style={{ color: 'var(--bg)', fontSize: 9, fontWeight: 900 }}>✓</span>
+                                                            </button>
+                                                            <span className="text-sm flex-1 line-through" style={{ color: 'var(--text-3)' }}>{task.content}</span>
+                                                            {task.completed_at && <span className="text-xs mono" style={{ color: 'var(--text-3)' }}>{fmtDate(task.completed_at)}</span>}
+                                                            <button onClick={() => safeCall('delete_item', task.id, 'task')} className="action-btn">✕</button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* FAB */}
+                        {!selMode && (
+                            <motion.button onClick={() => { setAddParentId(0); setShowAdd(true); }}
+                                whileHover={{ scale: 1.05, boxShadow: '0 12px 40px var(--gold-glow)' }} whileTap={{ scale: 0.96 }}
+                                className="fixed bottom-8 right-8 z-50 flex items-center gap-2 font-bold text-sm rounded-2xl px-5 py-3.5"
+                                style={{ background: 'var(--gold)', color: 'var(--bg)', boxShadow: '0 8px 32px var(--gold-glow)' }}>
+                                + New Task
+                            </motion.button>
+                        )}
+                    </div>
+
+                    {/* Right sidebar — widgets */}
+                    <AnimatePresence>
+                        {showSidebar && (
+                            <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 280, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
+                                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                                className="flex-shrink-0 overflow-y-auto overflow-x-hidden"
+                                style={{ borderLeft: '1px solid var(--border)', background: 'var(--bg-1)' }}>
+                                <div className="p-4 space-y-4 w-[280px]">
+                                    <DailyFocusWidget tasks={data.tasks} safeCall={safeCall} />
+                                    <PomodoroWidget />
+                                    <StreakWidget achievements={data.achievements} />
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Modals */}
+                    <AnimatePresence>
+                        {showAdd && <AddTaskModal onClose={() => setShowAdd(false)} parentId={addParentId} onAdd={handleAdd} />}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                        {showQuick && <QuickCapture onClose={() => setShowQuick(false)} onAdd={handleAdd} />}
+                    </AnimatePresence>
+
+                    {/* Bulk bar */}
+                    <AnimatePresence>
+                        {selMode && selected.length > 0 && (
+                            <motion.div initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
+                                className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-3 rounded-2xl z-50"
+                                style={{ background: 'var(--bg-1)', border: '1px solid var(--border-h)', boxShadow: 'var(--shadow-lg)' }}>
+                                <span className="text-sm font-bold" style={{ color: 'var(--gold)' }}>{selected.length} selected</span>
+                                <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
+                                <button onClick={() => bulkAction('complete')} className="btn" style={{ background: 'var(--sage-dim)', color: 'var(--sage)', padding: '7px 14px', fontSize: 11 }}>✓ Complete</button>
+                                <button onClick={() => bulkAction('delete')} className="btn" style={{ background: 'var(--rose-dim)', color: 'var(--rose)', padding: '7px 14px', fontSize: 11 }}>✕ Delete</button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            );
+        };
+
+        // ─── VICTORIES PAGE ───────────────────────────────────────────────────────────
+        const VictoriesPage = ({ data, safeCall }) => {
+            const [input, setInput] = useState('');
+            const [filter, setFilter] = useState('all');
+            const [imp, setImp] = useState('Medium');
+
+            const handleAdd = async () => {
+                if (!input.trim()) return;
+                await safeCall('add_achievement', input.trim(), imp, '', '');
+                setInput('');
+            };
+
+            const sorted = useMemo(() => [...data.achievements].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)), [data.achievements]);
+            const byDate = useMemo(() => {
+                const G = {};
+                sorted.filter(a => filter === 'all' || a.impact === filter).forEach(a => {
+                    const d = a.created_at ? new Date(a.created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Earlier';
+                    if (!G[d]) G[d] = [];
+                    G[d].push(a);
+                });
+                return G;
+            }, [sorted, filter]);
+
+            const IC = { High: { dot: 'var(--rose)', ring: true }, Medium: { dot: 'var(--gold)', ring: false }, Low: { dot: 'var(--sage)', ring: false } };
+            const total = data.achievements.length;
+            const highCount = data.achievements.filter(a => a.impact === 'High').length;
+
+            return (
+                <div className="flex-1 overflow-y-auto px-7 py-7 space-y-6 max-w-3xl">
+                    <header className="flex items-end justify-between">
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Victories</h2>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>{total} wins · {highCount} high impact</p>
+                        </div>
+                        {total > 0 && <div className="text-right text-xs" style={{ color: 'var(--text-3)' }}>
+                            <div className="text-2xl font-black mono" style={{ color: 'var(--gold)' }}>{highCount}</div>
+                            <div>high impact wins</div>
+                        </div>}
+                    </header>
+
+                    {/* Input */}
+                    <div className="card p-4 space-y-3">
+                        <input value={input} onChange={e => setInput(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                            className="w-full bg-transparent text-[15px] font-medium"
+                            style={{ color: 'var(--text)' }}
+                            placeholder="What did you accomplish?" />
+                        <div style={{ height: 1, background: 'var(--border)' }} />
+                        <div className="flex items-center gap-3">
+                            <div className="section-label">Impact:</div>
+                            {['High', 'Medium', 'Low'].map(p => (
+                                <button key={p} onClick={() => setImp(p)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                    style={{ background: imp === p ? IC[p].dot + '22' : 'var(--bg-3)', color: imp === p ? IC[p].dot : 'var(--text-3)', border: `1px solid ${imp === p ? IC[p].dot + '44' : 'transparent'}` }}>
+                                    {p}
+                                </button>
+                            ))}
+                            <button onClick={handleAdd} className="btn ml-auto" style={{ background: 'var(--teal)', color: 'var(--bg)', padding: '7px 16px', fontSize: 11 }}>Log Win</button>
+                        </div>
+                    </div>
+
+                    {/* Filter */}
+                    <div className="flex gap-1.5">
+                        {[['all', 'All'], ['High', 'High'], ['Medium', 'Medium'], ['Low', 'Low']].map(([v, l]) => (
+                            <button key={v} onClick={() => setFilter(v)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                style={{ background: filter === v ? 'var(--bg-2)' : 'transparent', color: filter === v ? 'var(--text)' : 'var(--text-3)', border: `1px solid ${filter === v ? 'var(--border-h)' : 'transparent'}` }}>
+                                {l}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* List grouped by date */}
+                    {Object.entries(byDate).map(([date, wins]) => (
+                        <div key={date} className="space-y-2">
+                            <div className="section-label px-1">{date}</div>
+                            {wins.map(a => {
+                                const ic = IC[a.impact] || IC.Medium;
+                                return (
+                                    <div key={a.id} className="group card-inset flex items-start gap-4 p-4 hover:border-border-h transition-all">
+                                        <div className={`mt-1.5 flex-shrink-0 rounded-full ${ic.ring ? 'pulse-ring' : ''}`}
+                                            style={{ width: 8, height: 8, background: ic.dot }} />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{a.content}</p>
+                                            {a.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>{a.notes}</p>}
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            <span className="badge" style={{ background: ic.dot + '22', color: ic.dot, fontSize: 9 }}>{a.impact}</span>
+                                            <button onClick={() => safeCall('delete_item', a.id, 'achievement')}
+                                                className="action-btn opacity-0 group-hover:opacity-100">✕</button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+                    {Object.keys(byDate).length === 0 && <div className="empty"><div style={{ fontSize: 40 }}>🏆</div><div className="text-sm font-bold" style={{ color: 'var(--text-3)' }}>No victories yet — log your first win</div></div>}
+                </div>
+            );
+        };
+
+        // ─── ANALYTICS PAGE ───────────────────────────────────────────────────────────
+        const AnalyticsPage = ({ data, safeCall }) => {
+            const [timeVal, setTimeVal] = useState('24');
+            const [timeUnit, setTimeUnit] = useState('hours');
+            const [recap, setRecap] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [aiLoading, setAiLoading] = useState(false);
+
+            const stats = useMemo(() => {
+                const total = data.tasks.length, done = data.tasks.filter(t => t.status === 'Completed').length;
+                const overdue = data.tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(); }).length;
+                const high = data.tasks.filter(t => t.priority === 'High' && t.status !== 'Completed').length;
+                const wins = data.achievements.length, highW = data.achievements.filter(a => a.impact === 'High').length;
+                return { total, done, active: total - done, overdue, high, wins, highW, momentum: total > 0 ? Math.round((done / total) * 100) : 0 };
+            }, [data]);
+
+            const priDist = useMemo(() => {
+                const C = { High: 0, Medium: 0, Low: 0 };
+                data.tasks.filter(t => t.status !== 'Completed').forEach(t => { if (C[t.priority] !== undefined) C[t.priority]++; });
+                const T = Object.values(C).reduce((a, b) => a + b, 0) || 1;
+                return Object.entries(C).map(([k, v]) => ({ label: k, count: v, pct: Math.round((v / T) * 100), color: PC[k].color }));
+            }, [data.tasks]);
+
+            const scan = async () => { setLoading(true); const r = await safeCall('generate_summary', `-${timeVal} ${timeUnit}`); setRecap(r || 'No data in this range.'); setLoading(false); };
+            const aiSynth = async () => { setAiLoading(true); const r = await safeCall('get_ai_recap', `Give concise insights on:\n${recap}`); setRecap(r || recap); setAiLoading(false); };
+
+            const CARDS = [
+                { l: 'Total', v: stats.total, c: 'var(--text)' },
+                { l: 'Completed', v: stats.done, c: 'var(--sage)' },
+                { l: 'Active', v: stats.active, c: 'var(--gold)' },
+                { l: 'Overdue', v: stats.overdue, c: 'var(--rose)' },
+                { l: 'High Priority', v: stats.high, c: 'var(--rose)' },
+                { l: 'Victories', v: stats.wins, c: 'var(--teal)' },
             ];
 
             return (
-                <aside className="sidebar-layer w-64 bg-surface border-r border-border flex flex-col pt-10 pb-6 z-20 transition-all duration-500 ease-out">
-                    <div className="px-8 mb-12">
-                        <span className="font-bold text-xl tracking-tighter text-main">CHRONOS<span className="text-cyan">_</span></span>
+                <div className="flex-1 overflow-y-auto px-7 py-7 space-y-6 max-w-4xl">
+                    <header className="flex items-end justify-between">
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Intelligence</h2>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>System-wide analytics</p>
+                        </div>
+                        <div className="text-right">
+                            <div className="section-label mb-1">Momentum</div>
+                            <div className="text-4xl font-black mono" style={{ color: 'var(--gold)' }}>{stats.momentum}%</div>
+                        </div>
+                    </header>
+
+                    {/* Momentum bar */}
+                    <div className="card p-4 space-y-2">
+                        <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
+                            <span>{stats.done} completed of {stats.total} total</span>
+                            <span className="mono font-bold" style={{ color: 'var(--gold)' }}>{stats.momentum}%</span>
+                        </div>
+                        <div className="progress-track" style={{ height: 6 }}>
+                            <div className="progress-fill" style={{ width: `${stats.momentum}%`, background: `linear-gradient(90deg, var(--gold), var(--teal))` }} />
+                        </div>
                     </div>
 
-                    <nav className="flex-1 space-y-1.5 px-4">
-                        {navItems.map((item) => (
-                            <button
-                                key={item.id}
-                                onClick={() => setActiveTab(item.id)}
-                                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all ${
-                                    activeTab === item.id ? 'bg-surface-hover text-main font-semibold shadow-inner' : 'text-muted hover:bg-surface-hover/50 hover:text-main'
-                                }`}
-                            >
-                                <div className={`w-2 h-2 rounded-full ${activeTab === item.id ? item.color : 'bg-muted/20'}`} />
-                                <span className="text-sm">{item.label}</span>
+                    {/* Stat grid */}
+                    <div className="grid grid-cols-3 gap-3">
+                        {CARDS.map(s => (
+                            <div key={s.l} className="card p-4 stat-card space-y-1" style={{ '--hover-c': s.c }}>
+                                <div className="section-label">{s.l}</div>
+                                <div className="text-2xl font-black mono" style={{ color: s.c }}>{s.v}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Priority distribution */}
+                    <div className="card p-5 space-y-4">
+                        <div className="section-label">Active Tasks by Priority</div>
+                        {priDist.map(d => (
+                            <div key={d.label} className="flex items-center gap-3">
+                                <div className="w-16 text-xs font-bold" style={{ color: d.color }}>{d.label}</div>
+                                <div className="flex-1 progress-track"><div className="progress-fill" style={{ width: `${d.pct}%`, background: d.color }} /></div>
+                                <div className="w-8 text-xs mono text-right" style={{ color: 'var(--text-3)' }}>{d.count}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Timeline scanner */}
+                    <div className="card p-5 space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-3">
+                            <div className="section-label">Timeline Scanner</div>
+                            <div className="flex items-center gap-2">
+                                <input type="number" value={timeVal} onChange={e => setTimeVal(e.target.value)}
+                                    className="mono text-sm text-center rounded-lg py-1.5 px-2"
+                                    style={{ width: 52, background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+                                <select value={timeUnit} onChange={e => setTimeUnit(e.target.value)}
+                                    className="mono text-sm rounded-lg py-1.5 px-3 appearance-none"
+                                    style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                                    <option value="seconds">Seconds</option>
+                                    <option value="minutes">Minutes</option>
+                                    <option value="hours">Hours</option>
+                                    <option value="days">Days</option>
+                                </select>
+                                <button onClick={scan} className="btn btn-ghost" style={{ fontSize: 11 }}>{loading ? 'Scanning…' : 'Scan'}</button>
+                                {recap && <button onClick={aiSynth} className="btn" style={{ background: 'var(--lavender)', color: 'var(--bg)', fontSize: 11 }}>{aiLoading ? 'Thinking…' : '✦ AI'}</button>}
+                            </div>
+                        </div>
+                        {recap ? (
+                            <div className="mono text-xs leading-relaxed p-4 rounded-xl whitespace-pre-wrap"
+                                style={{ background: 'var(--bg-3)', color: 'var(--text-2)', minHeight: 120, lineHeight: 2 }}>
+                                {loading ? <div className="shimmer rounded h-4 w-1/2" /> : recap}
+                            </div>
+                        ) : (
+                            <div className="py-8 text-center text-sm" style={{ color: 'var(--text-3)' }}>Set a range and scan to see your history</div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // ─── SETTINGS PAGE ────────────────────────────────────────────────────────────
+        const SettingsPage = ({ data, safeCall }) => {
+            const [s, setS] = useState({});
+            useEffect(() => { if (data.settings) setS(data.settings); }, [data.settings]);
+
+            return (
+                <div className="flex-1 overflow-y-auto px-7 py-7 max-w-xl">
+                    <h2 className="text-xl font-bold tracking-tight mb-8" style={{ color: 'var(--text)' }}>Settings</h2>
+
+                    <div className="space-y-4">
+                        <div className="card p-5">
+                            <div className="section-label mb-4">Integrations</div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Obsidian Vault</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{s.obsidian_path || 'No vault linked'}</div></div>
+                                <button onClick={() => safeCall('select_obsidian_path')} className="btn btn-ghost" style={{ fontSize: 11 }}>Browse</button>
+                            </div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>AI Endpoint</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Custom LLM URL</div></div>
+                                <input value={s.ai_url || ''} onChange={e => setS({ ...s, ai_url: e.target.value })}
+                                    className="input-field py-2 text-sm" style={{ width: 200 }} placeholder="https://…" />
+                            </div>
+                        </div>
+
+                        <div className="card p-5">
+                            <div className="section-label mb-4">Preferences</div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Default Priority</div></div>
+                                <div className="flex gap-1.5">
+                                    {['High', 'Medium', 'Low'].map(p => (
+                                        <button key={p} onClick={() => setS({ ...s, default_priority: p })}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                                            style={{ background: s.default_priority === p ? PC[p].bg : 'var(--bg-3)', color: s.default_priority === p ? PC[p].color : 'var(--text-3)' }}>
+                                            {p}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card p-5">
+                            <div className="section-label mb-4">Data</div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Export</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Download all data as JSON</div></div>
+                                <button className="btn btn-ghost" style={{ fontSize: 11 }}>Export</button>
+                            </div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--rose)' }}>Clear Completed</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Remove all completed tasks</div></div>
+                                <button className="btn btn-danger" style={{ fontSize: 11 }}>Clear</button>
+                            </div>
+                        </div>
+
+                        <button onClick={() => safeCall('save_settings', JSON.stringify(s))}
+                            className="btn btn-gold w-full" style={{ fontSize: 13, padding: '12px' }}>
+                            Save Settings
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+        const Sidebar = ({ tab, setTab, isDark, toggle }) => {
+            const NAV = [
+                { id: 'missions', l: 'Tasks', ic: '☐', c: 'var(--gold)' },
+                { id: 'log', l: 'Victories', ic: '◈', c: 'var(--teal)' },
+                { id: 'analytics', l: 'Intelligence', ic: '◉', c: 'var(--lavender)' },
+                { id: 'settings', l: 'Settings', ic: '◎', c: 'var(--text-3)' },
+            ];
+            return (
+                <aside className="sidebar-wrap flex flex-col pt-7 pb-6" style={{ borderRight: '1px solid var(--border)', background: 'var(--bg-1)' }}>
+                    <div className="px-5 mb-8">
+                        <div className="font-bold text-base tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.02em', fontFamily: "'Instrument Sans'" }}>
+                            CHRONOS<span style={{ color: 'var(--gold)' }}>_</span>
+                        </div>
+                        <div className="mono text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>pro</div>
+                    </div>
+
+                    <nav className="flex-1 space-y-0.5 px-3">
+                        {NAV.map(item => (
+                            <button key={item.id} onClick={() => setTab(item.id)}
+                                className={`nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm ${tab === item.id ? 'active' : ''}`}
+                                style={{ color: tab === item.id ? item.c : 'var(--text-3)' }}>
+                                <span style={{ fontSize: 13, opacity: .75 }}>{item.ic}</span>
+                                <span className="font-semibold">{item.l}</span>
+                                {tab === item.id && <div style={{ width: 5, height: 5, borderRadius: '50%', background: item.c, marginLeft: 'auto', flexShrink: 0 }} />}
                             </button>
                         ))}
                     </nav>
 
-                    <div className="px-4 mt-auto">
-                        <button
-                            onClick={toggleTheme}
-                            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-muted hover:bg-surface-hover/50 hover:text-main transition-colors"
-                        >
-                            <div className={`w-2 h-2 rounded-full ${isDarkMode ? 'bg-yellow-500' : 'bg-indigo-500'}`} />
-                            <span className="text-sm font-medium">{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                    <div className="px-3 mt-4">
+                        <div style={{ height: 1, background: 'var(--border)', marginBottom: 12 }} />
+                        <button onClick={toggle} className="nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm" style={{ color: 'var(--text-3)' }}>
+                            <span style={{ fontSize: 13 }}>{isDark ? '☀' : '☾'}</span>
+                            <span className="font-semibold">{isDark ? 'Light' : 'Dark'} Mode</span>
                         </button>
                     </div>
                 </aside>
             );
         };
 
-        const MissionsPage = ({ data, safeCall, focusTaskId, setFocusTaskId, timers, setTimers }) => {
-            const [input, setInput] = useState('');
-            const [selectionMode, setSelectionMode] = useState(false);
-            const [selectedIds, setSelectedIds] = useState([]);
+        // ─── APP ROOT ─────────────────────────────────────────────────────────────────
+        const App = () => {
+            const { data, call: safeCall } = useBridge();
+            const [tab, setTab] = useState('missions');
+            const [focusId, setFocusId] = useState(null);
+            const [isDark, setIsDark] = useState(() => localStorage.getItem('chronos-theme') !== 'light');
+            const [timers, setTimers] = useState({});
 
-            const handleAdd = async () => {
-                if (input.trim()) {
-                    await safeCall('add_task', input.trim(), 0, "", "");
-                    setInput('');
-                }
-            };
-
-            const toggleSelect = (id) => {
-                setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-            };
-
-            const buildTree = (tasks, parentId = 0) => {
-                return tasks
-                    .filter(t => t.parent_id === parentId)
-                    .map(t => ({ ...t, children: buildTree(tasks, t.id) }));
-            };
-
-            const missionTree = useMemo(() => buildTree(data.tasks), [data.tasks]);
-            const pending = missionTree.filter(t => t.status !== 'Completed');
-            const completed = missionTree.filter(t => t.status === 'Completed');
-
-            return (
-                <div className="flex-1 overflow-y-auto custom-scrollbar flex justify-center">
-                    <div className="w-full max-w-3xl py-14 px-8 flex flex-col min-h-full">
-                        <header className="mb-8 flex justify-between items-end">
-                            <h2 className="text-3xl font-bold text-main tracking-tight">Active Tasks</h2>
-                            <button
-                                onClick={() => { setSelectionMode(!selectionMode); setSelectedIds([]); }}
-                                className={`text-[10px] font-black uppercase tracking-widest ${selectionMode ? 'text-cyan' : 'text-muted'}`}
-                            >
-                                {selectionMode ? 'Stop Selection' : 'Selection Mode'}
-                            </button>
-                        </header>
-
-                        {!focusTaskId && (
-                            <div className="mb-10 bg-surface/20 rounded-xl p-1 border border-border/40">
-                                <input
-                                    type="text"
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                                    placeholder="Add task node..."
-                                    className="w-full bg-transparent px-5 py-4 text-main placeholder:text-muted/40 focus:border-cyan transition-colors"
-                                />
-                            </div>
-                        )}
-
-                        <div className="space-y-1 mb-24">
-                            {pending.map((task) => (
-                                <TaskNode
-                                    key={task.id}
-                                    task={task}
-                                    safeCall={safeCall}
-                                    isFocused={focusTaskId === task.id}
-                                    onFocus={() => setFocusTaskId(task.id)}
-                                    selectionMode={selectionMode}
-                                    isSelected={selectedIds.includes(task.id)}
-                                    onSelect={() => toggleSelect(task.id)}
-                                    timers={timers}
-                                    setTimers={setTimers}
-                                />
-                            ))}
-                        </div>
-
-                        {!focusTaskId && completed.length > 0 && (
-                            <div className="mt-12 opacity-30 dim-other-elements">
-                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted mb-6 px-3">Archive</h3>
-                                {completed.map(task => (
-                                    <TaskNode key={task.id} task={task} safeCall={safeCall} selectionMode={selectionMode} timers={timers} setTimers={setTimers} />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {selectionMode && selectedIds.length > 0 && (
-                        <motion.div
-                            initial={{ y: 100 }} animate={{ y: 0 }}
-                            className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-surface/90 backdrop-blur border border-cyan/40 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-8 z-[120]"
-                        >
-                            <span className="text-xs font-bold text-cyan uppercase tracking-wider">{selectedIds.length} Nodes Selected</span>
-                            <div className="flex gap-3">
-                                <button onClick={() => { selectedIds.forEach(id => safeCall('update_task_status', id, 'Completed')); setSelectedIds([]); }} className="px-5 py-2 bg-cyan/10 text-cyan text-xs font-bold rounded-lg hover:bg-cyan hover:text-base transition-all">Resolve</button>
-                                <button onClick={() => { selectedIds.forEach(id => safeCall('delete_item', id, 'task')); setSelectedIds([]); }} className="px-5 py-2 bg-red/10 text-red text-xs font-bold rounded-lg hover:bg-red hover:text-white transition-all">Abort</button>
-                            </div>
-                        </motion.div>
-                    )}
-                </div>
-            );
-        };
-
-        const TaskNode = ({ task, depth = 0, safeCall, isFocused, onFocus, selectionMode, isSelected, onSelect, timers, setTimers }) => {
-            const [isExpanded, setIsExpanded] = useState(false);
-            const [localNotes, setLocalNotes] = useState(task.notes || '');
-            const [timerActive, setTimerActive] = useState(false);
-            const intervalRef = useRef(null);
-
-            const isDone = task.status === 'Completed';
-
+            useEffect(() => { document.documentElement.classList.toggle('light', !isDark); localStorage.setItem('chronos-theme', isDark ? 'dark' : 'light'); }, [isDark]);
+            useEffect(() => { document.body.classList.toggle('focus-mode', !!focusId); }, [focusId]);
             useEffect(() => {
-                if (timerActive) {
-                    intervalRef.current = setInterval(() => {
-                        setTimers(prev => ({ ...prev, [task.id]: (prev[task.id] || 0) + 1 }));
-                    }, 1000);
-                } else {
-                    clearInterval(intervalRef.current);
-                }
-                return () => clearInterval(intervalRef.current);
-            }, [timerActive, task.id]);
-
-            const formatTime = (s) => {
-                const h = Math.floor(s / 3600);
-                const m = Math.floor((s % 3600) / 60);
-                const sec = s % 60;
-                return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-            };
-
-            const parseNotes = (text) => {
-                if (!text) return null;
-                const obsidianRegex = /obsidian:\/\/open\?vault=[^ \n]+/g;
-                const html = marked.parse(text.replace(obsidianRegex, (match) => `<a href="${match}" class="obsidian-chip">Open Obsidian Link</a>`));
-                return { __html: html };
-            };
+                const h = (e) => {
+                    if (e.shiftKey && e.key === 'F') setFocusId(null);
+                };
+                window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+            }, []);
 
             return (
-                <div
-                    className={`relative transition-all duration-500 ${isFocused ? 'focused-mission' : 'dim-other-elements'} ${depth > 0 ? 'ml-6 border-l border-border/10 pl-5' : ''}`}
-                >
-                    <div className={`flex items-start gap-4 py-3.5 px-3 rounded-2xl transition-all ${isFocused ? 'bg-surface shadow-2xl ring-1 ring-purple/30' : 'hover:bg-surface-hover/20'}`}>
-                        {selectionMode && (
-                            <button onClick={onSelect} className={`mt-1.5 w-4 h-4 rounded border transition-all ${isSelected ? 'bg-cyan border-cyan' : 'border-border/50'}`} />
-                        )}
+                <div id="app" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}>
+                    <Sidebar tab={tab} setTab={setTab} isDark={isDark} toggle={() => setIsDark(!isDark)} />
+                    <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
-                        <button
-                            onClick={(e) => { e.stopPropagation(); safeCall('update_task_status', task.id, isDone ? 'Pending' : 'Completed'); }}
-                            className={`mt-1.5 w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center ${isDone ? 'bg-teal border-teal' : 'border-muted/40 hover:border-cyan'}`}
-                        >
-                            {isDone && <span className="text-[9px] font-black text-white">✓</span>}
-                        </button>
-
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-4">
-                                <span
-                                    className={`text-sm transition-all cursor-pointer select-none ${isDone ? 'line-through text-muted/50' : 'text-main font-medium'}`}
-                                    onClick={() => setIsExpanded(!isExpanded)}
-                                >
-                                    {task.content}
-                                </span>
-
-                                {timers[task.id] > 0 && (
-                                    <span className="text-[10px] font-mono font-bold bg-purple/10 text-purple px-2 py-0.5 rounded border border-purple/20">
-                                        {formatTime(timers[task.id])}
-                                    </span>
-                                )}
-
-                                {!isDone && (
-                                    <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => setTimerActive(!timerActive)}
-                                            className={`text-[9px] font-black uppercase tracking-widest ${timerActive ? 'text-red animate-pulse' : 'text-cyan'}`}
-                                        >
-                                            {timerActive ? 'Stop' : 'Timer'}
-                                        </button>
-                                        {!isFocused && (
-                                            <button onClick={onFocus} className="text-[9px] font-black uppercase tracking-widest text-purple">Focus</button>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            <AnimatePresence>
-                                {isExpanded && (
-                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-4 space-y-5">
-                                        <div className="markdown-render text-xs text-muted/80 leading-relaxed font-normal" dangerouslySetInnerHTML={parseNotes(task.notes)} />
-                                        <textarea
-                                            value={localNotes}
-                                            onChange={(e) => setLocalNotes(e.target.value)}
-                                            onBlur={() => safeCall('update_task', task.id, task.content, localNotes, task.links || '')}
-                                            className="w-full h-28 bg-base border border-border/30 rounded-xl p-4 text-xs font-mono text-main placeholder:text-muted/20 focus:border-cyan"
-                                            placeholder="Context notes... (Markdown & Obsidian links supported)"
-                                        />
-                                        <div className="flex justify-end gap-3 pb-2">
-                                            <button onClick={() => safeCall('delete_item', task.id, 'task')} className="text-[10px] font-black uppercase text-red/60 hover:text-red transition-colors">Delete Task</button>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            {!isExpanded && task.children && task.children.length > 0 && (
-                                <div className="mt-2 space-y-1">
-                                    {task.children.map(child => (
-                                        <TaskNode key={child.id} task={child} depth={depth + 1} safeCall={safeCall} timers={timers} setTimers={setTimers} />
-                                    ))}
-                                </div>
+                        {/* Focus indicator */}
+                        <AnimatePresence>
+                            {focusId && (
+                                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                                    className="no-dim" style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 50, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px', borderRadius: 99, background: 'var(--bg-1)', border: '1px solid var(--border-h)', boxShadow: 'var(--shadow-md)' }}>
+                                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)' }} className="breathe" />
+                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--gold)' }}>Deep Focus</span>
+                                    <button onClick={() => setFocusId(null)} style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6, fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none' }}>Exit <span className="kbd">⇧F</span></button>
+                                </motion.div>
                             )}
-                        </div>
-                    </div>
+                        </AnimatePresence>
+
+                        <AnimatePresence mode="wait">
+                            {tab === 'missions' && (
+                                <motion.div key="m" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    <MissionsPage data={data} safeCall={safeCall} focusId={focusId} setFocusId={setFocusId} timers={timers} setTimers={setTimers} />
+                                </motion.div>
+                            )}
+                            {tab === 'log' && (
+                                <motion.div key="l" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    <VictoriesPage data={data} safeCall={safeCall} />
+                                </motion.div>
+                            )}
+                            {tab === 'analytics' && (
+                                <motion.div key="a" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    <AnalyticsPage data={data} safeCall={safeCall} />
+                                </motion.div>
+                            )}
+                            {tab === 'settings' && (
+                                <motion.div key="s" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    <SettingsPage data={data} safeCall={safeCall} />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </main>
                 </div>
             );
         };
 
-        const AnalyticsPage = ({ data, safeCall }) => {
-            const [status, setStatus] = useState('ready');
-            const [recap, setRecap] = useState('Awaiting neural scan results...');
-            const [timeVal, setTimeVal] = useState('24');
-            const [timeUnit, setTimeUnit] = useState('hours');
-
-            // Productivity Logic
-            const momentum = useMemo(() => {
-                if (!data.tasks.length) return 0;
-                const closed = data.tasks.filter(t => t.status === 'Completed').length;
-                return Math.round((closed / data.tasks.length) * 100);
-            }, [data.tasks]);
-
-            // Heatmap (Mocked data based on actual task count for visualization)
-            const heatmapGrid = useMemo(() => Array.from({length: 24}, (_, i) => ({
-                hour: i,
-                intensity: data.tasks.length > i ? 1 : 0
-            })), [data.tasks]);
-
-            return (
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-14 flex justify-center">
-                    <div className="w-full max-w-4xl space-y-14">
-                        <header className="flex justify-between items-end">
-                            <div>
-                                <h2 className="text-3xl font-bold tracking-tighter text-main">System Intelligence</h2>
-                                <p className="text-sm text-muted mt-2">Momentum analysis and temporal tracking grid.</p>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple mb-1 opacity-70">Momentum</div>
-                                <div className="text-5xl font-black text-purple tabular-nums">{momentum}%</div>
-                            </div>
-                        </header>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <section className="col-span-2 bg-surface border border-border/60 rounded-3xl p-8">
-                                <h3 className="text-[10px] font-black uppercase tracking-widest text-muted mb-8">Activity Distribution (24h Grid)</h3>
-                                <div className="grid grid-cols-12 gap-3">
-                                    {heatmapGrid.map((h, i) => (
-                                        <div
-                                            key={i}
-                                            className={`aspect-square rounded-md transition-all duration-1000 ${h.intensity ? 'bg-cyan shadow-[0_0_15px_rgba(14,173,207,0.3)]' : 'bg-border/10'}`}
-                                            title={`Hour ${h.hour}: Data Found`}
-                                        />
-                                    ))}
-                                </div>
-                            </section>
-
-                            <section className="bg-surface border border-border/60 rounded-3xl p-8 flex flex-col justify-between">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-muted mb-4">Neural Recounter</div>
-                                <div className="flex flex-col gap-4">
-                                    <div className="flex items-center gap-3">
-                                        <input type="number" value={timeVal} onChange={e => setTimeVal(e.target.value)} className="w-12 bg-transparent border-b border-border focus:border-purple text-main font-bold text-center pb-1" />
-                                        <select value={timeUnit} onChange={e => setTimeUnit(e.target.value)} className="bg-transparent text-xs font-bold text-main border-b border-border focus:border-purple pb-1 appearance-none cursor-pointer">
-                                            <option value="seconds">SEC</option>
-                                            <option value="minutes">MIN</option>
-                                            <option value="hours">HRS</option>
-                                            <option value="days">DYS</option>
-                                        </select>
-                                    </div>
-                                    <button
-                                        onClick={async () => {
-                                            setStatus('loading');
-                                            const res = await safeCall('generate_summary', `-${timeVal} ${timeUnit}`);
-                                            setRecap(res || "No data points located.");
-                                            setStatus('ready');
-                                        }}
-                                        className="w-full py-3 bg-base border border-border text-xs font-black uppercase tracking-widest text-main rounded-xl hover:bg-surface-hover"
-                                    >
-                                        Scan Timeline
-                                    </button>
-                                </div>
-                            </section>
-                        </div>
-
-                        <div className="bg-surface border border-border/60 rounded-3xl p-10 min-h-[350px] relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                    onClick={async () => {
-                                        setStatus('ai_loading');
-                                        const res = await safeCall('get_ai_recap', `Summarize these logs for me: ${recap}`);
-                                        setRecap(res);
-                                        setStatus('ready');
-                                    }}
-                                    className="px-5 py-2 bg-purple text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all"
-                                >
-                                    {status === 'ai_loading' ? 'Synthesizing...' : 'AI Synthesis'}
-                                </button>
-                            </div>
-                            <div className="font-mono text-xs leading-[2] text-main whitespace-pre-wrap opacity-70 selection:bg-cyan/30">
-                                {status === 'loading' ? <div className="animate-pulse">Accessing historical data...</div> : recap}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const VictoriesPage = ({ data, safeCall }) => {
-            const [input, setInput] = useState('');
-
-            const handleAdd = async () => {
-                if (!input.trim()) return;
-                let imp = input.startsWith('!!!') ? "High" : input.startsWith('.') ? "Low" : "Medium";
-                let clean = input.replace(/^!!!|^\./, '').trim();
-                await safeCall('add_achievement', clean, imp, "", "");
-                setInput('');
-            };
-
-            return (
-                <div className="flex-1 overflow-y-auto custom-scrollbar flex justify-center">
-                    <div className="w-full max-w-3xl py-14 px-8">
-                        <header className="mb-10">
-                            <h2 className="text-3xl font-bold text-main tracking-tight">Daily Victories</h2>
-                        </header>
-
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                            placeholder="Commit milestone win... (!!! for High)"
-                            className="w-full bg-transparent border-b border-border py-5 mb-14 text-2xl font-medium placeholder:text-muted/20 focus:border-teal transition-all"
-                        />
-
-                        <div className="space-y-6">
-                            {data.achievements.map(ach => (
-                                <div key={ach.id} className="group flex items-start gap-6 p-6 rounded-3xl border border-border/20 hover:bg-surface-hover/30 transition-all">
-                                    <div className={`mt-2 w-2 h-2 rounded-full flex-shrink-0 ${ach.impact === 'High' ? 'bg-red pulse-high' : ach.impact === 'Medium' ? 'bg-cyan' : 'bg-teal'}`} />
-                                    <div className="flex-1">
-                                        <div className="text-main font-semibold tracking-tight">{ach.content}</div>
-                                        {ach.notes && <div className="text-xs text-muted mt-3 opacity-60 leading-relaxed max-w-lg">{ach.notes}</div>}
-                                    </div>
-                                    <button onClick={() => safeCall('delete_item', ach.id, 'achievement')} className="text-[10px] font-black uppercase text-muted opacity-0 group-hover:opacity-100 hover:text-red transition-all">Discard</button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const SettingsPage = ({ data, safeCall }) => {
-            const [localSettings, setLocalSettings] = useState({});
-            useEffect(() => { if (data.settings) setLocalSettings(data.settings); }, [data.settings]);
-
-            return (
-                <div className="flex-1 p-14 flex justify-center overflow-y-auto custom-scrollbar">
-                    <div className="w-full max-w-2xl">
-                        <h2 className="text-3xl font-bold text-main mb-14 tracking-tighter">System Configuration</h2>
-                        <div className="space-y-8">
-                            <div className="bg-surface p-8 rounded-3xl border border-border/60">
-                                <label className="text-[10px] font-black uppercase text-muted tracking-widest block mb-4">Vault Sync (Obsidian)</label>
-                                <div className="flex items-center justify-between gap-6">
-                                    <span className="text-xs font-mono opacity-40 truncate">{localSettings.obsidian_path || 'Connection Standby...'}</span>
-                                    <button onClick={() => safeCall('select_obsidian_path')} className="px-5 py-2 bg-base border border-border rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-cyan">Relink</button>
-                                </div>
-                            </div>
-
-                            <div className="bg-surface p-8 rounded-3xl border border-border/60 space-y-6">
-                                <label className="text-[10px] font-black uppercase text-muted tracking-widest block">Neural API Hook</label>
-                                <input type="text" value={localSettings.ai_url || ''} className="w-full bg-base border border-border rounded-xl p-4 text-xs font-mono focus:border-purple" placeholder="Endpoint URI" />
-                                <button
-                                    onClick={() => safeCall('save_settings', JSON.stringify(localSettings))}
-                                    className="w-full py-4 bg-purple text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-2xl shadow-xl active:scale-[0.98] transition-all"
-                                >
-                                    Commit Core Config
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </head>
 

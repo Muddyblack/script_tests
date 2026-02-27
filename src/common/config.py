@@ -11,9 +11,12 @@ SETTINGS_FILE = os.path.join(APPDATA, "nexus_settings.json")
 USAGE_FILE = os.path.join(APPDATA, "nexus_usage.json")
 APPS_CACHE_FILE = os.path.join(APPDATA, "nexus_apps_cache.json")
 SEARCH_HISTORY_FILE = os.path.join(APPDATA, "nexus_history.json")
+FILE_OPS_SETTINGS = os.path.join(APPDATA, "nexus_file_ops.json")
+ARCHIVER_SETTINGS = os.path.join(APPDATA, "nexus_archiver.json")
 
 # --- HOTKEY ---
 SUMMON_HOTKEY = "ctrl+shift+space"
+IMG_TO_TEXT_HOTKEY = "ctrl+shift+y"
 
 # --- PROJECT PATHS ---
 PROJECT_ROOT = os.path.dirname(

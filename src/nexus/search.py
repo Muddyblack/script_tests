@@ -43,6 +43,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.archiver.archiver import ArchiverWindow, is_archive
 from src.common.config import (
     APPDATA,
     APPS_CACHE_FILE,
@@ -58,7 +59,9 @@ from src.common.config import (
 
 # Import SearchEngine
 from src.common.search_engine import SearchEngine
+from src.file_ops.file_ops import FileOpsWindow
 
+from .img_to_text import start_snip_to_text
 from .system_commands import (
     execute_system_toggle as _exec_toggle,
 )
@@ -624,12 +627,14 @@ class NexusSearch(QWidget):
 
         self.results_list = QListWidget()
         self.results_list.setObjectName("nexus_list")
+        self.results_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.results_list.itemDoubleClicked.connect(self.launch_selected)
         self.results_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.results_list.customContextMenuRequested.connect(self.show_context_menu)
 
         self.results_tree = QTreeWidget()
         self.results_tree.setObjectName("nexus_tree")
+        self.results_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.results_tree.viewport().setStyleSheet("background: transparent;")
         self.results_tree.setHeaderHidden(True)
         self.results_tree.setIndentation(20)
@@ -804,28 +809,43 @@ class NexusSearch(QWidget):
         item = self.results_list.itemAt(pos)
         if not item:
             return
-        data = item.data(Qt.ItemDataRole.UserRole)
-        self._show_common_menu(pos, data, self.results_list)
+
+        selected = self.results_list.selectedItems()
+        if item not in selected:
+            selected = [item]
+
+        data_list = [i.data(Qt.ItemDataRole.UserRole) for i in selected]
+        self._show_common_menu(pos, data_list, self.results_list)
 
     def show_tree_context_menu(self, pos):
         item = self.results_tree.itemAt(pos)
         if not item:
             return
-        data = item.data(0, Qt.ItemDataRole.UserRole)
-        if not data:
-            # Intermediate folder node — reconstruct path from tree hierarchy
-            parts = []
-            node = item
-            while node:
-                parts.insert(0, node.text(0))
-                node = node.parent()
-            folder_path = os.sep.join(parts)
-            if os.path.isdir(folder_path):
-                data = {"type": "file", "path": folder_path}
-        self._show_common_menu(pos, data, self.results_tree)
 
-    def _show_common_menu(self, pos, data, parent_widget):
-        if not data:
+        selected = self.results_tree.selectedItems()
+        if item not in selected:
+            selected = [item]
+
+        data_list = []
+        for i in selected:
+            data = i.data(0, Qt.ItemDataRole.UserRole)
+            if not data:
+                # Intermediate folder node — reconstruct path from tree hierarchy
+                parts = []
+                node = i
+                while node:
+                    parts.insert(0, node.text(0))
+                    node = node.parent()
+                folder_path = os.sep.join(parts)
+                if os.path.isdir(folder_path):
+                    data = {"type": "file", "path": folder_path}
+            if data:
+                data_list.append(data)
+
+        self._show_common_menu(pos, data_list, self.results_tree)
+
+    def _show_common_menu(self, pos, data_list, parent_widget):
+        if not data_list:
             return
         menu = QMenu(self)
         if self.is_light_mode:
@@ -841,40 +861,54 @@ class NexusSearch(QWidget):
                 "QMenu::item:selected { background-color: #3b82f6; color: white; }"
             )
 
-        path = data.get("path")
-        if path:
-            copy_path = menu.addAction("🔗 Copy Path")
-            copy_name = menu.addAction("📄 Copy File Name")
+        paths = [
+            d.get("path") for d in data_list if isinstance(d, dict) and d.get("path")
+        ]
+
+        if paths:
+            copy_path = menu.addAction("🔗 Copy Path(s)")
+            copy_name = menu.addAction("📄 Copy File Name(s)")
             open_loc = menu.addAction("📁 Open File Location")
-            search_here = menu.addAction("🎯 Search ONLY in this Folder")
+            search_here = None
+            if len(paths) == 1:
+                search_here = menu.addAction("🎯 Search ONLY in this Folder")
+
+            menu.addSeparator()
+            file_ops_action = menu.addAction("✂️ Copy / Move / Delete...")
+
+            archive_action = None
+            extract_action = None
+            if len(paths) == 1 and is_archive(paths[0]):
+                extract_action = menu.addAction("📦 Extract Archive...")
+            else:
+                archive_action = menu.addAction("📦 Compress to Archive...")
 
             action = menu.exec(parent_widget.mapToGlobal(pos))
             if not action:
                 return
 
-            # Most actions hide the UI
             if action != search_here:
                 self.hide()
 
             if action == copy_path:
-                norm_path = os.path.normpath(path)
-                QApplication.clipboard().setText(norm_path)
-                short = norm_path if len(norm_path) < 50 else "…" + norm_path[-45:]
-                self.status_lbl.setText(f"✓ Copied path: {short}")
+                norm_paths = [os.path.normpath(p) for p in paths]
+                QApplication.clipboard().setText("\n".join(norm_paths))
+                self.status_lbl.setText(f"✓ Copied {len(norm_paths)} path(s)")
             elif action == copy_name:
-                QApplication.clipboard().setText(os.path.basename(path))
-                self.status_lbl.setText("✓ Copied file name to clipboard")
+                names = [os.path.basename(p) for p in paths]
+                QApplication.clipboard().setText("\n".join(names))
+                self.status_lbl.setText("✓ Copied file name(s) to clipboard")
             elif action == open_loc:
-                norm_path = os.path.normpath(path)
+                norm_path = os.path.normpath(paths[0])
                 if os.path.exists(norm_path):
                     if os.path.isdir(norm_path):
                         os.startfile(norm_path)
                     else:
-                        # Professional "Open and Select" on Windows
                         subprocess.Popen(f'explorer /select,"{norm_path}"')
                 else:
                     self.status_lbl.setText("Path not found on disk")
-            elif action == search_here:
+            elif search_here and action == search_here:
+                path = paths[0]
                 dir_path = path if os.path.isdir(path) else os.path.dirname(path)
                 self.modes["target_folders"] = [dir_path]
                 self.modes["files"] = True
@@ -884,6 +918,16 @@ class NexusSearch(QWidget):
                     f"Locked Search to: {os.path.basename(dir_path)}"
                 )
                 self.save_settings()
+            elif action == file_ops_action:
+                self.file_ops_win = FileOpsWindow()
+                self.file_ops_win.source_paths = list(paths)
+                self.file_ops_win._refresh_list()
+                self.file_ops_win.show()
+            elif archive_action and action == archive_action or extract_action and action == extract_action:
+                self.archiver_win = ArchiverWindow()
+                self.archiver_win.source_paths = list(paths)
+                self.archiver_win._refresh_list()
+                self.archiver_win.show()
 
     # ------------------------------------------------------------------
     # Clock
@@ -943,6 +987,10 @@ class NexusSearch(QWidget):
 
         # Trigger rainbow glow on the search input
         self.rainbow_frame.trigger_animation()
+
+    def start_img_to_text(self) -> None:
+        """Snip a region on screen and OCR it into clipboard."""
+        start_snip_to_text(nexus=self)
 
     # ------------------------------------------------------------------
     # Search engine
@@ -1151,6 +1199,13 @@ class NexusSearch(QWidget):
                     "archiver",
                     "📦",
                     "#a78bfa",
+                ),
+                (
+                    "Snip → Text (OCR)",
+                    "Select an area on screen and copy text to clipboard",
+                    "img_to_text",
+                    "🖼️",
+                    "#22c55e",
                 ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
@@ -1701,101 +1756,117 @@ class NexusSearch(QWidget):
     # Launch
     # ------------------------------------------------------------------
     def launch_selected(self):
-        if self.view_mode == "tree":
-            item = self.results_tree.currentItem()
-        else:
-            item = self.results_list.currentItem()
-
-        if not item:
-            return
-
-        data = (
-            item.data(0, Qt.ItemDataRole.UserRole)
-            if self.view_mode == "tree"
-            else item.data(Qt.ItemDataRole.UserRole)
-        )
-        if not data:
-            return
-
-        should_hide = True
-        if data.get("type") in ["filter_toggle", "filter_clear"]:
-            should_hide = False
-
-        if should_hide:
-            # Save the successful search string
-            self.record_search(self.search_input.text())
-            self.hide()
-
-        if data.get("type") == "filter_toggle":
-            path = data["path"]
-            if path in self.modes.get("target_folders", []):
-                self.modes["target_folders"].remove(path)
+        try:
+            if self.view_mode == "tree":
+                item = self.results_tree.currentItem()
             else:
-                self.modes["target_folders"].append(path)
-            self.save_settings()
-            self.show_folder_picker()
-            return
-        elif data.get("type") == "filter_clear":
-            self.modes["target_folders"] = []
-            self.save_settings()
-            self.show_folder_picker()
-            return
-        elif data.get("type") == "app":
-            os.startfile(data["path"])
-        elif data.get("type") == "workspace":
-            self.record_usage(f"ws_{data['id']}")
-            run_workspace(data["id"])
-        elif data["type"] == "cmd":
-            if data["cmd"] == "reindex_files":
-                _trigger_reindex(self)
-            elif data["cmd"] == "regex_helper":
-                _launch_regex(self)
-            elif data["cmd"] == "file_ops":
-                _launch_file_ops(self)
-            elif data["cmd"] == "archiver":
-                _launch_archiver(self)
-            elif data["cmd"] == "color_picker":
-                _launch_color_picker(self)
-            elif data["cmd"] == "base64_tool":
-                _launch_base64_tool(self)
-            elif data["cmd"] == "ip_calculator":
-                _launch_ip_calculator(self)
-            elif data["cmd"] == "chronos_hub":
-                _launch_chronos(self)
-            elif (
-                data["cmd"].startswith("toggle_")
-                or data["cmd"].startswith("cmd_")
-                or data["cmd"].startswith("ms-settings:")
-                or data["cmd"] in ["flush_dns", "restart_explorer", "toggle_desktop"]
-            ):
-                _exec_toggle(self, data["cmd"])
-        elif data["type"] == "script":
-            self.record_usage(f"script_{data['path']}")
-            f_path = data["path"]
-            # If it is inside our src package, run it as a module
-            if "src" in f_path:
-                rel = os.path.relpath(f_path, PROJECT_ROOT)
-                mod_path = rel.replace(os.sep, ".").rsplit(".", 1)[0]
-                subprocess.Popen([sys.executable, "-m", mod_path])
-            else:
-                subprocess.Popen([sys.executable, f_path])
-        elif data["type"] == "file":
-            self.record_usage(f"file_{data['path']}")
-            os.startfile(data["path"])
-        elif data["type"] == "macro":
-            self.record_usage(f"macro_{data['id']}")
-            _run_macro(self, data["id"])
-        elif data["type"] == "process":
-            _kill_proc(self, data["pid"], data["name"])
-        elif data["type"] == "ssh":
-            self.status_lbl.setText(f"🔗 Connecting to {data['host']}...")
-            subprocess.Popen(f"start cmd /k ssh {data['host']}", shell=True)
-        elif data["type"] == "chronos_log":
-            _log_to_chronos(self, data["content"])
-        elif data["type"] == "url":
-            webbrowser.open(data["url"])
-            self.status_lbl.setText(f"🌐 Opened URL: {data['url']}")
-            self.status_lbl.setStyleSheet("color: #3b82f6; font-weight: bold;")
+                item = self.results_list.currentItem()
+
+            if not item:
+                return
+
+            data = (
+                item.data(0, Qt.ItemDataRole.UserRole)
+                if self.view_mode == "tree"
+                else item.data(Qt.ItemDataRole.UserRole)
+            )
+            if not data:
+                return
+
+            should_hide = True
+            if data.get("type") in ["filter_toggle", "filter_clear"]:
+                should_hide = False
+
+            if should_hide:
+                # Save the successful search string
+                self.record_search(self.search_input.text())
+                self.hide()
+
+            if data.get("type") == "filter_toggle":
+                path = data["path"]
+                if path in self.modes.get("target_folders", []):
+                    self.modes["target_folders"].remove(path)
+                else:
+                    self.modes["target_folders"].append(path)
+                self.save_settings()
+                self.show_folder_picker()
+                return
+            elif data.get("type") == "filter_clear":
+                self.modes["target_folders"] = []
+                self.save_settings()
+                self.show_folder_picker()
+                return
+            elif data.get("type") == "app":
+                if not os.path.exists(data["path"]):
+                    raise FileNotFoundError(f"App not found: {data['path']}")
+                os.startfile(data["path"])
+            elif data.get("type") == "workspace":
+                self.record_usage(f"ws_{data['id']}")
+                run_workspace(data["id"])
+            elif data["type"] == "cmd":
+                if data["cmd"] == "reindex_files":
+                    _trigger_reindex(self)
+                elif data["cmd"] == "regex_helper":
+                    _launch_regex(self)
+                elif data["cmd"] == "file_ops":
+                    _launch_file_ops(self)
+                elif data["cmd"] == "archiver":
+                    _launch_archiver(self)
+                elif data["cmd"] == "color_picker":
+                    _launch_color_picker(self)
+                elif data["cmd"] == "base64_tool":
+                    _launch_base64_tool(self)
+                elif data["cmd"] == "ip_calculator":
+                    _launch_ip_calculator(self)
+                elif data["cmd"] == "chronos_hub":
+                    _launch_chronos(self)
+                elif data["cmd"] == "img_to_text":
+                    self.start_img_to_text()
+                elif (
+                    data["cmd"].startswith("toggle_")
+                    or data["cmd"].startswith("cmd_")
+                    or data["cmd"].startswith("ms-settings:")
+                    or data["cmd"]
+                    in ["flush_dns", "restart_explorer", "toggle_desktop"]
+                ):
+                    _exec_toggle(self, data["cmd"])
+            elif data["type"] == "script":
+                self.record_usage(f"script_{data['path']}")
+                f_path = data["path"]
+                if not os.path.exists(f_path):
+                    raise FileNotFoundError(f"Script not found: {f_path}")
+                # If it is inside our src package, run it as a module
+                if "src" in f_path:
+                    rel = os.path.relpath(f_path, PROJECT_ROOT)
+                    mod_path = rel.replace(os.sep, ".").rsplit(".", 1)[0]
+                    subprocess.Popen([sys.executable, "-m", mod_path])
+                else:
+                    subprocess.Popen([sys.executable, f_path])
+            elif data["type"] == "file":
+                self.record_usage(f"file_{data['path']}")
+                if not os.path.exists(data["path"]):
+                    raise FileNotFoundError(f"File not found: {data['path']}")
+                os.startfile(data["path"])
+            elif data["type"] == "macro":
+                self.record_usage(f"macro_{data['id']}")
+                _run_macro(self, data["id"])
+            elif data["type"] == "process":
+                _kill_proc(self, data["pid"], data["name"])
+            elif data["type"] == "ssh":
+                self.status_lbl.setText(f"🔗 Connecting to {data['host']}...")
+                subprocess.Popen(f"start cmd /k ssh {data['host']}", shell=True)
+            elif data["type"] == "chronos_log":
+                _log_to_chronos(self, data["content"])
+            elif data["type"] == "url":
+                webbrowser.open(data["url"])
+                self.status_lbl.setText(f"🌐 Opened URL: {data['url']}")
+                self.status_lbl.setStyleSheet("color: #3b82f6; font-weight: bold;")
+        except Exception as e:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            self.status_lbl.setText(f"❌ Error: {str(e)}")
+            self.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
 
     # ------------------------------------------------------------------
     # System command delegates

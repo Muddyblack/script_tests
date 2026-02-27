@@ -252,3 +252,4 @@ class NexusBridge(QObject):
     """Emits a signal to toggle Nexus visibility from any thread."""
 
     toggle_signal = pyqtSignal()
+    snip_to_text_signal = pyqtSignal()

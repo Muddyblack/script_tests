@@ -36,6 +36,10 @@ def create_tray_icon(app, nexus) -> QSystemTrayIcon:
     show_action.triggered.connect(nexus.summon)
     menu.addAction(show_action)
 
+    ocr_action = QAction("🖼️  Snip → Text (OCR)", menu)
+    ocr_action.triggered.connect(nexus.start_img_to_text)
+    menu.addAction(ocr_action)
+
     menu.addSeparator()
 
     quit_action = QAction("❌  Quit", menu)
