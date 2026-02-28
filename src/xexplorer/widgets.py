@@ -213,13 +213,13 @@ class SearchBar(QWidget):
         T = self._theme
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         focused = self.input.hasFocus()
         r = self.rect().adjusted(1, 3, -1, -3)
-        
+
         bg = QColor(T["bg_overlay"] if focused else (T["bg_elevated"] if T.dark else T["bg_control"]))
         border = QColor(T["accent"] if focused else T["border_light"])
-        
+
         if focused:
             # Subtle glow
             glow = QColor(T["accent"])

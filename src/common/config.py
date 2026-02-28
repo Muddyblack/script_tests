@@ -3,6 +3,7 @@
 
 import os
 
+
 # --- CONFIGURATION (Shared with other apps) ---
 def get_appdata_dir():
     if os.name == "nt":
