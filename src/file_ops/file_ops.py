@@ -21,10 +21,10 @@ from PyQt6.QtGui import (
     QColor,
     QDragEnterEvent,
     QDropEvent,
+    QIcon,
     QLinearGradient,
     QPainter,
     QPainterPath,
-    QIcon,
 )
 from PyQt6.QtWidgets import (
     QApplication,

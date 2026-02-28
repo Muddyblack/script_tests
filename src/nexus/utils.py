@@ -30,11 +30,11 @@ def is_opacity_supported() -> bool:
     """
     if sys.platform != "linux":
         return True
-    
+
     # Check for Wayland (known problematic for Qt window opacity)
     if "WAYLAND_DISPLAY" in os.environ or os.environ.get("XDG_SESSION_TYPE") == "wayland":
         return False
-    
+
     # For X11, we could check for a compositor via _NET_WM_CM_Sn, but usually it works.
     # However, for now, we'll assume it's OK unless it's Wayland.
     return True
