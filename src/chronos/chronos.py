@@ -71,6 +71,14 @@ def init_db():
             conn.execute("ALTER TABLE tasks ADD COLUMN links TEXT")
         if "is_expanded" not in cols:
             conn.execute("ALTER TABLE tasks ADD COLUMN is_expanded INTEGER DEFAULT 1")
+        if "priority" not in cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT 'Medium'")
+        if "due_date" not in cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+        if "tags" not in cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN tags TEXT")
+        if "completed_at" not in cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN completed_at DATETIME")
 
         conn.commit()
 
@@ -129,7 +137,7 @@ class ChronosBridge(QObject):
             ]
 
             cursor.execute(
-                "SELECT id, parent_id, content, notes, links, timestamp, status, is_expanded FROM tasks ORDER BY parent_id ASC, timestamp DESC"
+                "SELECT id, parent_id, content, notes, links, timestamp, status, is_expanded, priority, due_date, tags, completed_at FROM tasks ORDER BY parent_id ASC, timestamp DESC"
             )
             tasks = [
                 {
@@ -141,6 +149,10 @@ class ChronosBridge(QObject):
                     "timestamp": r[5],
                     "status": r[6],
                     "is_expanded": r[7],
+                    "priority": r[8] or "Medium",
+                    "due_date": r[9],
+                    "tags": r[10].split(",") if r[10] else [],
+                    "completed_at": r[11],
                 }
                 for r in cursor.fetchall()
             ]
@@ -170,12 +182,12 @@ class ChronosBridge(QObject):
         self.data_updated.emit()
         self.trigger_sync()
 
-    @pyqtSlot(str, int, str, str)
-    def add_task(self, content, parent_id, notes, links):
+    @pyqtSlot(str, int, str, str, str, str, int)
+    def add_task(self, content, dummy, notes, tags, priority, due_date, parent_id):
         with sqlite3.connect(CHRONOS_DB) as conn:
             conn.execute(
-                "INSERT INTO tasks (content, parent_id, notes, links) VALUES (?, ?, ?, ?)",
-                (content, parent_id, notes, links),
+                "INSERT INTO tasks (content, parent_id, notes, links, tags, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (content, parent_id, notes, "", tags, priority, due_date),
             )
         self.data_updated.emit()
         self.trigger_sync()
@@ -192,8 +204,12 @@ class ChronosBridge(QObject):
 
     @pyqtSlot(int, str)
     def update_task_status(self, tid, status):
+        now = datetime.datetime.now().isoformat() if status == "Completed" else None
         with sqlite3.connect(CHRONOS_DB) as conn:
-            conn.execute("UPDATE tasks SET status=? WHERE id=?", (status, tid))
+            conn.execute(
+                "UPDATE tasks SET status=?, completed_at=? WHERE id=?",
+                (status, now, tid),
+            )
         self.data_updated.emit()
         self.trigger_sync()
 
@@ -236,34 +252,66 @@ class ChronosBridge(QObject):
     @pyqtSlot(str, result=str)
     def generate_summary(self, modifier):
         try:
+            now = datetime.datetime.now()
+            # Handle preset buttons specifically
+            if modifier == "daily":
+                date_filter = "date(timestamp) = date('now')"
+                title = f"Daily Standup - {now.strftime('%b %d, %Y')}"
+            elif modifier == "weekly":
+                date_filter = "timestamp >= datetime('now', '-7 days')"
+                title = "Weekly Review"
+            elif modifier == "monthly":
+                date_filter = "timestamp >= datetime('now', '-1 month')"
+                title = "Monthly Retrospective"
+            else:
+                date_filter = f"timestamp >= datetime('now', '{modifier}')"
+                title = f"Scan Report: {modifier}"
+
             with sqlite3.connect(CHRONOS_DB) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    f"SELECT content, impact, notes FROM achievements WHERE timestamp >= datetime('now', '{modifier}')"
+                    f"SELECT content, impact, notes FROM achievements WHERE {date_filter} ORDER BY impact DESC, timestamp DESC"
                 )
                 achs = cursor.fetchall()
+                # for tasks we use completed_at if it exists, otherwise fallback to timestamp
                 cursor.execute(
-                    f"SELECT content, status, notes FROM tasks WHERE timestamp >= datetime('now', '{modifier}')"
+                    f"SELECT content, status, notes, priority FROM tasks WHERE status='Completed' AND {date_filter.replace('timestamp', 'coalesce(completed_at, timestamp)')} ORDER BY priority DESC"
                 )
-                tasks = cursor.fetchall()
+                comp_tasks = cursor.fetchall()
+                cursor.execute(
+                    "SELECT content, priority FROM tasks WHERE status='Pending' ORDER BY priority DESC"
+                )
+                pending = cursor.fetchall()
 
-            summ = "### 🚀 CHRONOS SUMMARY\n\n"
-            if achs:
-                summ += "#### 🏆 Achievements\n"
-                for c, i, n in achs:
-                    icon = "🔥" if i == "High" else "🔵" if i == "Medium" else "🟢"
-                    summ += f"- {icon} **{c}**\n"
-                    if n:
-                        summ += f"  > {n}\n"
-            if tasks:
-                summ += "\n#### 📝 Missions\n"
-                for c, s, n in tasks:
-                    check = "[x]" if s == "Completed" else "[ ]"
-                    summ += f"- {check} {c}\n"
-                    if n:
-                        summ += f"  *Note: {n}*\n"
+            summ = f"### 🚀 {title}\n\n"
+
+            summ += "#### 🔥 What I Got Done\n"
+            if not achs and not comp_tasks:
+                summ += "*- No completed items in this period-*\n"
+            for c, i, _ in achs:
+                icon = "🏆" if i == "High" else "✨" if i == "Medium" else "✔️"
+                summ += f"- {icon} **{c}**\n"
+            for c, _s, _n, _p in comp_tasks:
+                summ += f"- ✅ {c}\n"
+
+            summ += "\n#### 🎯 Current Focus (Active)\n"
+            high_pending = [t for t in pending if t[1] == "High"]
+            other_pending = [t for t in pending if t[1] != "High"][:5]  # cap to 5 shown
+            if not high_pending and not other_pending:
+                summ += "*- Inbox Zero! ✨-*\n"
+            for c, _p in high_pending:
+                summ += f"- 🔴 **[High]** {c}\n"
+            for c, _p in other_pending:
+                summ += f"- 🔵 {c}\n"
+
+            if modifier == "daily":
+                summ += "\n#### 📦 Blockers / Notes\n- None"
+
             return summ
-        except (sqlite3.Error, Exception) as e:
+        except Exception as e:
+            import traceback
+
+            traceback.print_exc()
             return f"Error: {str(e)}"
 
     @pyqtSlot(str, result=str)
@@ -358,12 +406,18 @@ class ChronosBridge(QObject):
         v_path = self.settings["obsidian_path"]
         if not os.path.exists(v_path):
             return
-        sync_dir = os.path.join(v_path, "Chronos_Sync")
-        if not os.path.exists(sync_dir):
-            os.makedirs(sync_dir)
+        base_dir = os.path.join(v_path, "Chronos_Sync")
+        daily_dir = os.path.join(base_dir, "Daily")
+        weekly_dir = os.path.join(base_dir, "Weekly")
+
+        for d in [base_dir, daily_dir, weekly_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
         now = datetime.datetime.now()
-        f_path = os.path.join(sync_dir, f"Log_{now.strftime('%Y-%m-%d')}.md")
+        f_path = os.path.join(daily_dir, f"Log_{now.strftime('%Y-%m-%d')}.md")
+        week_num = now.isocalendar()[1]
+        w_path = os.path.join(weekly_dir, f"Week_{week_num:02d}_{now.year}.md")
 
         with sqlite3.connect(CHRONOS_DB) as conn:
             cursor = conn.cursor()
@@ -372,13 +426,20 @@ class ChronosBridge(QObject):
             )
             achs = cursor.fetchall()
             cursor.execute(
-                "SELECT status, content, notes, links FROM tasks WHERE date(timestamp) = date('now') OR status='Pending'"
+                "SELECT status, content, notes, priority, tags FROM tasks WHERE date(timestamp) = date('now') OR status='Pending'"
             )
             tasks = cursor.fetchall()
+            cursor.execute(
+                "SELECT impact, content FROM achievements WHERE week_number=? AND year=?",
+                (week_num, now.year),
+            )
+            w_achs = cursor.fetchall()
 
         with open(f_path, "w", encoding="utf-8") as f:
             f.write(f"# ⏳ Chronos Daily Log: {now.strftime('%A, %b %d, %Y')}\n\n")
             f.write("## 🏆 Achievements\n")
+            if not achs:
+                f.write("- *(None recorded)*\n")
             for impact, content, notes, link in achs:
                 icon = "🔴" if impact == "High" else "🔵"
                 f.write(f"- {icon} **[{impact}]** {content}\n")
@@ -387,13 +448,22 @@ class ChronosBridge(QObject):
                 if link:
                     f.write(f"  - Links: {link}\n")
             f.write("\n## 📝 Missions\n")
-            for status, content, notes, link in tasks:
+            if not tasks:
+                f.write("- *(No active tasks)*\n")
+            for status, content, notes, priority, tags in tasks:
                 check = "[x]" if status == "Completed" else "[ ]"
-                f.write(f"- {check} {content}\n")
+                fpri = f" [!{priority}]" if priority != "Medium" else ""
+                ftag = f" #{tags}" if tags else ""
+                f.write(f"- {check}{fpri}{ftag} {content}\n")
                 if notes:
                     f.write(f"  - Notes: {notes}\n")
-                if link:
-                    f.write(f"  - Links: {link}\n")
+
+        with open(w_path, "w", encoding="utf-8") as f:
+            f.write(f"# 📅 Chronos Weekly Summary: Week {week_num}, {now.year}\n\n")
+            f.write(f"**Total Wins This Week:** {len(w_achs)}\n\n")
+            for impact, content in w_achs:
+                icon = "🔥" if impact == "High" else "✔️"
+                f.write(f"- {icon} {content}\n")
 
 
 class ChronosApp(QMainWindow):

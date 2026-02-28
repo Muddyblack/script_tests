@@ -9,88 +9,14 @@
     <script crossorigin src="react-dom.min.js"></script>
     <script src="framer-motion.js"></script>
     <script src="lucide.min.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script src="babel.min.js"></script>
     <script src="tailwind.min.js"></script>
     <script src="qwebchannel.js"></script>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap"
-        rel="stylesheet">
+    <!-- Generated palette mapping from VS Code JSON -->
+    <link href="../theme/midnight-marina-palette.css" rel="stylesheet">
 
     <style>
-        /* ── WARM DARK PALETTE ─────────────────────────────────────────────── */
-        :root {
-            /* Backgrounds — warm, not cold. Like a lit study at night */
-            --bg: #111009;
-            --bg-1: #19160E;
-            --bg-2: #201C13;
-            --bg-3: #2A2519;
-            --bg-4: #332E20;
-
-            /* Borders */
-            --border: rgba(255, 235, 180, 0.07);
-            --border-h: rgba(255, 235, 180, 0.14);
-            --border-hh: rgba(255, 235, 180, 0.22);
-
-            /* Text — warm whites, not blue-grey */
-            --text: #F0E8D8;
-            --text-2: #8C8070;
-            --text-3: #4E4638;
-
-            /* Accent palette — amber-led, warm */
-            --gold: #E8B84B;
-            --gold-dim: rgba(232, 184, 75, 0.10);
-            --gold-glow: rgba(232, 184, 75, 0.20);
-            --teal: #4ECDC4;
-            --teal-dim: rgba(78, 205, 196, 0.09);
-            --rose: #E87070;
-            --rose-dim: rgba(232, 112, 112, 0.09);
-            --sage: #7EC8A0;
-            --sage-dim: rgba(126, 200, 160, 0.09);
-            --lavender: #B8A0E8;
-            --lav-dim: rgba(184, 160, 232, 0.09);
-            --sky: #78B4E0;
-            --sky-dim: rgba(120, 180, 224, 0.09);
-
-            /* Shadows */
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.5);
-            --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6);
-
-            /* Grain */
-            --grain-opacity: 0.035;
-        }
-
-        html.light {
-            --bg: #FAF7F0;
-            --bg-1: #FFFFFF;
-            --bg-2: #F5F1E8;
-            --bg-3: #EDE8DC;
-            --bg-4: #E4DDD0;
-            --border: rgba(60, 48, 20, 0.09);
-            --border-h: rgba(60, 48, 20, 0.16);
-            --border-hh: rgba(60, 48, 20, 0.26);
-            --text: #1A160A;
-            --text-2: #6B5E48;
-            --text-3: #A09078;
-            --gold: #B8880A;
-            --gold-dim: rgba(184, 136, 10, 0.10);
-            --gold-glow: rgba(184, 136, 10, 0.18);
-            --teal: #0D8A82;
-            --teal-dim: rgba(13, 138, 130, 0.09);
-            --rose: #C44040;
-            --rose-dim: rgba(196, 64, 64, 0.09);
-            --sage: #2E8A52;
-            --sage-dim: rgba(46, 138, 82, 0.09);
-            --lavender: #6A46C4;
-            --lav-dim: rgba(106, 70, 196, 0.09);
-            --sky: #2870B4;
-            --sky-dim: rgba(40, 112, 180, 0.09);
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.10);
-            --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.14);
-            --grain-opacity: 0.02;
-        }
-
         * {
             box-sizing: border-box;
             margin: 0;
@@ -130,8 +56,8 @@
             inset: 0;
             z-index: 0;
             pointer-events: none;
-            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(232, 184, 75, 0.04) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(78, 205, 196, 0.03) 0%, transparent 60%);
+            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(14, 173, 207, 0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(68, 255, 177, 0.03) 0%, transparent 60%);
         }
 
         #root {
@@ -591,7 +517,7 @@
         [data-tip]:hover::after {
             content: attr(data-tip);
             position: absolute;
-            bottom: calc(100% + 7px);
+            top: calc(100% + 7px);
             left: 50%;
             transform: translateX(-50%);
             white-space: nowrap;
@@ -1248,7 +1174,9 @@
                                         style={{ color: 'var(--text)', borderColor: 'var(--gold)' }} />
                                 ) : (
                                     <span className="task-title text-sm font-medium leading-snug cursor-default flex-1"
-                                        style={{ color: 'var(--text)' }} onClick={() => setExpanded(!expanded)}>
+                                        style={{ color: 'var(--text)' }}
+                                        onClick={() => setExpanded(!expanded)}
+                                        onDoubleClick={() => { setEditing(true); setExpanded(false); }}>
                                         {task.content}
                                     </span>
                                 )}
@@ -1654,103 +1582,184 @@
             );
         };
 
-        // ─── VICTORIES PAGE ───────────────────────────────────────────────────────────
-        const VictoriesPage = ({ data, safeCall }) => {
-            const [input, setInput] = useState('');
+        // ─── HISTORY PAGE ─────────────────────────────────────────────────────────────
+        const HistoryPage = ({ data, safeCall }) => {
+            const [search, setSearch] = useState('');
             const [filter, setFilter] = useState('all');
-            const [imp, setImp] = useState('Medium');
+            const [sortBy, setSortBy] = useState('date_desc');
+            const [editingItem, setEditingItem] = useState(null);
 
-            const handleAdd = async () => {
-                if (!input.trim()) return;
-                await safeCall('add_achievement', input.trim(), imp, '', '');
-                setInput('');
+            const handleSaveLog = () => {
+                if (!editingItem) return;
+                if (editingItem.type === 'task') {
+                    safeCall('update_task', editingItem.id, editingItem.content, editingItem.notes, editingItem.links || '');
+                } else {
+                    safeCall('update_achievement', editingItem.id, editingItem.content, editingItem.impact, editingItem.notes, editingItem.links || '');
+                }
+                setEditingItem(null);
             };
 
-            const sorted = useMemo(() => [...data.achievements].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)), [data.achievements]);
+            const completedItems = useMemo(() => {
+                const tasks = data.tasks.filter(t => t.status === 'Completed').map(t => ({
+                    ...t,
+                    type: 'task',
+                    dateStr: t.completed_at || t.timestamp,
+                    impact: t.priority
+                }));
+                const achs = data.achievements.map(a => ({
+                    ...a,
+                    type: 'victory',
+                    dateStr: a.created_at || a.timestamp
+                }));
+                return [...tasks, ...achs].sort((a, b) => {
+                    if (sortBy === 'date_asc') return new Date(a.dateStr || 0) - new Date(b.dateStr || 0);
+                    if (sortBy === 'name_asc') return a.content.localeCompare(b.content);
+                    if (sortBy === 'name_desc') return b.content.localeCompare(a.content);
+                    return new Date(b.dateStr || 0) - new Date(a.dateStr || 0);
+                });
+            }, [data.tasks, data.achievements, sortBy]);
+
             const byDate = useMemo(() => {
                 const G = {};
-                sorted.filter(a => filter === 'all' || a.impact === filter).forEach(a => {
-                    const d = a.created_at ? new Date(a.created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Earlier';
-                    if (!G[d]) G[d] = [];
-                    G[d].push(a);
+                const filtered = completedItems.filter(item => {
+                    if (filter === 'tasks' && item.type !== 'task') return false;
+                    if (filter === 'victories' && item.type !== 'victory') return false;
+                    if (search.trim()) {
+                        const q = search.toLowerCase();
+                        if (!item.content.toLowerCase().includes(q) && !(item.notes && item.notes.toLowerCase().includes(q))) return false;
+                    }
+                    return true;
                 });
+
+                if (sortBy.startsWith('date')) {
+                    filtered.forEach(a => {
+                        const d = a.dateStr ? new Date(a.dateStr).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Earlier';
+                        if (!G[d]) G[d] = [];
+                        G[d].push(a);
+                    });
+                } else {
+                    G['All Items'] = filtered;
+                }
                 return G;
-            }, [sorted, filter]);
+            }, [completedItems, filter, search, sortBy]);
 
             const IC = { High: { dot: 'var(--rose)', ring: true }, Medium: { dot: 'var(--gold)', ring: false }, Low: { dot: 'var(--sage)', ring: false } };
-            const total = data.achievements.length;
-            const highCount = data.achievements.filter(a => a.impact === 'High').length;
+            const total = completedItems.length;
 
             return (
                 <div className="flex-1 overflow-y-auto px-7 py-7 space-y-6 max-w-3xl">
                     <header className="flex items-end justify-between">
                         <div>
-                            <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Victories</h2>
-                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>{total} wins · {highCount} high impact</p>
+                            <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Logbook</h2>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>{total} items completed and recorded</p>
                         </div>
-                        {total > 0 && <div className="text-right text-xs" style={{ color: 'var(--text-3)' }}>
-                            <div className="text-2xl font-black mono" style={{ color: 'var(--gold)' }}>{highCount}</div>
-                            <div>high impact wins</div>
-                        </div>}
                     </header>
 
-                    {/* Input */}
-                    <div className="card p-4 space-y-3">
-                        <input value={input} onChange={e => setInput(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleAdd()}
-                            className="w-full bg-transparent text-[15px] font-medium"
-                            style={{ color: 'var(--text)' }}
-                            placeholder="What did you accomplish?" />
-                        <div style={{ height: 1, background: 'var(--border)' }} />
-                        <div className="flex items-center gap-3">
-                            <div className="section-label">Impact:</div>
-                            {['High', 'Medium', 'Low'].map(p => (
-                                <button key={p} onClick={() => setImp(p)}
+                    {/* Filter & Search */}
+                    <div className="flex gap-3 text-sm">
+                        <input value={search} onChange={e => setSearch(e.target.value)}
+                            className="input-field py-1.5 px-3 flex-1 text-sm bg-transparent" placeholder="Search history..." style={{ border: '1px solid var(--border)' }} />
+
+                        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                            className="input-field py-1 px-2 text-xs bg-transparent" style={{ width: 'auto', border: '1px solid var(--border)', height: 34, borderRadius: 8, outline: 'none' }}>
+                            <option value="date_desc">Newest First</option>
+                            <option value="date_asc">Oldest First</option>
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                        </select>
+
+                        <div className="flex gap-1.5 flex-shrink-0">
+                            {[['all', 'All'], ['tasks', 'Tasks'], ['victories', 'Victories']].map(([v, l]) => (
+                                <button key={v} onClick={() => setFilter(v)}
                                     className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                    style={{ background: imp === p ? IC[p].dot + '22' : 'var(--bg-3)', color: imp === p ? IC[p].dot : 'var(--text-3)', border: `1px solid ${imp === p ? IC[p].dot + '44' : 'transparent'}` }}>
-                                    {p}
+                                    style={{ background: filter === v ? 'var(--bg-2)' : 'transparent', color: filter === v ? 'var(--text)' : 'var(--text-3)', border: `1px solid ${filter === v ? 'var(--border-h)' : 'transparent'}` }}>
+                                    {l}
                                 </button>
                             ))}
-                            <button onClick={handleAdd} className="btn ml-auto" style={{ background: 'var(--teal)', color: 'var(--bg)', padding: '7px 16px', fontSize: 11 }}>Log Win</button>
                         </div>
-                    </div>
-
-                    {/* Filter */}
-                    <div className="flex gap-1.5">
-                        {[['all', 'All'], ['High', 'High'], ['Medium', 'Medium'], ['Low', 'Low']].map(([v, l]) => (
-                            <button key={v} onClick={() => setFilter(v)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                style={{ background: filter === v ? 'var(--bg-2)' : 'transparent', color: filter === v ? 'var(--text)' : 'var(--text-3)', border: `1px solid ${filter === v ? 'var(--border-h)' : 'transparent'}` }}>
-                                {l}
-                            </button>
-                        ))}
                     </div>
 
                     {/* List grouped by date */}
-                    {Object.entries(byDate).map(([date, wins]) => (
+                    {Object.entries(byDate).map(([date, items]) => (
                         <div key={date} className="space-y-2">
                             <div className="section-label px-1">{date}</div>
-                            {wins.map(a => {
+                            {items.map(a => {
                                 const ic = IC[a.impact] || IC.Medium;
                                 return (
-                                    <div key={a.id} className="group card-inset flex items-start gap-4 p-4 hover:border-border-h transition-all">
+                                    <div key={a.id + a.type} className="group card-inset flex items-start gap-4 p-4 hover:border-border-h transition-all"
+                                        onDoubleClick={() => setEditingItem(a)}>
                                         <div className={`mt-1.5 flex-shrink-0 rounded-full ${ic.ring ? 'pulse-ring' : ''}`}
-                                            style={{ width: 8, height: 8, background: ic.dot }} />
+                                            style={{ width: 8, height: 8, background: a.type === 'task' ? 'var(--sage)' : ic.dot }} />
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{a.content}</p>
-                                            {a.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>{a.notes}</p>}
+                                            <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>
+                                                {a.type === 'task' ? <span style={{ color: 'var(--sage)', marginRight: 6 }}>✓</span> : <span style={{ color: 'var(--gold)', marginRight: 6 }}>🏆</span>}
+                                                {a.content}
+                                            </p>
+                                            {a.notes && <div className="text-xs mt-2 leading-relaxed md" style={{ color: 'var(--text-2)' }} dangerouslySetInnerHTML={{ __html: md(a.notes) }} />}
+                                            {a.type === 'task' && (a.due_date || (a.tags && a.tags.length > 0)) && (
+                                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                                    {a.due_date && (
+                                                        <span className="text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--text-3)' }}>📅 {a.due_date}</span>
+                                                    )}
+                                                    {a.tags && Array.isArray(a.tags) && a.tags.filter(Boolean).map(tag => (
+                                                        <span key={tag} className="tag">#{tag}</span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
-                                            <span className="badge" style={{ background: ic.dot + '22', color: ic.dot, fontSize: 9 }}>{a.impact}</span>
-                                            <button onClick={() => safeCall('delete_item', a.id, 'achievement')}
-                                                className="action-btn opacity-0 group-hover:opacity-100">✕</button>
+                                            <button onClick={() => setEditingItem(a)}
+                                                className="action-btn opacity-0 group-hover:opacity-100" style={{ fontSize: 11 }}>✎ Edit</button>
+
+                                            {a.type === 'task' ? (
+                                                <button onClick={() => safeCall('update_task_status', a.id, 'Pending')}
+                                                    className="action-btn opacity-0 group-hover:opacity-100" style={{ fontSize: 10 }}>Undo</button>
+                                            ) : (
+                                                <span className="badge" style={{ background: ic.dot + '22', color: ic.dot, fontSize: 9 }}>{a.impact}</span>
+                                            )}
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
                     ))}
-                    {Object.keys(byDate).length === 0 && <div className="empty"><div style={{ fontSize: 40 }}>🏆</div><div className="text-sm font-bold" style={{ color: 'var(--text-3)' }}>No victories yet — log your first win</div></div>}
+                    {Object.keys(byDate).length === 0 && <div className="empty"><div style={{ fontSize: 40 }}>📜</div><div className="text-sm font-bold" style={{ color: 'var(--text-3)' }}>No history found</div></div>}
+
+                    {editingItem && (
+                        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingItem(null); }}>
+                            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="card p-6 space-y-4 shadow-lg w-full max-w-lg" style={{ background: 'var(--bg-1)' }}>
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Edit Log Details</h3>
+                                    <button onClick={() => setEditingItem(null)} style={{ color: 'var(--text-3)' }}>✕</button>
+                                </div>
+                                <div className="space-y-3">
+                                    <input value={editingItem.content} onChange={e => setEditingItem({ ...editingItem, content: e.target.value })}
+                                        className="input-field w-full font-bold" placeholder="Task or Victory title..." />
+
+                                    <textarea value={editingItem.notes || ''} onChange={e => setEditingItem({ ...editingItem, notes: e.target.value })}
+                                        className="input-field w-full resize-none text-xs mono" style={{ height: 120, lineHeight: 1.6 }}
+                                        placeholder="Add completion infos, context, thoughts, or markdown notes..." />
+
+                                    {editingItem.type === 'victory' && (
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <div className="section-label">Impact:</div>
+                                            {['High', 'Medium', 'Low'].map(p => (
+                                                <button key={p} onClick={() => setEditingItem({ ...editingItem, impact: p })}
+                                                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                                    style={{ background: editingItem.impact === p ? IC[p].dot + '22' : 'var(--bg-3)', color: editingItem.impact === p ? IC[p].dot : 'var(--text-3)', border: `1px solid ${editingItem.impact === p ? IC[p].dot + '44' : 'transparent'}` }}>
+                                                    {p}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex gap-2.5 pt-2">
+                                    <button onClick={() => setEditingItem(null)} className="btn btn-ghost flex-1">Cancel</button>
+                                    <button onClick={handleSaveLog} className="btn btn-gold flex-1">Save Completion Info</button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
                 </div>
             );
         };
@@ -1779,6 +1788,7 @@
             }, [data.tasks]);
 
             const scan = async () => { setLoading(true); const r = await safeCall('generate_summary', `-${timeVal} ${timeUnit}`); setRecap(r || 'No data in this range.'); setLoading(false); };
+            const scanPreset = async (p) => { setLoading(true); const r = await safeCall('generate_summary', p); setRecap(r || 'No data in this range.'); setLoading(false); };
             const aiSynth = async () => { setAiLoading(true); const r = await safeCall('get_ai_recap', `Give concise insights on:\n${recap}`); setRecap(r || recap); setAiLoading(false); };
 
             const CARDS = [
@@ -1839,27 +1849,37 @@
                     {/* Timeline scanner */}
                     <div className="card p-5 space-y-4">
                         <div className="flex items-center justify-between flex-wrap gap-3">
-                            <div className="section-label">Timeline Scanner</div>
                             <div className="flex items-center gap-2">
+                                <div className="section-label">Timeline Scanner</div>
+                                <div className="ml-2 flex gap-1 p-1 rounded-xl" style={{ border: '1px solid var(--border)' }}>
+                                    {[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([v, l]) => (
+                                        <button key={v} onClick={() => scanPreset(v)}
+                                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors hover:bg-bg1"
+                                            style={{ color: 'var(--text)', background: 'var(--bg-2)' }}>{l}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs" style={{ color: 'var(--text-3)' }}>Custom:</span>
                                 <input type="number" value={timeVal} onChange={e => setTimeVal(e.target.value)}
                                     className="mono text-sm text-center rounded-lg py-1.5 px-2"
                                     style={{ width: 52, background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)' }} />
                                 <select value={timeUnit} onChange={e => setTimeUnit(e.target.value)}
                                     className="mono text-sm rounded-lg py-1.5 px-3 appearance-none"
                                     style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)' }}>
-                                    <option value="seconds">Seconds</option>
-                                    <option value="minutes">Minutes</option>
-                                    <option value="hours">Hours</option>
-                                    <option value="days">Days</option>
+                                    <option value="seconds">Sec</option>
+                                    <option value="minutes">Min</option>
+                                    <option value="hours">Hr</option>
+                                    <option value="days">Day</option>
                                 </select>
-                                <button onClick={scan} className="btn btn-ghost" style={{ fontSize: 11 }}>{loading ? 'Scanning…' : 'Scan'}</button>
-                                {recap && <button onClick={aiSynth} className="btn" style={{ background: 'var(--lavender)', color: 'var(--bg)', fontSize: 11 }}>{aiLoading ? 'Thinking…' : '✦ AI'}</button>}
+                                <button onClick={scan} className="btn btn-ghost" style={{ fontSize: 11 }}>{loading ? '...' : 'Scan'}</button>
+                                {recap && <button onClick={aiSynth} className="btn" style={{ background: 'var(--lavender)', color: 'var(--bg)', fontSize: 11 }}>{aiLoading ? '...' : '✦ AI'}</button>}
                             </div>
                         </div>
                         {recap ? (
-                            <div className="mono text-xs leading-relaxed p-4 rounded-xl whitespace-pre-wrap"
-                                style={{ background: 'var(--bg-3)', color: 'var(--text-2)', minHeight: 120, lineHeight: 2 }}>
-                                {loading ? <div className="shimmer rounded h-4 w-1/2" /> : recap}
+                            <div className="text-sm leading-relaxed p-5 rounded-xl md"
+                                style={{ background: 'var(--bg-3)', color: 'var(--text)', minHeight: 120 }}>
+                                {loading ? <div className="shimmer rounded h-4 w-1/2" /> : <div dangerouslySetInnerHTML={{ __html: md(recap) }} />}
                             </div>
                         ) : (
                             <div className="py-8 text-center text-sm" style={{ color: 'var(--text-3)' }}>Set a range and scan to see your history</div>
@@ -1933,7 +1953,7 @@
         const Sidebar = ({ tab, setTab, isDark, toggle }) => {
             const NAV = [
                 { id: 'missions', l: 'Tasks', ic: '☐', c: 'var(--gold)' },
-                { id: 'log', l: 'Victories', ic: '◈', c: 'var(--teal)' },
+                { id: 'log', l: 'Logbook', ic: '◈', c: 'var(--teal)' },
                 { id: 'analytics', l: 'Intelligence', ic: '◉', c: 'var(--lavender)' },
                 { id: 'settings', l: 'Settings', ic: '◎', c: 'var(--text-3)' },
             ];
@@ -1983,7 +2003,8 @@
                 const h = (e) => {
                     if (e.shiftKey && e.key === 'F') setFocusId(null);
                 };
-                window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+                window.addEventListener('keydown', h);
+                return () => window.removeEventListener('keydown', h);
             }, []);
 
             return (
@@ -2011,7 +2032,7 @@
                             )}
                             {tab === 'log' && (
                                 <motion.div key="l" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                                    <VictoriesPage data={data} safeCall={safeCall} />
+                                    <HistoryPage data={data} safeCall={safeCall} />
                                 </motion.div>
                             )}
                             {tab === 'analytics' && (

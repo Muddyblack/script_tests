@@ -2,6 +2,7 @@
 
 import contextlib
 import ctypes
+import glob
 import json
 import os
 import re
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import webbrowser
 
 import keyboard
@@ -48,7 +50,6 @@ from src.common.config import (
     APPDATA,
     APPS_CACHE_FILE,
     DB_PATH,
-    GHOST_TYPIST_DB,
     ICON_PATH,
     PROJECT_ROOT,
     SEARCH_HISTORY_FILE,
@@ -60,10 +61,13 @@ from src.common.config import (
 # Import SearchEngine
 from src.common.search_engine import SearchEngine
 from src.file_ops.file_ops import FileOpsWindow
+from src.img_to_text import start_snip_to_text
 
-from .img_to_text import start_snip_to_text
 from .system_commands import (
     execute_system_toggle as _exec_toggle,
+)
+from .system_commands import (
+    kill_all_processes as _kill_all_procs,
 )
 from .system_commands import (
     kill_process as _kill_proc,
@@ -93,7 +97,7 @@ from .system_commands import (
     log_to_chronos as _log_to_chronos,
 )
 from .system_commands import (
-    run_macro as _run_macro,
+    launch_xexplorer as _launch_xexplorer,
 )
 from .system_commands import (
     trigger_reindex as _trigger_reindex,
@@ -102,7 +106,7 @@ from .system_commands import (
     update_process_cache as _update_procs,
 )
 from .themes import get_dark_theme, get_light_theme
-from .utils import format_display_name, run_workspace
+from .utils import format_display_name
 from .widgets import IconWorker, NexusInput, RainbowFrame
 
 
@@ -131,9 +135,8 @@ class NexusSearch(QWidget):
         # Mode state
         self.modes = {
             "apps": True,
-            "workspaces": True,
+            "bookmarks": True,
             "files": False,
-            "macros": False,
             "scripts": True,
             "processes": False,
             "toggles": True,
@@ -156,7 +159,7 @@ class NexusSearch(QWidget):
         self.load_search_history()
 
         # Data cache
-        self.workspaces = []
+        self.browser_bookmarks = []
         self.ssh_hosts = []
         self.process_cache = []
         self.last_proc_update = 0
@@ -164,7 +167,6 @@ class NexusSearch(QWidget):
         self.load_apps_cache()
 
         self.scan_ssh_hosts()
-        self.load_workspaces()
         self.icon_provider = QFileIconProvider()
         self.icon_cache = {}
         self.search_engine = SearchEngine([X_EXPLORER_DB, DB_PATH])
@@ -178,6 +180,7 @@ class NexusSearch(QWidget):
 
         # Slow app scanning in background
         threading.Thread(target=self.scan_installed_apps_bg, daemon=True).start()
+        threading.Thread(target=self.load_browser_bookmarks, daemon=True).start()
 
         # Debounce timer for search
         self.search_timer = QTimer()
@@ -441,19 +444,67 @@ class NexusSearch(QWidget):
             pass
 
     # ------------------------------------------------------------------
-    # Workspace loading
+    # Browser Bookmarks
     # ------------------------------------------------------------------
-    def load_workspaces(self):
-        try:
-            if os.path.exists(DB_PATH):
-                with sqlite3.connect(DB_PATH) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT id, name FROM workspaces")
-                    self.workspaces = [
-                        {"id": r[0], "name": r[1]} for r in cursor.fetchall()
-                    ]
-        except Exception:
-            self.workspaces = []
+    def load_browser_bookmarks(self):
+        self.browser_bookmarks = []
+        paths = []
+        paths.extend(
+            glob.glob(
+                os.path.join(
+                    os.environ.get("LOCALAPPDATA", ""),
+                    r"Google\Chrome\User Data\*\Bookmarks",
+                )
+            )
+        )
+        paths.extend(
+            glob.glob(
+                os.path.join(
+                    os.environ.get("LOCALAPPDATA", ""),
+                    r"Microsoft\Edge\User Data\*\Bookmarks",
+                )
+            )
+        )
+        paths.extend(
+            glob.glob(
+                os.path.join(
+                    os.environ.get("LOCALAPPDATA", ""),
+                    r"BraveSoftware\Brave-Browser\User Data\*\Bookmarks",
+                )
+            )
+        )
+
+        def extract_urls(node):
+            if isinstance(node, dict):
+                if node.get("type") == "url":
+                    self.browser_bookmarks.append(
+                        {
+                            "name": node.get("name", "Unnamed Bookmark"),
+                            "url": node.get("url", ""),
+                        }
+                    )
+                elif "children" in node:
+                    for child in node.get("children", []):
+                        extract_urls(child)
+
+        for path in paths:
+            if os.path.exists(path):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                        roots = data.get("roots", {})
+                        for key in roots:
+                            extract_urls(roots[key])
+                except Exception:
+                    pass
+
+        seen = set()
+        unique = []
+        for b in self.browser_bookmarks:
+            if b["url"] not in seen:
+                seen.add(b["url"])
+                unique.append(b)
+        self.browser_bookmarks = unique
 
     # ------------------------------------------------------------------
     # UI setup  (redesigned: side-panel + rainbow input + action buttons)
@@ -505,10 +556,6 @@ class NexusSearch(QWidget):
         brand_row.addWidget(brand_lbl)
         brand_row.addStretch()
 
-        self.clock_lbl = QLabel()
-        self.clock_lbl.setObjectName("nexus_clock")
-        brand_row.addWidget(self.clock_lbl)
-
         ver_lbl = QLabel("v2")
         ver_lbl.setObjectName("nexus_version")
         brand_row.addWidget(ver_lbl)
@@ -522,17 +569,17 @@ class NexusSearch(QWidget):
         # Mode buttons
         self.mode_btns = {}
         modes_metadata = [
-            ("apps", "Apps"),
-            ("workspaces", "Workspaces"),
-            ("files", "Files"),
-            ("macros", "Macros"),
-            ("scripts", "Scripts"),
-            ("ssh", "SSH"),
-            ("processes", "Processes"),
-            ("toggles", "System"),
+            ("apps", "Apps", "package.svg"),
+            ("bookmarks", "Bookmarks", "star.svg"),
+            ("files", "Files", "folder.svg"),
+            ("scripts", "Scripts", "code.svg"),
+            ("ssh", "SSH", "server.svg"),
+            ("processes", "Processes", "zap.svg"),
+            ("toggles", "System", "settings.svg"),
         ]
-        for key, label in modes_metadata:
-            btn = QPushButton(label)
+        for key, label, icon_name in modes_metadata:
+            btn = QPushButton(f"  {label}")
+            btn.setIcon(self._create_svg_icon(icon_name, color="#78849e"))
             btn.setCheckable(True)
             btn.setChecked(self.modes[key])
             btn.setObjectName("mode_btn")
@@ -569,7 +616,7 @@ class NexusSearch(QWidget):
         self.btn_pick_folders.setObjectName("mode_btn")
         self.btn_pick_folders.clicked.connect(self.show_folder_picker)
 
-        self.btn_reset_path = QPushButton("✖ Reset Path")
+        self.btn_reset_path = QPushButton("Reset Path")
         self.btn_reset_path.setObjectName("mode_btn")
         self.btn_reset_path.setToolTip("Clear all folder search filters")
         self.btn_reset_path.clicked.connect(self.clear_folder_filters)
@@ -589,6 +636,14 @@ class NexusSearch(QWidget):
         fb_layout.addWidget(self.btn_reset_path)
         left_layout.addWidget(self.filter_bar)
 
+        left_layout.addStretch()
+
+        # Clock in bottom left panel
+        self.clock_lbl = QLabel()
+        self.clock_lbl.setObjectName("nexus_clock")
+        self.clock_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self.clock_lbl)
+
         self.splitter.addWidget(self.left_panel)
 
         # ── Right Panel (input + results + footer) ──
@@ -600,7 +655,7 @@ class NexusSearch(QWidget):
 
         # Toggle button (in right panel top-left, visible when panel hidden)
         top_bar = QHBoxLayout()
-        self.btn_side_toggle = QPushButton("☰")
+        self.btn_side_toggle = QPushButton("menu.svg")
         self.btn_side_toggle.setObjectName("panel_toggle")
         self.btn_side_toggle.setFixedSize(28, 24)
         self.btn_side_toggle.setToolTip("Toggle Sources Panel")
@@ -665,6 +720,7 @@ class NexusSearch(QWidget):
         hint_lbl = QLabel("Enter ↵  Launch  •  Esc  Hide")
         hint_lbl.setObjectName("hint_text")
         footer_layout.addWidget(hint_lbl)
+
         right_layout.addLayout(footer_layout)
 
         self.splitter.addWidget(right_panel)
@@ -722,7 +778,7 @@ class NexusSearch(QWidget):
         self.modes["target_folders"] = []
         self.save_settings()
         self.update_reset_path_style()
-        self.status_lbl.setText("✓ Folder filters cleared")
+        self.status_lbl.setText("Folder filters cleared")
         self.perform_search()
 
     def update_reset_path_style(self):
@@ -761,13 +817,13 @@ class NexusSearch(QWidget):
         self.status_lbl.setText("Select Search Folders (ESC to return)")
         self.results_list.clear()
 
-        item = QListWidgetItem("✅ Search EVERYTHING (Clear Filters)")
+        item = QListWidgetItem("Search EVERYTHING (Clear Filters)")
         item.setData(Qt.ItemDataRole.UserRole, {"type": "filter_clear"})
         self.results_list.addItem(item)
 
         for path in managed:
             is_active = path in self.modes.get("target_folders", [])
-            state = "⭐ " if is_active else "📁 "
+            state = "check.svg" if is_active else "folder.svg"
             item = QListWidgetItem(f"{state}{path}")
             item.setData(
                 Qt.ItemDataRole.UserRole, {"type": "filter_toggle", "path": path}
@@ -866,22 +922,22 @@ class NexusSearch(QWidget):
         ]
 
         if paths:
-            copy_path = menu.addAction("🔗 Copy Path(s)")
-            copy_name = menu.addAction("📄 Copy File Name(s)")
-            open_loc = menu.addAction("📁 Open File Location")
+            copy_path = menu.addAction("Copy Path(s)")
+            copy_name = menu.addAction("Copy File Name(s)")
+            open_loc = menu.addAction("Open File Location")
             search_here = None
             if len(paths) == 1:
                 search_here = menu.addAction("🎯 Search ONLY in this Folder")
 
             menu.addSeparator()
-            file_ops_action = menu.addAction("✂️ Copy / Move / Delete...")
+            file_ops_action = menu.addAction("Copy / Move / Delete...")
 
             archive_action = None
             extract_action = None
             if len(paths) == 1 and is_archive(paths[0]):
-                extract_action = menu.addAction("📦 Extract Archive...")
+                extract_action = menu.addAction("Extract Archive...")
             else:
-                archive_action = menu.addAction("📦 Compress to Archive...")
+                archive_action = menu.addAction("Compress to Archive...")
 
             action = menu.exec(parent_widget.mapToGlobal(pos))
             if not action:
@@ -893,11 +949,11 @@ class NexusSearch(QWidget):
             if action == copy_path:
                 norm_paths = [os.path.normpath(p) for p in paths]
                 QApplication.clipboard().setText("\n".join(norm_paths))
-                self.status_lbl.setText(f"✓ Copied {len(norm_paths)} path(s)")
+                self.status_lbl.setText(f"Copied {len(norm_paths)} path(s)")
             elif action == copy_name:
                 names = [os.path.basename(p) for p in paths]
                 QApplication.clipboard().setText("\n".join(names))
-                self.status_lbl.setText("✓ Copied file name(s) to clipboard")
+                self.status_lbl.setText("Copied file name(s) to clipboard")
             elif action == open_loc:
                 norm_path = os.path.normpath(paths[0])
                 if os.path.exists(norm_path):
@@ -923,7 +979,12 @@ class NexusSearch(QWidget):
                 self.file_ops_win.source_paths = list(paths)
                 self.file_ops_win._refresh_list()
                 self.file_ops_win.show()
-            elif archive_action and action == archive_action or extract_action and action == extract_action:
+            elif (
+                archive_action
+                and action == archive_action
+                or extract_action
+                and action == extract_action
+            ):
                 self.archiver_win = ArchiverWindow()
                 self.archiver_win.source_paths = list(paths)
                 self.archiver_win._refresh_list()
@@ -961,7 +1022,6 @@ class NexusSearch(QWidget):
         super().hide()
 
     def summon(self):
-        self.load_workspaces()
         self.center_on_screen()
         self.search_input.clear()
         self.perform_search()
@@ -1017,7 +1077,7 @@ class NexusSearch(QWidget):
                     "score": 10000,
                     "title": f"CHRONOS: Log '{log_text}'",
                     "path": "Record this achievement instantly to Chronos Hub",
-                    "icon": "🏆",
+                    "icon": "clock.svg",
                     "color": "#fbbf24",
                     "data": {"type": "chronos_log", "content": log_text},
                 }
@@ -1038,7 +1098,7 @@ class NexusSearch(QWidget):
                     "score": 5000,
                     "title": f"Open {'Folder' if is_dir else 'File'}: {os.path.basename(raw_search) or raw_search}",
                     "path": raw_search,
-                    "icon": "📁" if is_dir else "📄",
+                    "icon": "folder.svg" if is_dir else "file.svg",
                     "file_path": raw_search,
                     "data": {"type": "file", "path": raw_search},
                 }
@@ -1066,7 +1126,7 @@ class NexusSearch(QWidget):
                     "score": 4500,
                     "title": f"Open Web URL: {raw_search}",
                     "path": f"Browse to {url}",
-                    "icon": "🌐",
+                    "icon": "globe.svg",
                     "color": "#3b82f6",
                     "data": {"type": "url", "url": url},
                 }
@@ -1074,9 +1134,8 @@ class NexusSearch(QWidget):
 
         # Prefix logic
         prefixes = {
-            ":w": "workspaces",
+            ":b": "bookmarks",
             ":f": "files",
-            ":m": "macros",
             ":s": "scripts",
             ":p": "processes",
             ":t": "toggles",
@@ -1101,7 +1160,7 @@ class NexusSearch(QWidget):
         # Footer hint
         if active_modes.get("processes"):
             self.status_lbl.setText(
-                "💥 Executioner Mode • Select and Press Enter to Finish It"
+                "Executioner Mode • Select and Press Enter to Finish It"
             )
             self.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
         else:
@@ -1117,7 +1176,7 @@ class NexusSearch(QWidget):
                             "score": 980,
                             "title": f"SSH: {host}",
                             "path": f"Remote Node • ssh {host}",
-                            "icon": "🌐",
+                            "icon": "server.svg",
                             "data": {"type": "ssh", "host": host},
                         }
                     )
@@ -1133,7 +1192,7 @@ class NexusSearch(QWidget):
                             "title": app["name"],
                             "path": f"App • {app['path']}",
                             "file_path": app["path"],
-                            "icon": "📦",
+                            "icon": "package.svg",
                             "data": {"type": "app", "path": app["path"]},
                         }
                     )
@@ -1145,66 +1204,73 @@ class NexusSearch(QWidget):
 
             mgmt_cmds = [
                 (
+                    "xexplorer - File Manager",
+                    "Modern explorer with blazing-fast search",
+                    "xexplorer",
+                    "folder.svg",
+                    "#3b82f6",
+                ),
+                (
                     "Re-index Files (X-Explorer)",
-                    "Refresh file search cache",
+                    "Background re-index of search cache",
                     "reindex_files",
-                    "▸",
+                    "refresh.svg",
                     "#60a5fa",
                 ),
                 (
                     "Regex Helper",
                     "Offline Pattern Tester",
                     "regex_helper",
-                    "🔬",
+                    "search.svg",
                     "#f472b6",
                 ),
                 (
                     "Base64 Encoder/Decoder",
                     "Encode and decode text strings",
                     "base64_tool",
-                    "🔢",
+                    "hash.svg",
                     "#4f46e5",
                 ),
                 (
                     "IP Calculator",
                     "IP Subnet Calculator with CIDR support",
                     "ip_calculator",
-                    "🌐",
+                    "globe.svg",
                     "#0ea5e9",
                 ),
                 (
                     "Color Picker",
                     "Hex & RGB preview + color tool",
                     "color_picker",
-                    "🎨",
+                    "palette.svg",
                     "#8b5cf6",
                 ),
                 (
                     "File Ops",
                     "Fast copy • move • delete",
                     "file_ops",
-                    "📂",
+                    "folder.svg",
                     "#22c55e",
                 ),
                 (
                     "Chronos Hub",
                     "Achievement & Mission Tracker",
                     "chronos_hub",
-                    "⏳",
+                    "clock.svg",
                     "#fbbf24",
                 ),
                 (
                     "Archiver",
                     "Zip • tar • 7z compress & extract",
                     "archiver",
-                    "📦",
+                    "package.svg",
                     "#a78bfa",
                 ),
                 (
                     "Snip → Text (OCR)",
                     "Select an area on screen and copy text to clipboard",
                     "img_to_text",
-                    "🖼️",
+                    "image.svg",
                     "#22c55e",
                 ),
             ]
@@ -1223,101 +1289,108 @@ class NexusSearch(QWidget):
 
             power_commands = [
                 (
-                    "Toggle Dark / Light Mode",
+                    "Toggle Nexus Theme (App Only)",
+                    "Theme",
+                    "toggle_nexus_theme",
+                    "moon.svg",
+                    ["dark", "light", "nexus", "app"],
+                ),
+                (
+                    "Toggle Windows Theme (System)",
                     "Theme",
                     "toggle_dark_mode",
-                    "◐",
-                    ["dark", "light", "theme", "night"],
+                    "moon.svg",
+                    ["dark", "light", "theme", "night", "system", "windows"],
                 ),
                 (
                     "Toggle Hidden Files",
                     "Explorer",
                     "toggle_hidden_files",
-                    "◉",
+                    "eye.svg",
                     ["hidden", "files", "view", "explorer"],
                 ),
                 (
                     "Toggle Desktop Icons",
                     "Desktop",
                     "toggle_desktop_icons",
-                    "▦",
+                    "menu.svg",
                     ["icons", "desktop", "shortcuts"],
                 ),
                 (
                     "Toggle System Mute",
                     "Audio",
                     "toggle_mute",
-                    "◉",
+                    "eye.svg",
                     ["mute", "audio", "volume", "sound"],
                 ),
                 (
                     "Show / Hide Desktop",
                     "Windows",
                     "toggle_desktop",
-                    "▣",
+                    "file-axis-3d.svg",
                     ["desktop", "reveal", "hide"],
                 ),
                 (
                     "Restart Windows Explorer",
                     "System",
                     "restart_explorer",
-                    "↻",
+                    "refresh.svg",
                     ["restart", "explorer", "refresh", "taskbar"],
                 ),
                 (
                     "Flush DNS Cache",
                     "Network",
                     "flush_dns",
-                    "↻",
+                    "refresh.svg",
                     ["dns", "flush", "network", "reset"],
                 ),
                 (
                     "Lock Workstation",
                     "Security",
                     "cmd_lock",
-                    "▸",
+                    "arrow-right.svg",
                     ["lock", "security", "sign out"],
                 ),
                 (
                     "Put PC to Sleep",
                     "Power",
                     "cmd_sleep",
-                    "▸",
+                    "arrow-right.svg",
                     ["sleep", "standby", "power"],
                 ),
                 (
                     "Restart Computer",
                     "Power",
                     "cmd_restart",
-                    "↻",
+                    "refresh.svg",
                     ["restart", "reboot", "power"],
                 ),
                 (
                     "Shutdown System",
                     "Power",
                     "cmd_shutdown",
-                    "■",
+                    "power.svg",
                     ["shutdown", "power off", "exit"],
                 ),
                 (
                     "Windows Settings",
                     "ms-settings",
                     "ms-settings:default",
-                    "▸",
+                    "arrow-right.svg",
                     ["settings", "config", "windows"],
                 ),
                 (
                     "Display Settings",
                     "ms-settings",
                     "ms-settings:display",
-                    "▸",
+                    "arrow-right.svg",
                     ["display", "monitor", "resolution", "brightness"],
                 ),
                 (
                     "Wi-Fi Settings",
                     "ms-settings",
                     "ms-settings:network-wifi",
-                    "▸",
+                    "arrow-right.svg",
                     ["wifi", "internet", "wireless"],
                 ),
             ]
@@ -1341,21 +1414,22 @@ class NexusSearch(QWidget):
                         }
                     )
 
-        # 3. Workspaces
-        if active_modes.get("workspaces"):
-            for ws in self.workspaces:
-                if matches_all_terms(ws["name"], terms):
-                    score = 1000
-                    if search_term and ws["name"].lower() == search_term:
-                        score += 500
-                    score += self.get_usage_boost(f"ws_{ws['id']}")
+        # 3. Bookmarks
+        if active_modes.get("bookmarks"):
+            for b in self.browser_bookmarks:
+                if (
+                    not terms
+                    or matches_all_terms(b["name"], terms)
+                    or matches_all_terms(b["url"], terms)
+                ):
                     candidates.append(
                         {
-                            "score": score,
-                            "title": ws["name"],
-                            "path": "Local Workspace",
-                            "icon": "🚀",
-                            "data": {"type": "workspace", "id": ws["id"]},
+                            "score": 600,
+                            "title": b["name"],
+                            "path": b["url"],
+                            "icon": "star.svg",
+                            "color": "#fcd34d",
+                            "data": {"type": "url", "url": b["url"]},
                         }
                     )
 
@@ -1399,38 +1473,10 @@ class NexusSearch(QWidget):
                                     "title": display_name,
                                     "path": f"Python Script • {f}",
                                     "file_path": f_path,
-                                    "icon": "🐍",
+                                    "icon": "code.svg",
                                     "data": {"type": "script", "path": f_path},
                                 }
                             )
-
-        # 5. Ghost Macros
-        if active_modes.get("macros") and os.path.exists(GHOST_TYPIST_DB):
-            try:
-                with sqlite3.connect(GHOST_TYPIST_DB) as conn:
-                    cursor = conn.cursor()
-                    sql = "SELECT id, name, hotkey FROM macros"
-                    if terms:
-                        sql += " WHERE " + " AND ".join(["name LIKE ?" for _ in terms])
-                        cursor.execute(sql, [f"%{t}%" for t in terms])
-                    else:
-                        cursor.execute(sql + " LIMIT 10")
-                    for mid, name, hotkey in cursor.fetchall():
-                        score = 900
-                        if search_term and name.lower() == search_term:
-                            score += 500
-                        score += self.get_usage_boost(f"macro_{mid}")
-                        candidates.append(
-                            {
-                                "score": score,
-                                "title": name,
-                                "path": f"Ghost Macro • {hotkey if hotkey else ''}",
-                                "icon": "⌨️",
-                                "data": {"type": "macro", "id": mid, "name": name},
-                            }
-                        )
-            except Exception:
-                pass
 
         # 6. File Search (Centralized Engine)
         if active_modes.get("files"):
@@ -1453,7 +1499,13 @@ class NexusSearch(QWidget):
                 score += self.get_usage_boost(f"file_{f_path}")
 
                 # UNC / network paths get a globe icon
-                icon = "🌐" if self._is_unc_path(f_path) else "📁" if is_dir else "📄"
+                icon = (
+                    "globe.svg"
+                    if self._is_unc_path(f_path)
+                    else "folder.svg"
+                    if is_dir
+                    else "file.svg"
+                )
 
                 candidates.append(
                     {
@@ -1476,34 +1528,112 @@ class NexusSearch(QWidget):
                 candidates.append(
                     {
                         "score": 150,
-                        "title": f"📄 {f_name}",
+                        "title": f"{f_name}",
                         "path": f"Found in content • {f_path}",
                         "file_path": f_path,
-                        "icon": "📄",
+                        "icon": "file.svg",
                         "data": {"type": "file", "path": f_path},
                     }
                 )
 
         # 7. Processes
-        if active_modes.get("processes") and terms:
+        is_explicit_process = search.startswith(":p")
+        if active_modes.get("processes") and (terms or is_explicit_process):
             _update_procs(self)
+            # Group by name
+            grouped = {}
             for p in self.process_cache:
-                if matches_all_terms(p["name"], terms):
+                name = p["name"]
+                if matches_all_terms(name, terms):
+                    if name not in grouped:
+                        grouped[name] = {
+                            "count": 0,
+                            "pids": [],
+                            "mem_sum": 0,
+                            "path": p["path"],
+                            "desc": p["desc"],
+                        }
+                    grouped[name]["count"] += 1
+                    grouped[name]["pids"].append(p["pid"])
+                    grouped[name]["mem_sum"] += p["mem_bytes"]
+
+            for name, info in grouped.items():
+                mem_mb = info["mem_sum"] // 1024 // 1024
+                # Description suffix
+                desc_suff = f" • {info['desc']}" if info["desc"] else ""
+
+                # Group result for multi-instance
+                if info["count"] > 1:
+                    candidates.append(
+                        {
+                            "score": 750
+                            + (100 if name.lower().startswith(search_term) else 0),
+                            "title": f"{name} ({info['count']} instances)",
+                            "path": f"Total: {mem_mb} MB{desc_suff}",
+                            "file_path": info["path"],
+                            "icon": "power.svg",
+                            "color": "#f87171",
+                            "data": {"type": "process_kill_all", "name": name},
+                        }
+                    )
+
+                # Individual result (only if 1 or if specifically requested)
+                # For clarity we show the first one if count > 1 as sample, or just show all if search is narrow
+                limit_individuals = 1 if info["count"] > 3 else info["count"]
+                for i in range(limit_individuals):
+                    pid = info["pids"][i]
+                    # Find individual mem for this PID if possible, else use average
+                    # For simplicity we just show average if grouped, or actual if single
+                    m_val = mem_mb if info["count"] == 1 else "?"
                     candidates.append(
                         {
                             "score": 700
-                            + (200 if p["name"].lower().startswith(search_term) else 0),
-                            "title": p["name"],
-                            "path": f"PID: {p['pid']} • {p['mem']} • 💀 KILL",
-                            "icon": "💥",
+                            + (100 if name.lower().startswith(search_term) else 0),
+                            "title": name
+                            if info["count"] == 1
+                            else f"{name} (PID: {pid})",
+                            "path": f"PID: {pid} • {m_val} MB{desc_suff}",
+                            "file_path": info["path"],
+                            "icon": "power.svg",
                             "color": "#ef4444",
                             "data": {
                                 "type": "process",
-                                "pid": p["pid"],
-                                "name": p["name"],
+                                "pid": pid,
+                                "name": name,
                             },
                         }
                     )
+
+        # Web Search Fallback (Only if explicit or if nothing found)
+        if search:
+            web_query = search
+            engine_url = "https://www.google.com/search?q="
+            is_explicit = False
+
+            if search.startswith("g ") and len(search) > 2:
+                web_query = search[2:].strip()
+                is_explicit = True
+            elif search.startswith("b ") and len(search) > 2:
+                engine_url = "https://www.bing.com/search?q="
+                web_query = search[2:].strip()
+                is_explicit = True
+            elif search.startswith("yt ") and len(search) > 3:
+                engine_url = "https://www.youtube.com/results?search_query="
+                web_query = search[3:].strip()
+                is_explicit = True
+
+            if is_explicit or not candidates:
+                encoded_query = urllib.parse.quote(web_query)
+                candidates.append(
+                    {
+                        "score": 6000 if is_explicit else 300,
+                        "title": f"Web Search: {web_query}",
+                        "path": f"Search online • {web_query}",
+                        "icon": "globe.svg",
+                        "color": "#3b82f6",
+                        "data": {"type": "url", "url": engine_url + encoded_query},
+                    }
+                )
 
         candidates.sort(key=lambda x: x["score"], reverse=True)
         if self.view_mode == "tree":
@@ -1514,6 +1644,22 @@ class NexusSearch(QWidget):
     # ------------------------------------------------------------------
     # Result population
     # ------------------------------------------------------------------
+    def _create_svg_icon(self, svg_name, color="#9ca3af"):
+        from PyQt6.QtCore import QByteArray
+        from PyQt6.QtGui import QIcon, QPixmap
+
+        svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", svg_name)
+        if not os.path.exists(svg_path):
+            return QIcon()
+        try:
+            with open(svg_path, encoding="utf-8") as f:
+                data = f.read().replace("currentColor", color)
+            pix = QPixmap()
+            pix.loadFromData(QByteArray(data.encode("utf-8")), "SVG")
+            return QIcon(pix)
+        except Exception:
+            return QIcon()
+
     def _is_unc_path(self, path: str) -> bool:
         """Return True if *path* is a UNC / network path."""
         return path.startswith("\\\\") or path.startswith("//")
@@ -1522,14 +1668,14 @@ class NexusSearch(QWidget):
         norm = os.path.normpath(path)
         QApplication.clipboard().setText(norm)
         short = norm if len(norm) < 50 else "…" + norm[-45:]
-        self.status_lbl.setText(f"✓ Copied: {short}")
+        self.status_lbl.setText(f"Copied: {short}")
 
     def _action_copy_dir(self, path: str):
         d = path if os.path.isdir(path) else os.path.dirname(path)
         norm = os.path.normpath(d)
         QApplication.clipboard().setText(norm)
         short = norm if len(norm) < 50 else "…" + norm[-45:]
-        self.status_lbl.setText(f"✓ Copied: {short}")
+        self.status_lbl.setText(f"Copied: {short}")
 
     def _action_open_folder(self, path: str):
         norm = os.path.normpath(path)
@@ -1562,12 +1708,30 @@ class NexusSearch(QWidget):
             icon_label.setFixedSize(38, 38)
             icon_label.setScaledContents(True)
 
-            icon_text = c.get("icon", "🔹")
+            icon_name = c.get("icon", "file.svg")
             file_path = c.get("file_path") or c["data"].get("path", "")
             if file_path and self._is_unc_path(file_path):
-                icon_text = "🌐"  # network directory
-            icon_label.setText(icon_text)
-            icon_label.setStyleSheet("font-size: 20px; color: #9ca3af;")
+                icon_name = "globe.svg"
+
+            # Render SVG with color
+            color_hex = c.get("color", "#9ca3af")
+            svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", icon_name)
+            if not os.path.exists(svg_path):
+                svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", "file.svg")
+
+            try:
+                from PyQt6.QtCore import QByteArray
+                from PyQt6.QtGui import QPixmap
+
+                with open(svg_path, encoding="utf-8") as fs:
+                    svg_data = fs.read()
+                svg_data = svg_data.replace("currentColor", color_hex)
+                pix = QPixmap()
+                pix.loadFromData(QByteArray(svg_data.encode("utf-8")), "SVG")
+                icon_label.setPixmap(pix)
+            except Exception:
+                pass
+
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             row_layout.addWidget(icon_label)
@@ -1585,7 +1749,7 @@ class NexusSearch(QWidget):
             display_path = c.get("path", "")
             # Show UNC prefix hint
             if file_path and self._is_unc_path(file_path):
-                display_path = f"🌐 {display_path}"
+                display_path = f"{display_path}"
             path_lbl = QLabel(format_display_name(display_path, max_len=72))
             path_lbl.setObjectName("item_path")
 
@@ -1593,28 +1757,92 @@ class NexusSearch(QWidget):
             text_container.addWidget(path_lbl)
             row_layout.addLayout(text_container, stretch=1)
 
-            # -- Inline action buttons (only for items with a path) --
-            path_val = c["data"].get("path", "")
-            if path_val and c["data"].get("type") in ("file", "app", "script", None):
-                btn_copy = QPushButton("📋")
+            # -- Alt Shortcut Badge --
+            if idx < 9:
+                hk_lbl = QLabel(f"{idx + 1}")
+                hk_lbl.setObjectName("shortcut_badge")
+                hk_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                row_layout.addWidget(hk_lbl)
+
+            # -- Inline action buttons --
+            d = c["data"]
+            dtype = d.get("type")
+
+            if dtype in ("file", "app", "script", None) and d.get("path"):
+                p_val = d["path"]
+                btn_copy = QPushButton()
+                btn_copy.setIcon(self._create_svg_icon("copy.svg"))
                 btn_copy.setObjectName("action_btn")
                 btn_copy.setToolTip("Copy path")
-                btn_copy.setFixedSize(30, 26)
-                btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn_copy.clicked.connect(
-                    lambda _, p=path_val: self._action_copy_path(p)
-                )
+                btn_copy.setFixedSize(32, 32)
+                btn_copy.clicked.connect(lambda _, p=p_val: self._action_copy_path(p))
                 row_layout.addWidget(btn_copy)
 
-                btn_dir = QPushButton("📂")
+                btn_dir = QPushButton()
+                btn_dir.setIcon(self._create_svg_icon("folder.svg"))
                 btn_dir.setObjectName("action_btn")
                 btn_dir.setToolTip("Open containing folder")
-                btn_dir.setFixedSize(30, 26)
-                btn_dir.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn_dir.clicked.connect(
-                    lambda _, p=path_val: self._action_open_folder(p)
-                )
+                btn_dir.setFixedSize(32, 32)
+                btn_dir.clicked.connect(lambda _, p=p_val: self._action_open_folder(p))
                 row_layout.addWidget(btn_dir)
+
+            elif dtype == "process":
+                p_id = d["pid"]
+                p_name = d["name"]
+                p_path = c.get("file_path")
+
+                if p_path and os.path.exists(p_path):
+                    btn_dir = QPushButton()
+                    btn_dir.setIcon(self._create_svg_icon("folder.svg"))
+                    btn_dir.setObjectName("action_btn")
+                    btn_dir.setToolTip("Open process location")
+                    btn_dir.setFixedSize(32, 32)
+                    btn_dir.clicked.connect(
+                        lambda _, p=p_path: self._action_open_folder(p)
+                    )
+                    row_layout.addWidget(btn_dir)
+
+                btn_info = QPushButton()
+                btn_info.setIcon(self._create_svg_icon("info.svg"))
+                btn_info.setObjectName("action_btn")
+                btn_info.setToolTip(f"Search web for {p_name}")
+                btn_info.setFixedSize(32, 32)
+                btn_info.clicked.connect(
+                    lambda _, n=p_name: webbrowser.open(
+                        f"https://www.google.com/search?q={n}+process+info"
+                    )
+                )
+                row_layout.addWidget(btn_info)
+
+                btn_kill = QPushButton()
+                btn_kill.setIcon(self._create_svg_icon("power.svg", color="#f87171"))
+                btn_kill.setObjectName("action_btn_danger")
+                btn_kill.setToolTip(f"Kill process {p_id}")
+                btn_kill.setFixedSize(32, 32)
+                btn_kill.setStyleSheet(
+                    "background: #450a0a; border: 1px solid #7f1d1d; border-radius: 4px;"
+                )
+                btn_kill.clicked.connect(
+                    lambda _, pid=p_id, n=p_name: self.kill_process(pid, n)
+                )
+                row_layout.addWidget(btn_kill)
+
+            elif dtype == "process_kill_all":
+                p_name = d["name"]
+                btn_kill_all = QPushButton("Kill All")
+                btn_kill_all.setIcon(
+                    self._create_svg_icon("power.svg", color="#ffffff")
+                )
+                btn_kill_all.setObjectName("action_btn_danger")
+                btn_kill_all.setToolTip(f"Kill all instances of {p_name}")
+                btn_kill_all.setFixedSize(80, 32)
+                btn_kill_all.setStyleSheet(
+                    "background: #ef4444; color: white; border-radius: 4px; font-weight: bold; font-size: 10px;"
+                )
+                btn_kill_all.clicked.connect(
+                    lambda _, n=p_name: _kill_all_procs(self, n)
+                )
+                row_layout.addWidget(btn_kill_all)
 
             item.setSizeHint(QSize(row_widget.sizeHint().width(), 62))
             self.results_list.setItemWidget(item, row_widget)
@@ -1731,7 +1959,7 @@ class NexusSearch(QWidget):
             icon_label = row_widget.findChild(QLabel, f"icon_{idx}")
             if not icon_label:
                 continue
-            if icon_label.pixmap() and not icon_label.pixmap().isNull():
+            if icon_label.property("native_loaded"):
                 continue
 
             ext = os.path.splitext(file_path)[1].lower()
@@ -1746,6 +1974,7 @@ class NexusSearch(QWidget):
                 icon_label.setPixmap(self.icon_cache[cache_key])
                 icon_label.setText("")
                 icon_label.setStyleSheet("")
+                icon_label.setProperty("native_loaded", True)
             elif cache_key not in self.pending_icons:
                 self.pending_icons.add(cache_key)
                 worker = IconWorker(file_path, cache_key, self)
@@ -1800,11 +2029,11 @@ class NexusSearch(QWidget):
                 if not os.path.exists(data["path"]):
                     raise FileNotFoundError(f"App not found: {data['path']}")
                 os.startfile(data["path"])
-            elif data.get("type") == "workspace":
-                self.record_usage(f"ws_{data['id']}")
-                run_workspace(data["id"])
+            # Workspaces removed
             elif data["type"] == "cmd":
-                if data["cmd"] == "reindex_files":
+                if data["cmd"] == "xexplorer":
+                    _launch_xexplorer(self)
+                elif data["cmd"] == "reindex_files":
                     _trigger_reindex(self)
                 elif data["cmd"] == "regex_helper":
                     _launch_regex(self)
@@ -1847,25 +2076,25 @@ class NexusSearch(QWidget):
                 if not os.path.exists(data["path"]):
                     raise FileNotFoundError(f"File not found: {data['path']}")
                 os.startfile(data["path"])
-            elif data["type"] == "macro":
-                self.record_usage(f"macro_{data['id']}")
-                _run_macro(self, data["id"])
+            # Macros removed
             elif data["type"] == "process":
                 _kill_proc(self, data["pid"], data["name"])
+            elif data["type"] == "process_kill_all":
+                _kill_all_procs(self, data["name"])
             elif data["type"] == "ssh":
-                self.status_lbl.setText(f"🔗 Connecting to {data['host']}...")
+                self.status_lbl.setText(f"Connecting to {data['host']}...")
                 subprocess.Popen(f"start cmd /k ssh {data['host']}", shell=True)
             elif data["type"] == "chronos_log":
                 _log_to_chronos(self, data["content"])
             elif data["type"] == "url":
                 webbrowser.open(data["url"])
-                self.status_lbl.setText(f"🌐 Opened URL: {data['url']}")
+                self.status_lbl.setText(f"Opened URL: {data['url']}")
                 self.status_lbl.setStyleSheet("color: #3b82f6; font-weight: bold;")
         except Exception as e:
             self.show()
             self.raise_()
             self.activateWindow()
-            self.status_lbl.setText(f"❌ Error: {str(e)}")
+            self.status_lbl.setText(f"Error: {str(e)}")
             self.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
 
     # ------------------------------------------------------------------
@@ -1883,8 +2112,7 @@ class NexusSearch(QWidget):
     def update_process_cache(self, force=False):
         _update_procs(self, force)
 
-    def _run_macro(self, macro_id):
-        _run_macro(self, macro_id)
+    # macro removed
 
     def _log_to_chronos(self, text):
         _log_to_chronos(self, text)

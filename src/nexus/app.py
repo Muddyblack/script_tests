@@ -1,12 +1,16 @@
-"""Nexus Search application bootstrap — wires together all components."""
-
+import contextlib
+import os
 import sys
+
+# Prevent Intel OpenMP conflict (torch vs Qt) which causes DLL load errors
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import keyboard
 from PyQt6.QtWidgets import QApplication
 
 from src.common.config import IMG_TO_TEXT_HOTKEY, SUMMON_HOTKEY
 
+from .hotkeys import _HotkeyWindow
 from .search import NexusSearch
 from .tray import create_tray_icon
 from .widgets import NexusBridge
@@ -26,26 +30,20 @@ def main():
     )
     bridge.snip_to_text_signal.connect(nexus.start_img_to_text)
 
-    def on_toggle():
-        bridge.toggle_signal.emit()
+    # RegisterHotKey-based hotkeys — survive lock/unlock/hibernate without
+    # any re-registration, unlike WH_KEYBOARD_LL hooks.
+    hw = _HotkeyWindow()
+    hw.toggle_signal.connect(bridge.toggle_signal)
+    hw.ocr_signal.connect(bridge.snip_to_text_signal)
+    hw.start(SUMMON_HOTKEY, IMG_TO_TEXT_HOTKEY)
 
-    def on_snip_to_text():
-        bridge.snip_to_text_signal.emit()
+    # keyboard.on_press for window-visible navigation redirect (best-effort)
+    with contextlib.suppress(Exception):
+        keyboard.on_press(nexus.on_global_key)
 
     # System tray icon
     tray = create_tray_icon(app, nexus)  # noqa: F841 — prevent GC
     nexus.tray = tray
-
-    # Bind the fixed hotkey
-    try:
-        keyboard.add_hotkey(SUMMON_HOTKEY, on_toggle)
-    except Exception as e:
-        print(f"Hotkey bind failed: {e}")
-
-    try:
-        keyboard.add_hotkey(IMG_TO_TEXT_HOTKEY, on_snip_to_text)
-    except Exception as e:
-        print(f"OCR hotkey bind failed: {e}")
 
     # If launched with --summon, show immediately
     if "--summon" in sys.argv:

@@ -37,10 +37,15 @@ def get_dark_theme() -> str:
         }
         QLabel#nexus_clock {
             color: rgba(255, 255, 255, 0.4);
-            font-size: 11px;
-            font-weight: 500;
+            font-size: 13px;
+            font-weight: 700;
             font-family: 'Outfit', 'Inter', 'Segoe UI';
-            margin-right: 4px;
+            margin-top: 8px;
+            letter-spacing: 2px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 10px;
         }
         QLabel#nexus_logo {
             background: transparent;
@@ -177,6 +182,17 @@ def get_dark_theme() -> str:
             font-family: 'Outfit', 'Inter', 'Segoe UI';
         }
 
+        QLabel#shortcut_badge {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            margin-right: 6px;
+        }
+
         /* ========== Inline action buttons ========== */
         QPushButton#action_btn {
             background: rgba(255, 255, 255, 0.04);
@@ -287,11 +303,16 @@ def get_light_theme() -> str:
             font-family: 'Outfit', 'Inter', 'Segoe UI';
         }
         QLabel#nexus_clock {
-            color: rgba(0, 0, 0, 0.4);
-            font-size: 11px;
-            font-weight: 500;
+            color: rgba(0, 0, 0, 0.5);
+            font-size: 13px;
+            font-weight: 700;
             font-family: 'Outfit', 'Inter', 'Segoe UI';
-            margin-right: 4px;
+            margin-top: 8px;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            padding: 8px 12px;
+            border-radius: 10px;
         }
         QLabel#nexus_logo {
             background: transparent;
@@ -426,6 +447,17 @@ def get_light_theme() -> str:
             color: #9ca3af;
             font-size: 10px;
             font-family: 'Outfit', 'Inter', 'Segoe UI';
+        }
+
+        QLabel#shortcut_badge {
+            background: rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 6px;
+            color: rgba(0, 0, 0, 0.4);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            margin-right: 6px;
         }
 
         /* ========== Inline action buttons ========== */

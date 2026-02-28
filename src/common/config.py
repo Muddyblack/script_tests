@@ -16,7 +16,7 @@ ARCHIVER_SETTINGS = os.path.join(APPDATA, "nexus_archiver.json")
 
 # --- HOTKEY ---
 SUMMON_HOTKEY = "ctrl+shift+space"
-IMG_TO_TEXT_HOTKEY = "ctrl+shift+y"
+IMG_TO_TEXT_HOTKEY = "ctrl+shift+q"
 
 # --- PROJECT PATHS ---
 PROJECT_ROOT = os.path.dirname(

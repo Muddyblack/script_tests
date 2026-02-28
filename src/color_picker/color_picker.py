@@ -13,7 +13,6 @@ from PyQt6.QtGui import (
     QPainterPath,
     QPen,
     QRadialGradient,
-    QFont,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -27,7 +26,6 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
-    QSizeGrip,
 )
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "color_config.json")

@@ -155,18 +155,35 @@ class NexusInput(QLineEdit):
         """Intercept Tab before Qt uses it for focus navigation."""
         from PyQt6.QtCore import QEvent
 
-        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Tab:
-            if self._accept_suggestion():
-                return True
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() == Qt.Key.Key_Tab
+            and self._accept_suggestion()
+        ):
+            return True
         return super().event(event)
 
     def keyPressEvent(self, event):
         key = event.key()
 
-        if key == Qt.Key.Key_Right and self.cursorPosition() == len(self.text()):
-            if self._accept_suggestion():
-                event.accept()
-                return
+        if (
+            event.modifiers() & Qt.KeyboardModifier.AltModifier
+            and Qt.Key.Key_1 <= key <= Qt.Key.Key_9
+        ):
+            idx = key - Qt.Key.Key_1
+            if idx < self.nexus.results_list.count():
+                self.nexus.results_list.setCurrentRow(idx)
+                self.nexus.launch_selected()
+            event.accept()
+            return
+
+        if (
+            key == Qt.Key.Key_Right
+            and self.cursorPosition() == len(self.text())
+            and self._accept_suggestion()
+        ):
+            event.accept()
+            return
         if key == Qt.Key.Key_Down:
             self.nexus.navigate_results(1)
             event.accept()

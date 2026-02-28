@@ -43,6 +43,13 @@ def execute_system_toggle(nexus, cmd: str) -> None:
             nexus.save_settings()
             nexus.apply_theme()
 
+        elif cmd == "toggle_nexus_theme":
+            nexus.is_light_mode = not nexus.is_light_mode
+            state_name = "Light" if nexus.is_light_mode else "Dark"
+            nexus.status_lbl.setText(f"🌓 Nexus Theme set to {state_name}")
+            nexus.save_settings()
+            nexus.apply_theme()
+
         elif cmd == "toggle_hidden_files":
             import winreg
 
@@ -159,39 +166,90 @@ def kill_process(nexus, pid: str, name: str) -> None:
     """Terminate a process by PID."""
     try:
         subprocess.Popen(f"taskkill /F /PID {pid}", shell=True)
-        nexus.status_lbl.setText(f"💀 Terminated: {name}")
+        nexus.status_lbl.setText(f"💀 Terminated: {name} ({pid})")
         nexus.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
         QTimer.singleShot(500, lambda: update_process_cache(nexus, force=True))
     except Exception as e:
         nexus.status_lbl.setText(f"Error killing {name}: {e}")
 
 
+def kill_all_processes(nexus, name: str) -> None:
+    """Terminate all processes with the given image name."""
+    try:
+        # name might not have .exe if it comes from Get-Process
+        img_name = name if name.lower().endswith(".exe") else f"{name}.exe"
+        subprocess.Popen(f"taskkill /F /IM {img_name}", shell=True)
+        nexus.status_lbl.setText(f"💀 Killed all: {name}")
+        nexus.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
+        QTimer.singleShot(500, lambda: update_process_cache(nexus, force=True))
+    except Exception as e:
+        nexus.status_lbl.setText(f"Error killing all {name}: {e}")
+
+
 def update_process_cache(nexus, force: bool = False) -> None:
-    """Fetch running processes using tasklist (throttled)."""
+    """Fetch running processes using PowerShell (Name, ID, Path, Memory)."""
     now = time.time()
     if not force and now - nexus.last_proc_update < 5:
         return
 
     try:
-        output = subprocess.check_output("tasklist /fo csv /nh", shell=True).decode(
+        cmd = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-Process | Select-Object Name, Id, Path, WorkingSet, @{Name='Description';Expression={$_.Description}} | ConvertTo-Csv -NoTypeInformation",
+        ]
+        output = subprocess.check_output(cmd, shell=True).decode(
             "utf-8", errors="ignore"
         )
         lines = output.strip().split("\n")
-        new_cache = []
-        for line in lines:
-            parts = line.replace('"', "").split(",")
-            if len(parts) >= 5:
-                new_cache.append({"name": parts[0], "pid": parts[1], "mem": parts[4]})
-        nexus.process_cache = new_cache
+
+        # Group by name to support "Kill All" and deduplicate in UI if desired
+        raw_procs = []
+        if len(lines) > 1:
+            import csv
+            from io import StringIO
+
+            reader = csv.DictReader(StringIO(output))
+            for row in reader:
+                name = row.get("Name", "")
+                pid = row.get("Id", "")
+                path = row.get("Path", "")
+                desc = row.get("Description", "")
+                mem_raw = row.get("WorkingSet", "0")
+                try:
+                    mem_mb = int(mem_raw) // 1024 // 1024
+                    mem_str = f"{mem_mb} MB"
+                except Exception:
+                    mem_str = "0 MB"
+
+                raw_procs.append(
+                    {
+                        "name": name,
+                        "pid": pid,
+                        "path": path,
+                        "desc": desc,
+                        "mem": mem_str,
+                        "mem_bytes": int(mem_raw) if mem_raw.isdigit() else 0,
+                    }
+                )
+
+        nexus.process_cache = raw_procs
         nexus.last_proc_update = now
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error in update_process_cache: {e}")
 
 
 def trigger_reindex(nexus) -> None:
     """Launch X-Explorer in indexing mode."""
     nexus.status_lbl.setText("📡 Triggering File Indexer...")
-    # Run as a module to handle relative imports correctly
+    # Run in index-only mode
+    subprocess.Popen([sys.executable, "-m", "src.xexplorer.xexplorer", "--index"])
+
+
+def launch_xexplorer(nexus) -> None:
+    """Launch the X-Explorer File Manager UI."""
+    nexus.status_lbl.setText("🧭 Launching X-Explorer...")
     subprocess.Popen([sys.executable, "-m", "src.xexplorer.xexplorer"])
 
 
