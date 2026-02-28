@@ -118,6 +118,7 @@ class _ThemeManager(QObject):
                 "bg_elevated": "#252525",
                 "bg_overlay": "#1a1a1a",
                 "bg_control": "#333333",
+                "row_alt": "#222222",
                 "accent": "#0078d4",
                 "accent_subtle": "rgba(0,120,212,0.12)",
                 "accent_pressed": "#0063b1",
@@ -157,7 +158,16 @@ class _ThemeManager(QObject):
     # Convenience accessors
     # ------------------------------------------------------------------
     def __getitem__(self, key: str) -> str:
-        return self.theme_data.get("colors", {}).get(key, "#ff00ff")
+        # Better fallback: if key is missing, try bg_base, then bg_elevated, then neutral grey
+        colors = self.theme_data.get("colors", {})
+        if key in colors:
+            return colors[key]
+        
+        # Fallbacks for specific common keys
+        if key == "row_alt":
+            return colors.get("bg_overlay", colors.get("bg_base", "#1c1c1c"))
+        
+        return colors.get("bg_base", "#ff00ff")
 
     @property
     def is_dark(self) -> bool:

@@ -909,7 +909,8 @@ class XExplorer(QMainWindow):
                 self.save_settings(),
             )
         )
-        item.setSizeHint(w.sizeHint())
+        # Ensure enough vertical space to prevent clumping/overlapping
+        item.setSizeHint(QSize(100, 32))
         self.ignore_list.addItem(item)
         self.ignore_list.setItemWidget(item, w)
 

@@ -33,6 +33,7 @@
         "warning": "#FFE073",
         "icon_folder": "#FFE073",
         "icon_file": "#B8D0E0",
+        "row_alt": "#01121F",
         "sidebar_bg": "#03233A",
         "sidebar_item": "#03233A",
         "sidebar_hover": "#032842",

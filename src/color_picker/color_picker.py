@@ -944,7 +944,7 @@ class ColorPickerApp(QWidget):
         self.alpha_slider.set_checker_colors(
             QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
         )
-        self.swatch_flow.set_colors(self.saved_colors, self.mgr)
+        self.flow_widget.set_colors(self.saved_colors, self.mgr)
         self.toggle_btn.setText("☀️" if self.mgr.is_dark else "🌙")
         self.divider.setStyleSheet(f"background-color: {self.mgr['border']};")
         self.divider2.setStyleSheet(f"background-color: {self.mgr['border']};")

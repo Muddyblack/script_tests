@@ -345,7 +345,7 @@ class ChipBtn(QPushButton):
 class ToggleSwitch(QWidget):
     toggled = pyqtSignal(bool)
 
-    _W, _H = 36, 20
+    _W, _H = 34, 18
 
     def __init__(self, checked: bool = True, theme=None, parent=None):
         super().__init__(parent)
@@ -369,18 +369,20 @@ class ToggleSwitch(QWidget):
 
     def paintEvent(self, e):
         T = self._theme
+        if not T:
+            return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         acc = QColor(T["accent"] if self._checked else T["bg_control"])
         p.setBrush(QBrush(acc))
         p.setPen(QPen(QColor(T["border"]), 1))
         p.drawRoundedRect(
-            0, 3, self._W, self._H - 6, (self._H - 6) // 2, (self._H - 6) // 2
+            0, 2, self._W, self._H - 4, (self._H - 4) // 2, (self._H - 4) // 2
         )
         p.setBrush(QBrush(QColor("#ffffff")))
         p.setPen(Qt.PenStyle.NoPen)
         thumb_x = self._W - self._H + 2 if self._checked else 2
-        p.drawEllipse(thumb_x, 2, self._H - 4, self._H - 4)
+        p.drawEllipse(thumb_x, 1, self._H - 2, self._H - 2)
         p.end()
 
 
@@ -397,14 +399,18 @@ class IgnoreItemWidget(QWidget):
         self._text = text
         self._theme = theme
         hl = QHBoxLayout(self)
-        hl.setContentsMargins(12, 0, 8, 0)
-        hl.setSpacing(8)
-        self._lbl = QLabel(text)
-        self._lbl.setObjectName("ignore_item_lbl")
-        hl.addWidget(self._lbl, 1)
+        hl.setContentsMargins(10, 0, 8, 0)
+        hl.setSpacing(10)
+
+        # Toggle on the LEFT
         self._toggle = ToggleSwitch(checked, theme)
         self._toggle.toggled.connect(self.stateChanged)
         hl.addWidget(self._toggle)
+
+        self._lbl = QLabel(text)
+        self._lbl.setObjectName("ignore_item_lbl")
+        hl.addWidget(self._lbl, 1)
+
         self.setFixedHeight(32)
 
     def isChecked(self) -> bool:
