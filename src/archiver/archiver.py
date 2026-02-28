@@ -54,6 +54,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.common.config import ARCHIVER_SETTINGS, ASSETS_DIR
+from src.common.theme import ThemeManager
+from src.common.theme_template import TOOL_SHEET
 
 ICON_PATH = os.path.join(ASSETS_DIR, "nexus_icon.png")
 
@@ -273,219 +275,6 @@ def create_archive(
 # ──────────────────────────────────────────────────────────────────────
 # GUI
 # ──────────────────────────────────────────────────────────────────────
-# ─── Palette ──────────────────────────────────────────────────────────
-C = {
-    "bg": "#060910",
-    "surface": "#0c1017",
-    "panel": "#111722",
-    "border": "#1e2a3a",
-    "border2": "#243040",
-    "cyan": "#00d4ff",
-    "cyan_dim": "#006480",
-    "cyan_glow": "rgba(0,212,255,0.08)",
-    "green": "#00ff9d",
-    "green_dim": "#005c3a",
-    "red": "#ff4466",
-    "red_dim": "#5c0018",
-    "text": "#d0dcea",
-    "muted": "#4a6070",
-    "muted2": "#2a3a4a",
-}
-
-STYLESHEET = f"""
-/* ── Root ── */
-* {{ outline: none; }}
-QMainWindow, QWidget#root {{
-    background: {C["bg"]};
-}}
-
-/* ── Main card ── */
-QFrame#card {{
-    background: {C["surface"]};
-    border: 1px solid {C["border"]};
-    border-radius: 20px;
-}}
-
-/* ── Header labels ── */
-QLabel#title {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 4px;
-    color: {C["cyan"]};
-}}
-QLabel#sub {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 10px;
-    letter-spacing: 2px;
-    color: {C["muted"]};
-}}
-QLabel#section_label {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 9px;
-    letter-spacing: 3px;
-    color: {C["muted"]};
-}}
-QLabel#status {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    color: {C["muted"]};
-    padding: 2px 0;
-}}
-
-/* ── Drop zone ── */
-QLabel#drop_zone {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 12px;
-    letter-spacing: 1px;
-    color: {C["muted"]};
-    background: transparent;
-    border: 1px dashed {C["border2"]};
-    border-radius: 14px;
-    padding: 40px 20px;
-}}
-QLabel#drop_zone[active="true"] {{
-    color: {C["cyan"]};
-    border: 1px solid {C["cyan"]};
-    background: {C["cyan_glow"]};
-}}
-
-/* ── File list ── */
-QListWidget {{
-    background: {C["panel"]};
-    border: 1px solid {C["border"]};
-    border-radius: 12px;
-    padding: 4px;
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    color: {C["text"]};
-    selection-background-color: transparent;
-}}
-QListWidget::item {{
-    padding: 8px 12px;
-    border-radius: 8px;
-    border-bottom: 1px solid {C["border"]};
-    color: {C["text"]};
-}}
-QListWidget::item:last {{
-    border-bottom: none;
-}}
-QListWidget::item:selected {{
-    background: rgba(0,212,255,0.08);
-    color: {C["cyan"]};
-}}
-QListWidget::item:hover:!selected {{
-    background: rgba(255,255,255,0.03);
-}}
-QScrollBar:vertical {{
-    background: transparent;
-    width: 6px;
-    margin: 4px 2px;
-}}
-QScrollBar::handle:vertical {{
-    background: {C["border2"]};
-    border-radius: 3px;
-    min-height: 30px;
-}}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-
-/* ── Input & Combo ── */
-QLineEdit, QComboBox {{
-    background: {C["panel"]};
-    border: 1px solid {C["border"]};
-    border-radius: 10px;
-    padding: 9px 14px;
-    color: {C["text"]};
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    selection-background-color: {C["cyan_dim"]};
-}}
-QLineEdit:focus, QComboBox:focus {{
-    border: 1px solid {C["cyan_dim"]};
-    background: {C["panel"]};
-}}
-QLineEdit::placeholder {{
-    color: {C["muted"]};
-}}
-
-QComboBox::drop-down {{
-    border: none;
-    width: 20px;
-}}
-QComboBox QAbstractItemView {{
-    background: {C["surface"]};
-    border: 1px solid {C["border"]};
-    selection-background-color: {C["cyan_dim"]};
-    color: {C["text"]};
-}}
-
-/* ── Buttons — base ── */
-QPushButton {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    border-radius: 10px;
-    padding: 9px 20px;
-    border: 1px solid {C["border2"]};
-    background: {C["panel"]};
-    color: {C["muted"]};
-}}
-QPushButton:hover {{
-    color: {C["text"]};
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.04);
-}}
-QPushButton:pressed {{
-    background: rgba(255,255,255,0.02);
-}}
-QPushButton:disabled {{
-    opacity: 0.35;
-}}
-
-/* ── Buttons — accent variants ── */
-QPushButton#btn_compress {{
-    color: {C["cyan"]};
-    border: 1px solid rgba(0,212,255,0.25);
-    background: rgba(0,212,255,0.06);
-}}
-QPushButton#btn_compress:hover {{
-    background: rgba(0,212,255,0.12);
-    border-color: rgba(0,212,255,0.45);
-}}
-
-QPushButton#btn_extract {{
-    color: {C["green"]};
-    border: 1px solid rgba(0,255,157,0.25);
-    background: rgba(0,255,157,0.06);
-}}
-QPushButton#btn_extract:hover {{
-    background: rgba(0,255,157,0.12);
-    border-color: rgba(0,255,157,0.45);
-}}
-
-/* ── Progress bar ── */
-QProgressBar {{
-    background: {C["panel"]};
-    border: 1px solid {C["border"]};
-    border-radius: 6px;
-    height: 6px;
-    text-align: center;
-    font-size: 0px;
-}}
-QProgressBar::chunk {{
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-        stop:0 {C["cyan"]}, stop:1 {C["green"]});
-    border-radius: 5px;
-}}
-
-/* ── Divider ── */
-QFrame#divider {{
-    background: {C["border"]};
-    max-height: 1px;
-    border: none;
-}}
-"""
 
 
 # ─── Animated fade-in helper ──────────────────────────────────────────
@@ -509,6 +298,7 @@ class GlowProgressBar(QProgressBar):
         self.setFixedHeight(4)
         self.setTextVisible(False)
         self._glow = 0.0
+        self.mgr = ThemeManager()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._pulse)
@@ -526,7 +316,7 @@ class GlowProgressBar(QProgressBar):
 
         # Track
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(C["panel"]))
+        p.setBrush(QColor(self.mgr["bg_overlay"]))
         path = QPainterPath()
         path.addRoundedRect(r.x(), r.y(), r.width(), r.height(), 2, 2)
         p.drawPath(path)
@@ -534,8 +324,8 @@ class GlowProgressBar(QProgressBar):
         if self.maximum() > 0 and self.value() > 0:
             fill_w = int(r.width() * self.value() / self.maximum())
             grad = QLinearGradient(0, 0, fill_w, 0)
-            grad.setColorAt(0, QColor("#00d4ff"))
-            grad.setColorAt(1, QColor("#00ff9d"))
+            grad.setColorAt(0, QColor(self.mgr["accent"]))
+            grad.setColorAt(1, QColor(self.mgr["success"]))
             p.setBrush(grad)
             chunk = QPainterPath()
             chunk.addRoundedRect(0, 0, fill_w, r.height(), 2, 2)
@@ -545,7 +335,9 @@ class GlowProgressBar(QProgressBar):
             import math
 
             alpha = int(30 + 20 * math.sin(self._glow))
-            glow_color = QColor(0, 212, 255, alpha)
+            glow_color = QColor(self.mgr["accent"])
+            # Reconstruct color with alpha to avoid QColor(r,g,b,a) mismatch in some PyQt versions if passing string
+            glow_color.setAlpha(alpha)
             p.setBrush(glow_color)
             p.drawPath(chunk)
 
@@ -568,6 +360,7 @@ class ArchiverWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.mgr = ThemeManager()
         self.setWindowTitle("NEXUS ARCHIVER")
         self.setMinimumSize(680, 580)
         self.resize(720, 600)
@@ -580,10 +373,19 @@ class ArchiverWindow(QMainWindow):
 
         self.progress_signal.connect(self._on_progress)
         self.done_signal.connect(self._on_done)
+        self.mgr.theme_changed.connect(self._apply_theme)
 
-        self.setStyleSheet(STYLESHEET)
         self._build_ui()
+        self._apply_theme()
         self._load_settings()
+
+    def _apply_theme(self):
+        self.mgr.apply_to_widget(self, TOOL_SHEET)
+        # Update dot color
+        self.status_dot.setStyleSheet(f"color: {self.mgr['success']}; font-size: 10px;")
+        self.opts_frame.setStyleSheet(
+            f"background: {self.mgr['bg_overlay']}; border-radius: 10px; border: 1px solid {self.mgr['border_light']};"
+        )
 
     def _load_settings(self):
         if os.path.exists(ARCHIVER_SETTINGS):
@@ -636,7 +438,6 @@ class ArchiverWindow(QMainWindow):
         hdr.addStretch()
 
         self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet(f"color: {C['green']}; font-size: 10px;")
         hdr.addWidget(self.status_dot)
 
         self.status_lbl = QLabel(" READY")
@@ -729,7 +530,6 @@ class ArchiverWindow(QMainWindow):
         # Options panel (Hidden by default)
         self.opts_frame = QFrame()
         self.opts_frame.setVisible(False)
-        self.opts_frame.setStyleSheet(f"background: {C['panel']}; border-radius: 10px; border: 1px solid {C['border2']};")
         opts_layout = QHBoxLayout(self.opts_frame)
         opts_layout.setContentsMargins(15, 10, 15, 10)
         opts_layout.setSpacing(15)
@@ -739,7 +539,9 @@ class ArchiverWindow(QMainWindow):
         lvl_lbl.setObjectName("section_label")
         lvl_box.addWidget(lvl_lbl)
         self.combo_lvl = QComboBox()
-        self.combo_lvl.addItems(["Store", "Fastest", "Fast", "Normal", "Maximum", "Ultra"])
+        self.combo_lvl.addItems(
+            ["Store", "Fastest", "Fast", "Normal", "Maximum", "Ultra"]
+        )
         self.combo_lvl.setCurrentText("Normal")
         lvl_box.addWidget(self.combo_lvl)
         opts_layout.addLayout(lvl_box)
@@ -749,7 +551,9 @@ class ArchiverWindow(QMainWindow):
         dict_lbl.setObjectName("section_label")
         dict_box.addWidget(dict_lbl)
         self.combo_dict = QComboBox()
-        self.combo_dict.addItems(["1 MB", "16 MB", "32 MB", "64 MB", "128 MB", "256 MB"])
+        self.combo_dict.addItems(
+            ["1 MB", "16 MB", "32 MB", "64 MB", "128 MB", "256 MB"]
+        )
         self.combo_dict.setCurrentText("16 MB")
         dict_box.addWidget(self.combo_dict)
         opts_layout.addLayout(dict_box)
@@ -854,13 +658,23 @@ class ArchiverWindow(QMainWindow):
             size_str = ""
             if os.path.isfile(p):
                 sz = os.path.getsize(p)
-                if sz > 1_000_000_000: size_str = f"  {sz / 1_000_000_000:.1f} GB"
-                elif sz > 1_000_000: size_str = f"  {sz / 1_000_000:.1f} MB"
-                elif sz > 1_000: size_str = f"  {sz / 1_000:.1f} KB"
-                else: size_str = f"  {sz} B"
+                if sz > 1_000_000_000:
+                    size_str = f"  {sz / 1_000_000_000:.1f} GB"
+                elif sz > 1_000_000:
+                    size_str = f"  {sz / 1_000_000:.1f} MB"
+                elif sz > 1_000:
+                    size_str = f"  {sz / 1_000:.1f} KB"
+                else:
+                    size_str = f"  {sz} B"
 
             item = QListWidgetItem(f"{icon}   {os.path.basename(p)}{size_str}")
-            item.setForeground(QColor(C["cyan"] if is_arc else (C["green"] if is_dir else C["text"])))
+            item.setForeground(
+                QColor(
+                    self.mgr["accent"]
+                    if is_arc
+                    else (self.mgr["success"] if is_dir else self.mgr["text_primary"])
+                )
+            )
             self.file_list.addItem(item)
 
         has = len(self.source_paths) > 0
@@ -870,15 +684,17 @@ class ArchiverWindow(QMainWindow):
         count = len(self.source_paths)
         if has:
             if all(is_archive(p) for p in self.source_paths):
-                self._set_status(f"{count} ARCHIVE(S) READY TO EXTRACT", C["green"])
+                self._set_status(
+                    f"{count} ARCHIVE(S) READY TO EXTRACT", self.mgr["success"]
+                )
             else:
-                self._set_status(f"{count} ITEM(S) QUEUED", C["muted"])
+                self._set_status(f"{count} ITEM(S) QUEUED", self.mgr["text_secondary"])
         else:
-            self._set_status("READY", C["muted"])
+            self._set_status("READY", self.mgr["text_secondary"])
 
     def _compress(self):
         if not self.source_paths:
-            self._set_status("NO FILES SELECTED!", C["red"])
+            self._set_status("NO FILES SELECTED!", self.mgr["danger"])
             return
         dst = self.dst_input.text().strip()
         if not dst:
@@ -917,7 +733,7 @@ class ArchiverWindow(QMainWindow):
     def _extract(self):
         archives = [p for p in self.source_paths if is_archive(p)]
         if not archives:
-            self._set_status("NO ARCHIVES SELECTED!", C["red"])
+            self._set_status("NO ARCHIVES SELECTED!", self.mgr["danger"])
             return
 
         dst = self.dst_input.text().strip()
@@ -950,30 +766,41 @@ class ArchiverWindow(QMainWindow):
         self.btn_compress.setEnabled(not busy)
         self.btn_extract.setEnabled(not busy)
         if busy:
-            self._set_status("WORKING…", C["cyan"])
-            self.status_dot.setStyleSheet(f"color: {C['cyan']}; font-size: 10px;")
+            self._set_status("WORKING…", self.mgr["accent"])
+            self.status_dot.setStyleSheet(
+                f"color: {self.mgr['accent']}; font-size: 10px;"
+            )
 
     def _on_progress(self, done, total):
         self.progress.setMaximum(total)
         self.progress.setValue(done)
-        self._set_status(f"PROCESSING… [{done}/{total}]", C["cyan"])
+        self._set_status(f"PROCESSING… [{done}/{total}]", self.mgr["accent"])
 
     def _on_done(self, errors, message):
         self._set_busy(False)
         if errors:
-            self._set_status(f"ERROR: {errors[0][:40]}...", C["red"])
-            self.status_dot.setStyleSheet(f"color: {C['red']}; font-size: 10px;")
+            self._set_status(f"ERROR: {errors[0][:40]}...", self.mgr["danger"])
+            self.status_dot.setStyleSheet(
+                f"color: {self.mgr['danger']}; font-size: 10px;"
+            )
         else:
-            self._set_status(f"{message} ✓", C["green"])
-            self.status_dot.setStyleSheet(f"color: {C['green']}; font-size: 10px;")
+            self._set_status(f"{message} ✓", self.mgr["success"])
+            self.status_dot.setStyleSheet(
+                f"color: {self.mgr['success']}; font-size: 10px;"
+            )
             self.source_paths.clear()
             self._refresh_list()
 
-        QTimer.singleShot(4000, lambda: (
-            self._set_status("READY", C["muted"]),
-            self.status_dot.setStyleSheet(f"color: {C['green']}; font-size: 10px;"),
-            self.progress.setVisible(False)
-        ))
+        QTimer.singleShot(
+            4000,
+            lambda: (
+                self._set_status("READY", self.mgr["text_secondary"]),
+                self.status_dot.setStyleSheet(
+                    f"color: {self.mgr['success']}; font-size: 10px;"
+                ),
+                self.progress.setVisible(False),
+            ),
+        )
 
     def _set_status(self, text: str, color: str):
         self.status_lbl.setText(f" {text}")
@@ -987,17 +814,8 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    from PyQt6.QtGui import QPalette
-    pal = app.palette()
-    pal.setColor(QPalette.ColorRole.Window, QColor(C["bg"]))
-    pal.setColor(QPalette.ColorRole.WindowText, QColor(C["text"]))
-    pal.setColor(QPalette.ColorRole.Base, QColor(C["panel"]))
-    pal.setColor(QPalette.ColorRole.AlternateBase, QColor(C["surface"]))
-    pal.setColor(QPalette.ColorRole.Button, QColor(C["panel"]))
-    pal.setColor(QPalette.ColorRole.ButtonText, QColor(C["text"]))
-    pal.setColor(QPalette.ColorRole.Highlight, QColor(C["cyan_dim"]))
-    pal.setColor(QPalette.ColorRole.HighlightedText, QColor(C["cyan"]))
-    app.setPalette(pal)
+    mgr = ThemeManager()
+    app.setPalette(mgr.get_palette())
 
     win = ArchiverWindow()
     win.show()

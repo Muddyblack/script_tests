@@ -862,7 +862,6 @@ class XExplorer(QMainWindow):
         key = f"file_{ext}_{size}"
         if key not in self._icon_cache:
             # Create a temp file to get the real system icon
-            from PyQt6.QtCore import QFileInfo
 
             # We can use the actual path if it exists, otherwise use the provider with extension
             # For now, let's try the simple extension-based provider if possible,
@@ -913,7 +912,7 @@ class XExplorer(QMainWindow):
         c = conn.cursor()
 
         c.execute("SELECT path, last_indexed FROM folder_stats")
-        stats = {r[0]: r[1] for r in c.fetchall()}
+        {r[0]: r[1] for r in c.fetchall()}
 
         c.execute("SELECT value FROM settings WHERE key='folders'")
         res = c.fetchone()
@@ -1061,7 +1060,6 @@ class XExplorer(QMainWindow):
         added = []
         for d in drives:
             if d not in existing:
-                import string as _string
 
                 letter = d[0].upper() if d else "?"
                 # Friendly label e.g. "System C:\" or "Data D:\"
@@ -1227,7 +1225,7 @@ class XExplorer(QMainWindow):
         if len(query) < 2:
             for w in [self._details, self._icons_view, self._tree_view]:
                 w.clear()
-            self._status_lbl.setText(f"Type at least 2 characters…   0 items")
+            self._status_lbl.setText("Type at least 2 characters…   0 items")
             # Show empty state only if nothing indexed
             try:
                 import sqlite3 as _sq

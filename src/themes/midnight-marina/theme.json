@@ -1,0 +1,33 @@
+{
+    "name": "Midnight Marina",
+    "dark": true,
+    "colors": {
+        "bg_base": "#03233A",
+        "bg_elevated": "#021A2C",
+        "bg_overlay": "#01121F",
+        "bg_control": "#032842",
+        "bg_control_hov": "#074F81",
+        "bg_control_prs": "#01121F",
+        "accent": "#0EADCF",
+        "accent_hover": "#55FFCC",
+        "accent_pressed": "#22D4FF",
+        "accent_subtle": "rgba(14, 173, 207, 0.1)",
+        "border": "#33638059",
+        "border_light": "#33638080",
+        "border_focus": "#0EADCF",
+        "text_primary": "#CBE0F0",
+        "text_secondary": "#B8D0E0",
+        "text_disabled": "#8295A0",
+        "text_on_accent": "#01121F",
+        "success": "#44FFB1",
+        "danger": "#D95C5C",
+        "warning": "#FFE073",
+        "icon_folder": "#FFE073",
+        "icon_file": "#B8D0E0",
+        "sidebar_bg": "#03233A",
+        "sidebar_item": "#03233A",
+        "sidebar_hover": "#032842",
+        "sidebar_sel": "rgba(14, 173, 207, 0.1)",
+        "sidebar_sel_bar": "#0EADCF"
+    }
+}

@@ -14,6 +14,8 @@ from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow
 
+from src.common.theme import ThemeManager
+
 # --- CONFIGURATION ---
 APPDATA = os.getenv("APPDATA", os.path.expanduser("~"))
 CHRONOS_DIR = os.path.join(APPDATA, ".chronos_app")
@@ -469,12 +471,14 @@ class ChronosBridge(QObject):
 class ChronosApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.mgr = ThemeManager()
         init_db()
         self.setWindowTitle("Chronos Hub Ultra")
         self.resize(1200, 900)
 
         self.view = QWebEngineView()
-        self.view.page().setBackgroundColor(QColor("#03233A"))
+        self.view.page().setBackgroundColor(QColor(self.mgr["bg_base"]))
+        self.mgr.theme_changed.connect(self._apply_theme)
 
         # Safely enable dev tools if available
         attrs = self.view.settings()
@@ -504,6 +508,23 @@ class ChronosApp(QMainWindow):
         self.rem_timer.timeout.connect(self.check_reminders)
         self.rem_timer.start(60000)
         self.last_hour = -1
+        self._apply_theme()
+
+    def _apply_theme(self):
+        # Inject the entire palette as CSS variables to the web view
+        js_css = ""
+        for name, color in self.mgr.palette_dict.items():
+            js_css += f"--{name.replace('_', '-')}: {color};"
+
+        # Mappings for Chronos's existing CSS variables
+        js_css += f"--bg: {self.mgr['bg_base']};"
+        js_css += f"--text: {self.mgr['text_primary']};"
+        js_css += f"--border: {self.mgr['border']};"
+        js_css += f"--accent-primary: {self.mgr['accent']};"
+
+        script = f"document.documentElement.style.cssText += `{js_css}`;"
+        self.view.page().runJavaScript(script)
+        self.view.page().setBackgroundColor(QColor(self.mgr["bg_base"]))
 
     def open_devtools(self):
         self.devtools_view = QWebEngineView()

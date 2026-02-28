@@ -1,0 +1,33 @@
+{
+    "name": "Snowy Nexus",
+    "dark": false,
+    "colors": {
+        "bg_base": "#F0F4FF",
+        "bg_elevated": "#FFFFFF",
+        "bg_overlay": "#F8FAFF",
+        "bg_control": "#E1E8F5",
+        "bg_control_hov": "#DDE4F0",
+        "bg_control_prs": "#CAD3E6",
+        "accent": "#4A7BEC",
+        "accent_hover": "#3D6FFF",
+        "accent_pressed": "#2A56DD",
+        "accent_subtle": "rgba(74, 123, 236, 0.08)",
+        "border": "#D2DBE8",
+        "border_light": "#E2E9F3",
+        "border_focus": "#4A7BEC",
+        "text_primary": "#1A253A",
+        "text_secondary": "#5A6880",
+        "text_disabled": "#A0ABC0",
+        "text_on_accent": "#FFFFFF",
+        "success": "#00A86B",
+        "danger": "#DC3545",
+        "warning": "#FFB800",
+        "icon_folder": "#FFD64D",
+        "icon_file": "#5A6880",
+        "sidebar_bg": "#FFFFFF",
+        "sidebar_item": "#FFFFFF",
+        "sidebar_hover": "#F0F4FF",
+        "sidebar_sel": "rgba(74, 123, 236, 0.08)",
+        "sidebar_sel_bar": "#4A7BEC"
+    }
+}

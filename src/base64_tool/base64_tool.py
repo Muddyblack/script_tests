@@ -24,151 +24,25 @@ except ImportError:
     ICON_PATH = ""
 
 
-STYLESHEET = """
-/* ── Root ──────────────────────────────────────────────────────── */
-QWidget#root {
-    background-color: #080c14;
-}
+from src.common.theme import ThemeManager
+from src.common.theme_template import TOOL_SHEET
 
-/* ── Card Panel ─────────────────────────────────────────────────── */
-QFrame#card {
-    background-color: #0e1524;
-    border: 1px solid #1c2a42;
-    border-radius: 16px;
-}
-
-/* ── Labels ─────────────────────────────────────────────────────── */
+STYLESHEET_BASE64 = """
+/* Specific overrides for Base64 tool if needed, otherwise uses TOOL_SHEET */
 QLabel#app-title {
     font-family: 'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 22px;
     font-weight: 700;
-    color: #e8edf5;
+    color: {{text_primary}};
     letter-spacing: 1px;
 }
 QLabel#app-subtitle {
     font-family: 'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 11px;
     font-weight: 400;
-    color: #3d5278;
+    color: {{text_secondary}};
     letter-spacing: 3px;
     text-transform: uppercase;
-}
-QLabel#field-label {
-    font-family: 'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 10px;
-    font-weight: 600;
-    color: #3d5278;
-    letter-spacing: 3px;
-}
-QLabel#status-ok {
-    font-family: 'DM Mono', 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #22d3a0;
-    letter-spacing: 1px;
-}
-QLabel#status-err {
-    font-family: 'DM Mono', 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #f43f5e;
-    letter-spacing: 1px;
-}
-
-/* ── Text Editors ───────────────────────────────────────────────── */
-QPlainTextEdit {
-    background-color: #060a11;
-    border: 1px solid #1c2a42;
-    border-radius: 10px;
-    padding: 14px 16px;
-    color: #c8d8f0;
-    font-family: 'DM Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    selection-background-color: #1e3a5f;
-}
-QPlainTextEdit:focus {
-    border: 1px solid #2a4a7f;
-    background-color: #07101e;
-}
-QPlainTextEdit[readOnly="true"] {
-    background-color: #050810;
-    color: #7a9ec8;
-    border: 1px solid #131e30;
-}
-QScrollBar:vertical {
-    background: #060a11;
-    width: 6px;
-    border-radius: 3px;
-}
-QScrollBar::handle:vertical {
-    background: #1c2a42;
-    border-radius: 3px;
-    min-height: 20px;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-
-/* ── Buttons ────────────────────────────────────────────────────── */
-QPushButton {
-    font-family: 'DM Mono', 'JetBrains Mono', monospace;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 1.5px;
-    border: none;
-    border-radius: 8px;
-    padding: 11px 22px;
-}
-QPushButton#btn-encode {
-    background-color: #1a3a6e;
-    color: #6db3ff;
-    border: 1px solid #2a5599;
-}
-QPushButton#btn-encode:hover {
-    background-color: #1e4480;
-    color: #90caff;
-    border: 1px solid #3a6bb5;
-}
-QPushButton#btn-encode:pressed { background-color: #162f5a; }
-
-QPushButton#btn-decode {
-    background-color: #0f3028;
-    color: #34d399;
-    border: 1px solid #1a5040;
-}
-QPushButton#btn-decode:hover {
-    background-color: #133a30;
-    color: #6ee7b7;
-    border: 1px solid #22684d;
-}
-QPushButton#btn-decode:pressed { background-color: #0c2820; }
-
-QPushButton#btn-copy {
-    background-color: #0e1524;
-    color: #3d5278;
-    border: 1px solid #1c2a42;
-}
-QPushButton#btn-copy:hover {
-    background-color: #0f1a2e;
-    color: #6d8fbf;
-    border: 1px solid #2a4060;
-}
-QPushButton#btn-copy:pressed { background-color: #0a1020; }
-
-QPushButton#btn-clear {
-    background-color: transparent;
-    color: #3d5278;
-    border: 1px solid #1c2a42;
-}
-QPushButton#btn-clear:hover {
-    background-color: #1a0a10;
-    color: #f43f5e;
-    border: 1px solid #5a1a28;
-}
-QPushButton#btn-clear:pressed { background-color: #140710; }
-
-/* ── Divider ────────────────────────────────────────────────────── */
-QFrame#divider {
-    background-color: #1c2a42;
-    max-height: 1px;
-    border: none;
 }
 """
 
@@ -193,7 +67,8 @@ class DotAccent(QWidget):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        colors = ["#1e3a6e", "#2a5599", "#6db3ff"]
+        mgr = ThemeManager()
+        colors = [mgr["accent_pressed"], mgr["border_focus"], mgr["accent"]]
         for i, c in enumerate(colors):
             p.setBrush(QColor(c))
             p.setPen(Qt.PenStyle.NoPen)
@@ -210,11 +85,12 @@ class GradientHeader(QWidget):
 
     def paintEvent(self, event):
         p = QPainter(self)
+        mgr = ThemeManager()
         g = QLinearGradient(0, 0, self.width(), 0)
-        g.setColorAt(0.0, QColor("#1e3a6e"))
-        g.setColorAt(0.4, QColor("#6db3ff"))
-        g.setColorAt(0.7, QColor("#22d3a0"))
-        g.setColorAt(1.0, QColor("#1e3a6e"))
+        g.setColorAt(0.0, QColor(mgr["accent_pressed"]))
+        g.setColorAt(0.4, QColor(mgr["accent"]))
+        g.setColorAt(0.7, QColor(mgr["success"]))
+        g.setColorAt(1.0, QColor(mgr["accent_pressed"]))
         p.fillRect(self.rect(), g)
         p.end()
 
@@ -222,13 +98,18 @@ class GradientHeader(QWidget):
 class Base64App(QWidget):
     def __init__(self):
         super().__init__()
+        self.mgr = ThemeManager()
         self.setObjectName("root")
         self.setWindowTitle("Nexus · Base64")
         if os.path.exists(ICON_PATH):
             self.setWindowIcon(QIcon(ICON_PATH))
         self.setMinimumSize(680, 620)
-        self.setStyleSheet(STYLESHEET)
+        self.mgr.theme_changed.connect(self._apply_theme)
         self._build_ui()
+        self._apply_theme()
+
+    def _apply_theme(self):
+        self.mgr.apply_to_widget(self, TOOL_SHEET + STYLESHEET_BASE64)
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -338,7 +219,9 @@ class Base64App(QWidget):
 
     def _set_status(self, text, ok=True):
         self.status_lbl.setObjectName("status-ok" if ok else "status-err")
-        self.status_lbl.setStyleSheet("color: #22d3a0;" if ok else "color: #f43f5e;")
+        self.status_lbl.setStyleSheet(
+            f"color: {self.mgr['success'] if ok else self.mgr['danger']};"
+        )
         self.status_lbl.setText(text)
 
     def do_encode(self):
@@ -385,7 +268,7 @@ class Base64App(QWidget):
         QApplication.clipboard().setText(text)
         self.copy_btn.setText("✓ COPIED")
         self.copy_btn.setStyleSheet(
-            "background-color: #0f3028; color: #22d3a0; border: 1px solid #22684d;"
+            f"background-color: {self.mgr['bg_control']}; color: {self.mgr['success']}; border: 1px solid {self.mgr['success']};"
         )
         QTimer.singleShot(1600, self._reset_copy_btn)
 
@@ -397,6 +280,9 @@ class Base64App(QWidget):
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    mgr = ThemeManager()
+    app.setPalette(mgr.get_palette())
     window = Base64App()
     window.show()
     sys.exit(app.exec())

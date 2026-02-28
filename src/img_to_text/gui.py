@@ -1,4 +1,5 @@
 """Desktop snip-to-text GUI and Overlay."""
+
 from __future__ import annotations
 
 import os
@@ -44,6 +45,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.common.theme import ThemeManager
+
 from .extractor import ocr_qimage
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -52,15 +55,49 @@ from .extractor import ocr_qimage
 
 
 class _C:
-    ACCENT = QColor("#6366f1")
-    ACCENT_LITE = QColor("#818cf8")
-    SUCCESS = QColor("#22c55e")
-    WARNING = QColor("#f59e0b")
-    ERROR = QColor("#ef4444")
-    BG = QColor(15, 15, 24, 245)
-    TEXT = QColor(255, 255, 255, 225)
-    TEXT_DIM = QColor(255, 255, 255, 100)
-    OVERLAY_DIM = QColor(0, 0, 0, 100)
+    def __init__(self):
+        self.mgr = ThemeManager()
+
+    @property
+    def ACCENT(self):
+        return QColor(self.mgr["accent"])
+
+    @property
+    def ACCENT_LITE(self):
+        return QColor(self.mgr["accent_pressed"])
+
+    @property
+    def SUCCESS(self):
+        return QColor(self.mgr["success"])
+
+    @property
+    def WARNING(self):
+        return QColor(self.mgr["warning"])
+
+    @property
+    def ERROR(self):
+        return QColor(self.mgr["danger"])
+
+    @property
+    def BG(self):
+        c = QColor(self.mgr["bg_base"])
+        c.setAlpha(245)
+        return c
+
+    @property
+    def TEXT(self):
+        return QColor(self.mgr["text_primary"])
+
+    @property
+    def TEXT_DIM(self):
+        return QColor(self.mgr["text_secondary"])
+
+    @property
+    def OVERLAY_DIM(self):
+        return QColor(0, 0, 0, 100)
+
+
+C = _C()
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +211,7 @@ class SnipOverlay(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.drawPixmap(0, 0, self._desktop)
-        p.fillRect(self.rect(), _C.OVERLAY_DIM)
+        p.fillRect(self.rect(), C.OVERLAY_DIM)
         rect = self._sel_rect()
         if not rect.isNull():
             self._paint_selection(p, rect)
@@ -191,7 +228,7 @@ class SnipOverlay(QWidget):
         p.drawPixmap(r, self._desktop, r)
 
         # Border
-        p.setPen(QPen(_C.ACCENT_LITE, 2))
+        p.setPen(QPen(C.ACCENT_LITE, 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRect(r)
 
@@ -218,7 +255,7 @@ class SnipOverlay(QWidget):
         path = QPainterPath()
         path.addRoundedRect(float(bx), float(by), float(tw), float(th), 4, 4)
         p.fillPath(path, QColor(0, 0, 0, 180))
-        p.setPen(_C.TEXT)
+        p.setPen(C.TEXT)
         p.drawText(bx + 8, by + fm.ascent() + 4, badge)
 
     def _draw_loupe(self, p: QPainter, pos: QPoint) -> None:
@@ -267,18 +304,18 @@ class SnipOverlay(QWidget):
         p.drawEllipse(dst)
 
         # Inner accent ring
-        p.setPen(QPen(_C.ACCENT_LITE, 1))
+        p.setPen(QPen(C.ACCENT_LITE, 1))
         inner = dst.adjusted(4, 4, -4, -4)
         p.drawEllipse(inner)
 
         # Crosshair
         cx, cy = dst.center().x(), dst.center().y()
-        p.setPen(QPen(_C.ACCENT_LITE, 1))
+        p.setPen(QPen(C.ACCENT_LITE, 1))
         p.drawLine(cx - 10, cy, cx + 10, cy)
         p.drawLine(cx, cy - 10, cx, cy + 10)
         # Center dot
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(_C.ACCENT)
+        p.setBrush(C.ACCENT)
         p.drawEllipse(QPoint(cx, cy), 2, 2)
 
         # Coordinate badge below loupe
@@ -293,7 +330,7 @@ class SnipOverlay(QWidget):
         coord_path = QPainterPath()
         coord_path.addRoundedRect(float(bx), float(by), float(tw), float(th), 3, 3)
         p.fillPath(coord_path, QColor(0, 0, 0, 180))
-        p.setPen(_C.TEXT_DIM)
+        p.setPen(C.TEXT_DIM)
         p.drawText(bx + 6, by + fm.ascent() + 3, coord)
 
     def _paint_toolbar(self, p: QPainter):
@@ -319,10 +356,12 @@ class Toast(QWidget):
         self,
         message: str,
         icon: str = "✓",
-        color: QColor = _C.ACCENT,
+        color: QColor = None,
         duration_ms: int = 2500,
     ):
         super().__init__()
+        if color is None:
+            color = C.ACCENT
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -349,8 +388,10 @@ class Toast(QWidget):
 
     @staticmethod
     def show_toast(
-        msg: str, icon: str = "✓", color: QColor = _C.ACCENT, duration_ms: int = 2500
+        msg: str, icon: str = "✓", color: QColor = None, duration_ms: int = 2500
     ):
+        if color is None:
+            color = C.ACCENT
         t = Toast(msg, icon, color, duration_ms)
         t.show()
         t._ref = t
@@ -492,7 +533,7 @@ class OcrPreviewTooltip(QWidget):
             OcrPreviewTooltip {{
                 background: rgba(12,12,22,0.95);
                 border-radius: 8px;
-                border: 1px solid {_C.ACCENT.name()};
+                border: 1px solid {C.ACCENT.name()};
             }}
         """)
         screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
@@ -564,11 +605,10 @@ def _save_image_dialog(image: QImage) -> str | None:
 
 
 def _open_in_editor(text: str) -> None:
-    tmp = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", prefix="snip_", delete=False, encoding="utf-8"
-    )
-    tmp.write(text)
-    tmp.close()
+    ) as tmp:
+        tmp.write(text)
     os.startfile(tmp.name)
 
 
@@ -635,13 +675,13 @@ def start_snip_to_text(
     def _handle(action: str, image: QImage, anchor: QPoint) -> None:
         if action == "cancel":
             _status("Snip cancelled")
-            Toast.show_toast("Cancelled", "—", _C.TEXT_DIM, 1200)
+            Toast.show_toast("Cancelled", "—", C.TEXT_DIM, 1200)
             return
 
         if action == "image":
             _copy_image(image)
             _status("✓ Image copied")
-            Toast.show_toast("Image copied", "🖼️", _C.ACCENT)
+            Toast.show_toast("Image copied", "🖼️", C.ACCENT)
             if on_done:
                 on_done(SnipResult("", image, action))
             return
@@ -650,7 +690,7 @@ def start_snip_to_text(
             path = _save_image_dialog(image)
             if path:
                 _status(f"✓ Saved → {Path(path).name}")
-                Toast.show_toast(f"Saved: {Path(path).name}", "💾", _C.SUCCESS)
+                Toast.show_toast(f"Saved: {Path(path).name}", "💾", C.SUCCESS)
                 _recent_snips.appendleft(_SnipRecord(datetime.now(), "", image))
                 if on_done:
                     on_done(SnipResult("", image, action))
@@ -667,7 +707,7 @@ def start_snip_to_text(
             tip.set_text(text)
             if not text:
                 _status("⚠️ No text detected")
-                Toast.show_toast("No text detected", "⚠️", _C.ERROR)
+                Toast.show_toast("No text detected", "⚠️", C.ERROR)
                 if on_error:
                     on_error("No text detected")
                 return
@@ -675,27 +715,27 @@ def start_snip_to_text(
             if action == "text":
                 _copy_text(text)
                 _status("✓ Text copied")
-                Toast.show_toast("Text copied", "📋", _C.ACCENT)
+                Toast.show_toast("Text copied", "📋", C.ACCENT)
             elif action == "both":
                 _copy_text(text)
                 _copy_image(image)
                 _status("✓ Text & image copied")
-                Toast.show_toast("Text & image copied", "📑", _C.ACCENT)
+                Toast.show_toast("Text & image copied", "📑", C.ACCENT)
             elif action == "insert":
                 _insert_at_cursor(text)
                 _status("✓ Text inserted")
-                Toast.show_toast("Text inserted", "⌨️", _C.SUCCESS)
+                Toast.show_toast("Text inserted", "⌨️", C.SUCCESS)
             elif action == "editor":
                 _open_in_editor(text)
                 _status("✓ Opened in editor")
-                Toast.show_toast("Opened in editor", "📝", _C.SUCCESS)
+                Toast.show_toast("Opened in editor", "📝", C.SUCCESS)
             if on_done:
                 on_done(SnipResult(text, image, action))
 
         def _err(err: str) -> None:
             tip.close()
             _status(f"❌ {err}")
-            Toast.show_toast(f"OCR error: {err}", "❌", _C.ERROR)
+            Toast.show_toast(f"OCR error: {err}", "❌", C.ERROR)
             if on_error:
                 on_error(err)
 
@@ -724,7 +764,7 @@ def start_snip_to_text(
         ov.snip_cancelled.connect(
             lambda: (
                 _status("Snip cancelled"),
-                Toast.show_toast("Cancelled", "—", _C.TEXT_DIM, 1200),
+                Toast.show_toast("Cancelled", "—", C.TEXT_DIM, 1200),
             )
         )
         ov.snip_taken.connect(lambda r: _on_taken(r, ov))
@@ -738,7 +778,7 @@ def start_snip_to_text(
             desktop, vgeo = _capture_virtual_desktop()
         except Exception as e:
             _status(f"❌ Capture error: {e}")
-            Toast.show_toast(f"Capture error: {e}", "❌", _C.ERROR)
+            Toast.show_toast(f"Capture error: {e}", "❌", C.ERROR)
             if on_error:
                 on_error(str(e))
             return

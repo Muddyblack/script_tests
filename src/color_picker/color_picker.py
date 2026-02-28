@@ -23,109 +23,71 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
+
+from src.common.theme import ThemeManager
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "color_config.json")
 ICON_PATH = ""
 MAX_SAVED_COLORS = 32
 
-THEMES = {
-    "dark": {
-        "bg_base": "#070B14",
-        "bg_surface": "#0D1526",
-        "bg_elevated": "#141E35",
-        "bg_card": "#1A2540",
-        "border": "#1F2E4A",
-        "border_active": "#3D6FFF",
-        "text_primary": "#EDF2FF",
-        "text_secondary": "#7A90B8",
-        "text_muted": "#3D5070",
-        "accent": "#3D6FFF",
-        "success_bg": "#003D28",
-        "success_fg": "#00F5A0",
-        "success_border": "#00A06A",
-        "divider": "#1F2E4A",
-        "checker_a": "#2A3550",
-        "checker_b": "#1A2540",
-        "toggle_icon": "☀",
-    },
-    "light": {
-        "bg_base": "#F0F4FF",
-        "bg_surface": "#FFFFFF",
-        "bg_elevated": "#E8EEFF",
-        "bg_card": "#FFFFFF",
-        "border": "#D0D8F0",
-        "border_active": "#3D6FFF",
-        "text_primary": "#0D1526",
-        "text_secondary": "#4A5880",
-        "text_muted": "#8A9CC0",
-        "accent": "#3D6FFF",
-        "success_bg": "#E6FFF5",
-        "success_fg": "#00875A",
-        "success_border": "#00C87A",
-        "divider": "#D0D8F0",
-        "checker_a": "#C8D0E8",
-        "checker_b": "#E8EEFF",
-        "toggle_icon": "☾",
-    },
-}
+# Internal THEMES are replaced by ThemeManager
 
 
-def make_stylesheet(t):
+def make_stylesheet(mgr):
     return f"""
     * {{ font-family: 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', sans-serif; }}
-    QWidget#root_bg {{ background-color: {t["bg_base"]}; }}
-    QWidget {{ background-color: transparent; color: {t["text_primary"]}; }}
-    QLabel#section_label {{ font-size: 10px; font-weight: 600; letter-spacing: 2px; color: {t["text_muted"]}; }}
-    QLabel#value_label {{ font-size: 19px; font-weight: 700; color: {t["text_primary"]}; letter-spacing: -0.5px; }}
-    QLabel#sub_label {{ font-size: 11px; color: {t["text_secondary"]}; font-weight: 400; }}
-    QLabel#channel_label {{ font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: {t["text_muted"]}; }}
-    QLabel#app_title {{ font-size: 10px; font-weight: 700; letter-spacing: 3px; color: {t["text_muted"]}; }}
+    QWidget#root_bg {{ background-color: {mgr["bg_base"]}; }}
+    QWidget {{ background-color: transparent; color: {mgr["text_primary"]}; }}
+    QLabel#section_label {{ font-size: 10px; font-weight: 600; letter-spacing: 2px; color: {mgr["text_secondary"]}; }}
+    QLabel#value_label {{ font-size: 19px; font-weight: 700; color: {mgr["text_primary"]}; letter-spacing: -0.5px; }}
+    QLabel#sub_label {{ font-size: 11px; color: {mgr["text_secondary"]}; font-weight: 400; }}
+    QLabel#channel_label {{ font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: {mgr["text_secondary"]}; }}
+    QLabel#app_title {{ font-size: 10px; font-weight: 700; letter-spacing: 3px; color: {mgr["text_secondary"]}; }}
     QLineEdit {{
-        background-color: {t["bg_card"]}; border: 1px solid {t["border"]};
-        padding: 8px 32px 8px 10px; border-radius: 8px; color: {t["text_primary"]};
-        font-size: 13px; font-weight: 500; selection-background-color: {t["accent"]};
+        background-color: {mgr["bg_control"]}; border: 1px solid {mgr["border"]};
+        padding: 8px 32px 8px 10px; border-radius: 8px; color: {mgr["text_primary"]};
+        font-size: 13px; font-weight: 500; selection-background-color: {mgr["accent"]};
     }}
-    QLineEdit:focus {{ border: 1px solid {t["border_active"]}; background-color: {t["bg_elevated"]}; }}
+    QLineEdit:focus {{ border: 1px solid {mgr["border_focus"]}; background-color: {mgr["bg_overlay"]}; }}
     QLineEdit#channel_input {{ padding: 5px 4px; font-size: 12px; border-radius: 7px; font-weight: 600; }}
     QPushButton#primary {{
-        background-color: {t["accent"]}; color: white; border: none;
+        background-color: {mgr["accent"]}; color: {mgr["text_on_accent"]}; border: none;
         padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 12px;
     }}
-    QPushButton#primary:hover {{ background-color: #5585FF; }}
-    QPushButton#primary:pressed {{ background-color: #2A56DD; }}
+    QPushButton#primary:hover {{ background-color: {mgr["accent_hover"]}; }}
+    QPushButton#primary:pressed {{ background-color: {mgr["accent_pressed"]}; }}
     QPushButton#ghost {{
-        background-color: {t["bg_card"]}; color: {t["text_secondary"]};
-        border: 1px solid {t["border"]}; padding: 10px 16px;
+        background-color: {mgr["bg_control"]}; color: {mgr["text_primary"]};
+        border: 1px solid {mgr["border"]}; padding: 10px 16px;
         border-radius: 10px; font-weight: 600; font-size: 12px;
     }}
     QPushButton#ghost:hover {{
-        background-color: {t["bg_elevated"]}; color: {t["text_primary"]};
-        border: 1px solid {t["border_active"]};
+        background-color: {mgr["bg_control_hov"]}; color: {mgr["text_primary"]};
+        border: 1px solid {mgr["border_focus"]};
     }}
     QPushButton#toggle {{
-        background-color: {t["bg_card"]}; color: {t["text_secondary"]};
-        border: 1px solid {t["border"]}; padding: 6px 10px;
+        background-color: {mgr["bg_control"]}; color: {mgr["text_primary"]};
+        border: 1px solid {mgr["border"]}; padding: 6px 10px;
         border-radius: 8px; font-size: 14px; min-width: 32px; max-width: 32px;
     }}
-    QPushButton#toggle:hover {{ background-color: {t["bg_elevated"]}; border: 1px solid {t["border_active"]}; }}
+    QPushButton#toggle:hover {{ background-color: {mgr["bg_control_hov"]}; border: 1px solid {mgr["border_focus"]}; }}
     QPushButton#expand_btn {{
-        background-color: transparent; color: {t["text_muted"]};
+        background-color: transparent; color: {mgr["text_secondary"]};
         border: none; padding: 0px; font-size: 10px; font-weight: 700; letter-spacing: 1px;
     }}
-    QPushButton#expand_btn:hover {{ color: {t["text_secondary"]}; }}
+    QPushButton#expand_btn:hover {{ color: {mgr["text_primary"]}; }}
     QPushButton#inline_copy {{
-        background-color: transparent; color: {t["text_muted"]};
+        background-color: transparent; color: {mgr["text_secondary"]};
         border: none; padding: 0px 6px;
         font-size: 13px; min-width: 24px; max-width: 24px;
     }}
-    QPushButton#inline_copy:hover {{ color: {t["accent"]}; }}
+    QPushButton#inline_copy:hover {{ color: {mgr["accent"]}; }}
     QScrollArea {{ border: none; background: transparent; }}
     QScrollBar:vertical {{ background: transparent; width: 4px; margin: 0; }}
-    QScrollBar::handle:vertical {{ background: {t["border"]}; border-radius: 2px; min-height: 20px; }}
+    QScrollBar::handle:vertical {{ background: {mgr["border"]}; border-radius: 2px; min-height: 20px; }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     """
 
@@ -418,10 +380,10 @@ class ColorSwatch(QWidget):
     clicked = pyqtSignal(str)
     removed = pyqtSignal(str)
 
-    def __init__(self, hex_str, theme_name="dark", parent=None):
+    def __init__(self, hex_str, theme_mgr=None, parent=None):
         super().__init__(parent)
         self.hex_str = hex_str
-        self.theme_name = theme_name
+        self.mgr = theme_mgr or ThemeManager()
         self.setFixedSize(36, 36)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hovered = False
@@ -445,10 +407,9 @@ class ColorSwatch(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         color = QColor(self.hex_str)
-        t = THEMES[self.theme_name]
         if color.alpha() < 255:
             block = 5
-            ca, cb = QColor(t["checker_a"]), QColor(t["checker_b"])
+            ca, cb = QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
             path = QPainterPath()
             path.addRoundedRect(3.0, 3.0, 30.0, 30.0, 6.0, 6.0)
             p.setClipPath(path)
@@ -467,7 +428,11 @@ class ColorSwatch(QWidget):
         p.setClipPath(path)
         p.fillRect(3, 3, 30, 30, color)
         p.setClipping(False)
-        border = QColor(t["border_active"]) if self._hovered else QColor(t["border"])
+        border = (
+            QColor(self.mgr["border_focus"])
+            if self._hovered
+            else QColor(self.mgr["border"])
+        )
         p.setPen(QPen(border, 1.5))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(3, 3, 30, 30, 6, 6)
@@ -482,19 +447,14 @@ class FlowWidget(QWidget):
     colorRequested = pyqtSignal(str)
     removeRequested = pyqtSignal(str)
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setLayout(FlowLayout(self, h_spacing=5, v_spacing=5))
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-
-    def set_colors(self, colors, theme_name):
+    def set_colors(self, colors, theme_mgr):
         layout = self.layout()
         while layout.count():
             it = layout.takeAt(0)
             if it and it.widget():
                 it.widget().deleteLater()
         for hex_str in colors:
-            sw = ColorSwatch(hex_str, theme_name)
+            sw = ColorSwatch(hex_str, theme_mgr)
             sw.clicked.connect(self.colorRequested)
             sw.removed.connect(self.removeRequested)
             layout.addWidget(sw)
@@ -506,9 +466,9 @@ class ScreenPicker(QWidget):
     colorSelected = pyqtSignal(QColor)
     pickerClosed = pyqtSignal()
 
-    def __init__(self, theme_name="dark", parent=None):
+    def __init__(self, theme_mgr=None, parent=None):
         super().__init__(None)
-        self.theme_name = theme_name
+        self.mgr = theme_mgr or ThemeManager()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -550,13 +510,10 @@ class ScreenPicker(QWidget):
         magnified = self.pixmap.copy(src).scaled(mag, mag)
         dx = lp.x() + 25
         dy = lp.y() + 25
-        if dx + mag > self.width():
-            dx = lp.x() - mag - 25
         if dy + mag > self.height():
             dy = lp.y() - mag - 25
-        t = THEMES[self.theme_name]
         p.setPen(Qt.PenStyle.NoPen)
-        bg = QColor(t["bg_surface"])
+        bg = QColor(self.mgr["bg_overlay"])
         bg.setAlpha(210)
         p.setBrush(bg)
         p.drawEllipse(dx - 5, dy - 5, mag + 10, mag + 10)
@@ -565,7 +522,7 @@ class ScreenPicker(QWidget):
         p.setClipPath(path)
         p.drawPixmap(dx, dy, magnified)
         p.setClipping(False)
-        p.setPen(QPen(QColor(t["accent"]), 2))
+        p.setPen(QPen(QColor(self.mgr["accent"]), 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(dx, dy, mag, mag)
         cx, cy = dx + hm, dy + hm
@@ -579,11 +536,11 @@ class ScreenPicker(QWidget):
             c = self.image.pixelColor(lp)
             bx, by = dx + 8, dy + mag + 14
             p.setPen(Qt.PenStyle.NoPen)
-            box = QColor(t["bg_base"])
+            box = QColor(self.mgr["bg_base"])
             box.setAlpha(220)
             p.setBrush(box)
             p.drawRoundedRect(bx - 6, by - 15, 102, 22, 6, 6)
-            p.setPen(QColor(t["text_primary"]))
+            p.setPen(QColor(self.mgr["text_primary"]))
             p.drawText(bx, by, c.name().upper())
 
     def closeEvent(self, e):
@@ -661,17 +618,16 @@ class InputWithCopy(QWidget):
     def _reset_icon(self):
         self.copy_btn.setText("⎘")
 
-
-# ── Main app ───────────────────────────────────────────────────────────────────
+    # ── Main app ───────────────────────────────────────────────────────────────────
 
 
 class ColorPickerApp(QWidget):
     def __init__(self):
         super().__init__()
+        self.mgr = ThemeManager()
         self.setWindowTitle("Color")
         if os.path.exists(ICON_PATH):
             self.setWindowIcon(QIcon(ICON_PATH))
-        self.theme_name = "dark"
         self.hue, self.sat, self.val, self.alpha = 210.0, 0.8, 0.9, 1.0
         self.updating = False
         self.saved_colors = []
@@ -679,7 +635,8 @@ class ColorPickerApp(QWidget):
         self.setFixedWidth(320)
         self._build_ui()
         self.load_config()
-        self.apply_theme(self.theme_name)
+        self.mgr.theme_changed.connect(self.apply_theme)
+        self.apply_theme()
         self.sync_ui()
 
     def _build_ui(self):
@@ -944,7 +901,7 @@ class ColorPickerApp(QWidget):
         self.scroll_area.setVisible(has)
         self.palette_hint.setVisible(not has)
         self.palette_count_lbl.setText(str(len(self.saved_colors)))
-        self.flow_widget.set_colors(self.saved_colors, self.theme_name)
+        self.flow_widget.set_colors(self.saved_colors, self.mgr)
 
     def save_current_color(self):
         hex_str = self.hex_input.text().lower()
@@ -972,23 +929,29 @@ class ColorPickerApp(QWidget):
             self.alpha = c.alphaF()
             self.sync_ui()
 
-    def apply_theme(self, name):
-        self.theme_name = name
-        t = THEMES[name]
-        self.setStyleSheet(make_stylesheet(t))
-        self.bg_frame.setStyleSheet(
-            f"QWidget#root_bg {{ background-color: {t['bg_base']}; }}"
+    def apply_theme(self):
+        self.setStyleSheet(make_stylesheet(self.mgr))
+        self.preview_widget.set_checker_colors(
+            QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
         )
-        self.divider.setStyleSheet(f"background-color: {t['divider']};")
-        self.divider2.setStyleSheet(f"background-color: {t['divider']};")
-        self.toggle_btn.setText(t["toggle_icon"])
-        ca, cb = QColor(t["checker_a"]), QColor(t["checker_b"])
-        self.preview_widget.set_checker_colors(ca, cb)
-        self.alpha_slider.set_checker_colors(ca, cb)
-        self._refresh_palette_ui()
+        self.hue_slider.set_checker_colors(
+            QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
+        )
+        self.alpha_slider.set_checker_colors(
+            QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
+        )
+        self.swatch_flow.set_colors(self.saved_colors, self.mgr)
+        self.toggle_btn.setText("☀️" if self.mgr.is_dark else "🌙")
+        self.divider.setStyleSheet(f"background-color: {self.mgr['border']};")
+        self.divider2.setStyleSheet(f"background-color: {self.mgr['border']};")
+        self.update()
 
     def toggle_theme(self):
-        self.apply_theme("light" if self.theme_name == "dark" else "dark")
+        if "dark" in self.mgr.current_theme_name.lower():
+            self.mgr.load_theme("light")
+        else:
+            self.mgr.load_theme("midnight-marina")
+        self.mgr.theme_changed.emit()
         self.sync_ui()
 
     def load_config(self):
@@ -1000,7 +963,6 @@ class ColorPickerApp(QWidget):
                 self.sat = data.get("sat", 0.8)
                 self.val = data.get("val", 0.9)
                 self.alpha = data.get("alpha", 1.0)
-                self.theme_name = data.get("theme", "dark")
                 self.saved_colors = data.get("saved_colors", [])
             except Exception:
                 pass
@@ -1015,7 +977,7 @@ class ColorPickerApp(QWidget):
                         "sat": self.sat,
                         "val": self.val,
                         "alpha": self.alpha,
-                        "theme": self.theme_name,
+                        "theme": self.mgr.current_theme_name,
                         "saved_colors": self.saved_colors,
                     },
                     f,
@@ -1119,7 +1081,7 @@ class ColorPickerApp(QWidget):
         QTimer.singleShot(150, self._open_picker)
 
     def _open_picker(self):
-        self.sp = ScreenPicker(theme_name=self.theme_name)
+        self.sp = ScreenPicker(theme_mgr=self.mgr)
         self.sp.colorSelected.connect(self.on_screen_picked)
         self.sp.pickerClosed.connect(self.show)
         self.sp.show()
@@ -1132,10 +1094,9 @@ class ColorPickerApp(QWidget):
         self.sync_ui()
 
     def _flash_save_btn(self):
-        t = THEMES[self.theme_name]
         self.save_color_btn.setText("✓ Saved")
         self.save_color_btn.setStyleSheet(
-            f"QPushButton {{ background-color: {t['success_bg']}; color: {t['success_fg']}; border: 1px solid {t['success_border']}; padding: 2px 10px; border-radius: 6px; font-weight: 600; font-size: 11px; }}"
+            f"QPushButton {{ background-color: {self.mgr['success']}; color: {self.mgr['bg_base']}; border: 1px solid {self.mgr['success']}; padding: 2px 10px; border-radius: 6px; font-weight: 600; font-size: 11px; }}"
         )
         QTimer.singleShot(
             1500,
@@ -1149,6 +1110,10 @@ class ColorPickerApp(QWidget):
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    mgr = ThemeManager()
+    app.setPalette(mgr.get_palette())
+
     window = ColorPickerApp()
     window.show()
     sys.exit(app.exec())

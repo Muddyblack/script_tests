@@ -88,16 +88,13 @@ from .system_commands import (
     launch_file_ops as _launch_file_ops,
 )
 from .system_commands import (
-    launch_ip_calculator as _launch_ip_calculator,
-)
-from .system_commands import (
     launch_regex_helper as _launch_regex,
 )
 from .system_commands import (
-    log_to_chronos as _log_to_chronos,
+    launch_xexplorer as _launch_xexplorer,
 )
 from .system_commands import (
-    launch_xexplorer as _launch_xexplorer,
+    log_to_chronos as _log_to_chronos,
 )
 from .system_commands import (
     trigger_reindex as _trigger_reindex,
@@ -1232,13 +1229,6 @@ class NexusSearch(QWidget):
                     "#4f46e5",
                 ),
                 (
-                    "IP Calculator",
-                    "IP Subnet Calculator with CIDR support",
-                    "ip_calculator",
-                    "globe.svg",
-                    "#0ea5e9",
-                ),
-                (
                     "Color Picker",
                     "Hex & RGB preview + color tool",
                     "color_picker",
@@ -1444,7 +1434,6 @@ class NexusSearch(QWidget):
                 os.path.join(PROJECT_ROOT, "src", "archiver"),
                 os.path.join(PROJECT_ROOT, "src", "color_picker"),
                 os.path.join(PROJECT_ROOT, "src", "base64_tool"),
-                os.path.join(PROJECT_ROOT, "src", "ip_calculator"),
                 os.path.join(PROJECT_ROOT, "src", "chronos"),
                 os.path.join(APPDATA, "scripts"),
             ]
@@ -2045,8 +2034,6 @@ class NexusSearch(QWidget):
                     _launch_color_picker(self)
                 elif data["cmd"] == "base64_tool":
                     _launch_base64_tool(self)
-                elif data["cmd"] == "ip_calculator":
-                    _launch_ip_calculator(self)
                 elif data["cmd"] == "chronos_hub":
                     _launch_chronos(self)
                 elif data["cmd"] == "img_to_text":

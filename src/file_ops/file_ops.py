@@ -42,223 +42,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.common.theme import ThemeManager
+from src.common.theme_template import TOOL_SHEET
+
 COPY_BUFFER = 8 * 1024 * 1024
 
-# ─── Palette ──────────────────────────────────────────────────────────
-C = {
-    "bg": "#060910",
-    "surface": "#0c1017",
-    "panel": "#111722",
-    "border": "#1e2a3a",
-    "border2": "#243040",
-    "cyan": "#00d4ff",
-    "cyan_dim": "#006480",
-    "cyan_glow": "rgba(0,212,255,0.08)",
-    "green": "#00ff9d",
-    "green_dim": "#005c3a",
-    "red": "#ff4466",
-    "red_dim": "#5c0018",
-    "text": "#d0dcea",
-    "muted": "#4a6070",
-    "muted2": "#2a3a4a",
-}
-
-STYLESHEET = f"""
-/* ── Root ── */
-* {{ outline: none; }}
-QMainWindow, QWidget#root {{
-    background: {C["bg"]};
-}}
-
-/* ── Main card ── */
-QFrame#card {{
-    background: {C["surface"]};
-    border: 1px solid {C["border"]};
-    border-radius: 20px;
-}}
-
-/* ── Header labels ── */
-QLabel#title {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 4px;
-    color: {C["cyan"]};
-}}
-QLabel#sub {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 10px;
-    letter-spacing: 2px;
-    color: {C["muted"]};
-}}
-QLabel#section_label {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 9px;
-    letter-spacing: 3px;
-    color: {C["muted"]};
-}}
-QLabel#status {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    color: {C["muted"]};
-    padding: 2px 0;
-}}
-
-/* ── Drop zone ── */
-QLabel#drop_zone {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 12px;
-    letter-spacing: 1px;
-    color: {C["muted"]};
-    background: transparent;
-    border: 1px dashed {C["border2"]};
-    border-radius: 14px;
-    padding: 40px 20px;
-}}
-QLabel#drop_zone[active="true"] {{
-    color: {C["cyan"]};
-    border: 1px solid {C["cyan"]};
-    background: {C["cyan_glow"]};
-}}
-
-/* ── File list ── */
-QListWidget {{
-    background: {C["panel"]};
-    border: 1px solid {C["border"]};
-    border-radius: 12px;
-    padding: 4px;
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    color: {C["text"]};
-    selection-background-color: transparent;
-}}
-QListWidget::item {{
-    padding: 8px 12px;
-    border-radius: 8px;
-    border-bottom: 1px solid {C["border"]};
-    color: {C["text"]};
-}}
-QListWidget::item:last {{
-    border-bottom: none;
-}}
-QListWidget::item:selected {{
-    background: rgba(0,212,255,0.08);
-    color: {C["cyan"]};
-}}
-QListWidget::item:hover:!selected {{
-    background: rgba(255,255,255,0.03);
-}}
-QScrollBar:vertical {{
-    background: transparent;
-    width: 6px;
-    margin: 4px 2px;
-}}
-QScrollBar::handle:vertical {{
-    background: {C["border2"]};
-    border-radius: 3px;
-    min-height: 30px;
-}}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-
-/* ── Input ── */
-QLineEdit {{
-    background: {C["panel"]};
-    border: 1px solid {C["border"]};
-    border-radius: 10px;
-    padding: 9px 14px;
-    color: {C["text"]};
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    selection-background-color: {C["cyan_dim"]};
-}}
-QLineEdit:focus {{
-    border: 1px solid {C["cyan_dim"]};
-    background: {C["panel"]};
-}}
-QLineEdit::placeholder {{
-    color: {C["muted"]};
-}}
-
-/* ── Buttons — base ── */
-QPushButton {{
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    border-radius: 10px;
-    padding: 9px 20px;
-    border: 1px solid {C["border2"]};
-    background: {C["panel"]};
-    color: {C["muted"]};
-}}
-QPushButton:hover {{
-    color: {C["text"]};
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.04);
-}}
-QPushButton:pressed {{
-    background: rgba(255,255,255,0.02);
-}}
-QPushButton:disabled {{
-    opacity: 0.35;
-}}
-
-/* ── Buttons — accent variants ── */
-QPushButton#btn_copy {{
-    color: {C["green"]};
-    border: 1px solid rgba(0,255,157,0.25);
-    background: rgba(0,255,157,0.06);
-}}
-QPushButton#btn_copy:hover {{
-    background: rgba(0,255,157,0.12);
-    border-color: rgba(0,255,157,0.45);
-}}
-QPushButton#btn_copy:pressed {{
-    background: rgba(0,255,157,0.07);
-}}
-
-QPushButton#btn_move {{
-    color: {C["cyan"]};
-    border: 1px solid rgba(0,212,255,0.25);
-    background: rgba(0,212,255,0.06);
-}}
-QPushButton#btn_move:hover {{
-    background: rgba(0,212,255,0.12);
-    border-color: rgba(0,212,255,0.45);
-}}
-
-QPushButton#btn_delete {{
-    color: {C["red"]};
-    border: 1px solid rgba(255,68,102,0.25);
-    background: rgba(255,68,102,0.06);
-}}
-QPushButton#btn_delete:hover {{
-    background: rgba(255,68,102,0.13);
-    border-color: rgba(255,68,102,0.45);
-}}
-
-/* ── Progress bar ── */
-QProgressBar {{
-    background: {C["panel"]};
-    border: 1px solid {C["border"]};
-    border-radius: 6px;
-    height: 6px;
-    text-align: center;
-    font-size: 0px;
-}}
-QProgressBar::chunk {{
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-        stop:0 {C["cyan"]}, stop:1 {C["green"]});
-    border-radius: 5px;
-}}
-
-/* ── Divider ── */
-QFrame#divider {{
-    background: {C["border"]};
-    max-height: 1px;
-    border: none;
-}}
-"""
+# Palette and Stylesheet are now handled by ThemeManager and TOOL_SHEET
 
 
 # ─── Animated fade-in helper ──────────────────────────────────────────
@@ -279,6 +68,7 @@ class GlowProgressBar(QProgressBar):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.mgr = ThemeManager()
         self.setFixedHeight(4)
         self.setTextVisible(False)
         self._glow = 0.0
@@ -298,7 +88,7 @@ class GlowProgressBar(QProgressBar):
 
         # Track
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(C["panel"]))
+        p.setBrush(QColor(self.mgr["bg_overlay"]))
         path = QPainterPath()
         path.addRoundedRect(r.x(), r.y(), r.width(), r.height(), 2, 2)
         p.drawPath(path)
@@ -306,8 +96,8 @@ class GlowProgressBar(QProgressBar):
         if self.maximum() > 0 and self.value() > 0:
             fill_w = int(r.width() * self.value() / self.maximum())
             grad = QLinearGradient(0, 0, fill_w, 0)
-            grad.setColorAt(0, QColor("#00d4ff"))
-            grad.setColorAt(1, QColor("#00ff9d"))
+            grad.setColorAt(0, QColor(self.mgr["accent_pressed"]))
+            grad.setColorAt(1, QColor(self.mgr["success"]))
             p.setBrush(grad)
             chunk = QPainterPath()
             chunk.addRoundedRect(0, 0, fill_w, r.height(), 2, 2)
@@ -317,7 +107,8 @@ class GlowProgressBar(QProgressBar):
             import math
 
             alpha = int(30 + 20 * math.sin(self._glow))
-            glow_color = QColor(0, 212, 255, alpha)
+            glow_color = QColor(self.mgr["accent"])
+            glow_color.setAlpha(alpha)
             p.setBrush(glow_color)
             p.drawPath(chunk)
 
@@ -380,9 +171,13 @@ class FileOpsWorker(threading.Thread):
 
 # ─── Separator line ───────────────────────────────────────────────────
 def make_divider():
+    mgr = ThemeManager()
     f = QFrame()
     f.setObjectName("divider")
     f.setFrameShape(QFrame.Shape.HLine)
+    f.setStyleSheet(
+        f"background-color: {mgr['border']}; max-height: 1px; border: none;"
+    )
     return f
 
 
@@ -393,6 +188,7 @@ class FileOpsWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.mgr = ThemeManager()
         self.setWindowTitle("NEXUS FILE OPS")
         self.setMinimumSize(680, 580)
         self.resize(720, 600)
@@ -403,8 +199,83 @@ class FileOpsWindow(QMainWindow):
         self._progress_sig.connect(self._on_progress)
         self._done_sig.connect(self._on_done)
 
-        self.setStyleSheet(STYLESHEET)
+        self.mgr.theme_changed.connect(self._apply_theme)
         self._build_ui()
+        self._apply_theme()
+
+    def _apply_theme(self):
+        # Specific overrides for File Ops
+        file_ops_sheet = """
+            QLabel#title {
+                font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
+                font-size: 15px;
+                font-weight: 700;
+                letter-spacing: 4px;
+                color: {{accent}};
+            }
+            QLabel#sub {
+                font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
+                font-size: 10px;
+                letter-spacing: 2px;
+                color: {{text_secondary}};
+            }
+            QLabel#section_label {
+                font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
+                font-size: 9px;
+                letter-spacing: 3px;
+                color: {{text_secondary}};
+            }
+            QLabel#status {
+                font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
+                font-size: 11px;
+                color: {{text_secondary}};
+                padding: 2px 0;
+            }
+            QLabel#drop_zone {
+                font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
+                font-size: 12px;
+                letter-spacing: 1px;
+                color: {{text_secondary}};
+                background: transparent;
+                border: 1px dashed {{border_light}};
+                border-radius: 14px;
+                padding: 40px 20px;
+            }
+            QLabel#drop_zone[active="true"] {
+                color: {{accent}};
+                border: 1px solid {{accent}};
+                background: {{accent_glow}};
+            }
+            QPushButton#btn_copy {
+                color: {{success}};
+                border: 1px solid {{success_border}};
+                background: {{success_glow}};
+            }
+            QPushButton#btn_copy:hover {
+                background: {{success_hover_glow}};
+                border-color: {{success}};
+            }
+            QPushButton#btn_move {
+                color: {{accent}};
+                border: 1px solid {{accent_border}};
+                background: {{accent_glow}};
+            }
+            QPushButton#btn_move:hover {
+                background: {{accent_hover_glow}};
+                border-color: {{accent}};
+            }
+            QPushButton#btn_delete {
+                color: {{danger}};
+                border: 1px solid {{danger_border}};
+                background: {{danger_glow}};
+            }
+            QPushButton#btn_delete:hover {
+                background: {{danger_hover_glow}};
+                border-color: {{danger}};
+            }
+        """
+        self.mgr.apply_to_widget(self, TOOL_SHEET + file_ops_sheet)
+        self.status_dot.setStyleSheet(f"color: {self.mgr['success']}; font-size: 10px;")
 
     def _build_ui(self):
         root = QWidget()
@@ -440,7 +311,6 @@ class FileOpsWindow(QMainWindow):
         hdr.addStretch()
 
         self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet(f"color: {C['green']}; font-size: 10px;")
         hdr.addWidget(self.status_dot)
 
         self.status_lbl = QLabel(" READY")
@@ -613,7 +483,9 @@ class FileOpsWindow(QMainWindow):
                     size_str = f"  {sz} B"
 
             item = QListWidgetItem(f"{icon}   {os.path.basename(p)}{size_str}")
-            item.setForeground(QColor(C["cyan"] if is_dir else C["text"]))
+            item.setForeground(
+                QColor(self.mgr["accent"] if is_dir else self.mgr["text_primary"])
+            )
             self.file_list.addItem(item)
 
         has = len(self.source_paths) > 0
@@ -623,17 +495,17 @@ class FileOpsWindow(QMainWindow):
         count = len(self.source_paths)
         self._set_status(
             f"{count} ITEM{'S' if count != 1 else ''} QUEUED" if has else "READY",
-            C["muted"],
+            self.mgr["text_secondary"],
         )
 
     # ── Operations ────────────────────────────────────────────────────
     def _run_op(self, op_type: str):
         if not self.source_paths:
-            self._set_status("NO FILES SELECTED", C["red"])
+            self._set_status("NO FILES SELECTED", self.mgr["danger"])
             return
         dst = self.dst_input.text().strip()
         if op_type != "delete" and not dst:
-            self._set_status("SELECT A DESTINATION FIRST", C["red"])
+            self._set_status("SELECT A DESTINATION FIRST", self.mgr["danger"])
             return
 
         ops = []
@@ -649,8 +521,8 @@ class FileOpsWindow(QMainWindow):
         for b in [self.btn_copy, self.btn_move, self.btn_delete]:
             b.setEnabled(False)
 
-        self._set_status("WORKING…", C["cyan"])
-        self.status_dot.setStyleSheet(f"color: {C['cyan']}; font-size: 10px;")
+        self._set_status("WORKING…", self.mgr["accent"])
+        self.status_dot.setStyleSheet(f"color: {self.mgr['accent']}; font-size: 10px;")
 
         self.worker = FileOpsWorker(
             ops,
@@ -661,18 +533,24 @@ class FileOpsWindow(QMainWindow):
 
     def _on_progress(self, done, total, name):
         self.progress.setValue(done)
-        self._set_status(f"{name}  [{done}/{total}]", C["cyan"])
+        self._set_status(f"{name}  [{done}/{total}]", self.mgr["accent"])
 
     def _on_done(self, errors):
         for b in [self.btn_copy, self.btn_move, self.btn_delete]:
             b.setEnabled(True)
 
         if errors:
-            self._set_status(f"{len(errors)} ERROR(S) — CHECK PERMISSIONS", C["red"])
-            self.status_dot.setStyleSheet(f"color: {C['red']}; font-size: 10px;")
+            self._set_status(
+                f"{len(errors)} ERROR(S) — CHECK PERMISSIONS", self.mgr["danger"]
+            )
+            self.status_dot.setStyleSheet(
+                f"color: {self.mgr['danger']}; font-size: 10px;"
+            )
         else:
-            self._set_status("ALL DONE  ✓", C["green"])
-            self.status_dot.setStyleSheet(f"color: {C['green']}; font-size: 10px;")
+            self._set_status("ALL DONE  ✓", self.mgr["success"])
+            self.status_dot.setStyleSheet(
+                f"color: {self.mgr['success']}; font-size: 10px;"
+            )
             self.source_paths.clear()
             self._refresh_list()
 
@@ -680,8 +558,10 @@ class FileOpsWindow(QMainWindow):
         QTimer.singleShot(
             4000,
             lambda: (
-                self._set_status("READY", C["muted"]),
-                self.status_dot.setStyleSheet(f"color: {C['green']}; font-size: 10px;"),
+                self._set_status("READY", self.mgr["text_secondary"]),
+                self.status_dot.setStyleSheet(
+                    f"color: {self.mgr['success']}; font-size: 10px;"
+                ),
             ),
         )
 
@@ -697,19 +577,8 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    # Try to set a nice base palette so Fusion doesn't bleed through
-    from PyQt6.QtGui import QPalette
-
-    pal = app.palette()
-    pal.setColor(QPalette.ColorRole.Window, QColor(C["bg"]))
-    pal.setColor(QPalette.ColorRole.WindowText, QColor(C["text"]))
-    pal.setColor(QPalette.ColorRole.Base, QColor(C["panel"]))
-    pal.setColor(QPalette.ColorRole.AlternateBase, QColor(C["surface"]))
-    pal.setColor(QPalette.ColorRole.Button, QColor(C["panel"]))
-    pal.setColor(QPalette.ColorRole.ButtonText, QColor(C["text"]))
-    pal.setColor(QPalette.ColorRole.Highlight, QColor(C["cyan_dim"]))
-    pal.setColor(QPalette.ColorRole.HighlightedText, QColor(C["cyan"]))
-    app.setPalette(pal)
+    mgr = ThemeManager()
+    app.setPalette(mgr.get_palette())
 
     win = FileOpsWindow()
     win.show()

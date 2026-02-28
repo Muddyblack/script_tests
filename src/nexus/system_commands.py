@@ -283,12 +283,6 @@ def launch_base64_tool(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.base64_tool.base64_tool"])
 
 
-def launch_ip_calculator(nexus) -> None:
-    """Launch the Nexus IP Calculator."""
-    nexus.status_lbl.setText("🌐 Launching IP Calculator...")
-    subprocess.Popen([sys.executable, "-m", "src.ip_calculator.ip_calculator"])
-
-
 def launch_chronos(nexus) -> None:
     """Launch the Chronos Hub."""
     nexus.status_lbl.setText("⏳ Launching Chronos Hub...")

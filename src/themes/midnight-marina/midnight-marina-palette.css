@@ -1,0 +1,78 @@
+/* 
+  Comprehensive Midnight Marina Palette
+  Derived from the original VS Code theme.
+*/
+:root {
+  /* === Background Layers === */
+  --bg: #03233A;
+  /* Main Background (Editor) */
+  --bg-1: #03233A;
+  /* Surface 1 */
+  --bg-2: #021A2C;
+  /* Surface 2 (Activity Bar/Sidebar) */
+  --bg-3: #01121F;
+  /* Surface 3 (Overlay/Deep) */
+  --bg-4: #032842;
+  /* Hover State */
+  --bg-selection: #074F81;
+  /* Selection highlight */
+
+  /* === Accents === */
+  --accent: #0EADCF;
+  /* Primary Cyan Accent */
+  --accent-bright: #55FFCC;
+  /* Prominent Mint Accent */
+  --accent-glow: rgba(14, 173, 207, 0.2);
+  --accent-bright-glow: rgba(85, 255, 204, 0.25);
+
+  /* === Primary Hues === */
+  --gold: #FFE073;
+  --gold-bright: #FFEE88;
+  --teal: #22D4FF;
+  /* Brighter than accent, used for info */
+  --cyan: #24EAF7;
+  /* ANSI Cyan shade */
+  --rose: #E52E2E;
+  /* ANSI Red shade */
+  --error: #D95C5C;
+  /* VS Code Red shade */
+  --sage: #44FFB1;
+  /* Success Green */
+  --mint: #47FF9C;
+  /* Cursor Green */
+  --lavender: #aa82ff;
+  /* Purple shade */
+  --sky: #0FC5ED;
+  /* ANSI Blue shade */
+
+  /* === Alpha Variants === */
+  --gold-dim: rgba(255, 224, 115, 0.1);
+  --gold-glow: rgba(255, 224, 115, 0.2);
+  --teal-dim: rgba(34, 212, 255, 0.15);
+  --rose-dim: rgba(229, 46, 46, 0.15);
+  --error-dim: rgba(217, 92, 92, 0.15);
+  --sage-dim: rgba(68, 255, 177, 0.15);
+  --lavender-dim: rgba(170, 130, 255, 0.15);
+  --sky-dim: rgba(15, 197, 237, 0.15);
+
+  /* === Texts === */
+  --text: #CBE0F0;
+  /* Primary Editor Text */
+  --text-2: #B8D0E0;
+  /* Common UI Text */
+  --text-3: #A6BCC9;
+  /* Secondary/Labels */
+  --text-4: #8295A0;
+  /* Descriptions */
+
+  /* === Borders === */
+  --border: #33638059;
+  --border-h: #0EADCF80;
+  --border-hh: #22D4FF;
+
+  /* === Effects === */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.8);
+  --grain-opacity: 0.025;
+}

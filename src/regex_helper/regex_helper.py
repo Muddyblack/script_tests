@@ -32,6 +32,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.common.theme import ThemeManager
+
 # --- CONFIGURATION & DATABASE ---
 DB_PATH = os.path.join(os.getenv("APPDATA", "."), "regex_sandbox.db")
 
@@ -214,6 +216,7 @@ class CodeGenDialog(QDialog):
 class RegexSandbox(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.mgr = ThemeManager()
         init_db()
         seed_defaults()
         self.setWindowTitle("Regex Sandbox & Library | Offline Pattern Tester")
@@ -222,10 +225,9 @@ class RegexSandbox(QMainWindow):
         self.base_font = QFont("Segoe UI", 10)
         self.code_font = QFont("Consolas", 11)
         self.current_pattern_id = None
-        self.dark_mode = True  # Default
 
-        self.load_settings()
         self.setup_ui()
+        self.mgr.theme_changed.connect(self.apply_theme)
         self.apply_theme()
         self.load_patterns()
 
@@ -525,218 +527,115 @@ class RegexSandbox(QMainWindow):
         layout.addWidget(cheat_text)
         self.tabs.addTab(cheat_page, "Cheat Sheet")
 
-    def load_settings(self):
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM settings WHERE key='theme'")
-            res = cursor.fetchone()
-            if res:
-                self.dark_mode = res[0] == "dark"
-
-    def save_settings(self):
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT OR REPLACE INTO settings VALUES (?, ?)",
-                ("theme", "dark" if self.dark_mode else "light"),
-            )
-            conn.commit()
-
     def toggle_theme(self):
-        self.dark_mode = not self.dark_mode
-        self.apply_theme()
-        self.save_settings()
+        if "dark" in self.mgr.current_theme_name.lower():
+            self.mgr.load_theme("light")
+        else:
+            self.mgr.load_theme("midnight-marina")
+        self.mgr.theme_changed.emit()
         self.trigger_evaluation()  # Re-evaluate to update text highlights
 
     def apply_theme(self):
-        if self.dark_mode:
-            self.btn_theme.setText("☀️ Light Mode")
-            self.highlight_bg = "#2563eb"
-            self.highlight_fg = "#ffffff"
-            self.setStyleSheet("""
-                QMainWindow { background-color: #0b0e14; }
-                QWidget { background-color: #0b0e14; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; }
+        # Update button text based on theme
+        is_dark = self.mgr.is_dark
+        self.btn_theme.setText("☀️ Light Mode" if is_dark else "🌙 Dark Mode")
 
-                QFrame#sidebar {
-                    background-color: #121620;
-                    border-right: 1px solid #1e293b;
-                }
+        # We can use the manager to apply the theme.
+        # However, Regex Helper has a very specific complex stylesheet.
+        # I'll convert it to use manager variables.
 
-                QLabel#section_title { color: #94a3b8; font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }
-                QLabel#mode_label { color: #94a3b8; }
+        style = f"""
+                QMainWindow {{ background-color: {self.mgr["bg_base"]}; }}
+                QWidget {{ background-color: {self.mgr["bg_base"]}; color: {self.mgr["text_primary"]}; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; }}
 
-                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
-                    background-color: #1a1f2e;
-                    border: 1px solid #334155;
+                QFrame#sidebar {{
+                    background-color: {self.mgr["bg_elevated"]};
+                    border-right: 1px solid {self.mgr["border"]};
+                }}
+
+                QLabel#section_title {{ color: {self.mgr["text_secondary"]}; font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }}
+                QLabel#mode_label {{ color: {self.mgr["text_secondary"]}; }}
+
+                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{
+                    background-color: {self.mgr["bg_overlay"]};
+                    border: 1px solid {self.mgr["border"]};
                     padding: 12px;
                     border-radius: 8px;
-                    color: #ffffff;
+                    color: {self.mgr["text_primary"]};
                     font-size: 13px;
-                }
-                QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus { border: 1px solid #3b82f6; background-color: #0f172a; }
-                QComboBox::drop-down { border: none; }
+                }}
+                QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 1px solid {self.mgr["accent"]}; background-color: {self.mgr["bg_base"]}; }}
+                QComboBox::drop-down {{ border: none; }}
 
-                QCheckBox { color: #94a3b8; spacing: 8px; }
-                QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #334155; background-color: #0f172a; }
-                QCheckBox::indicator:checked { background-color: #3b82f6; border: 1.5px solid #3b82f6; }
+                QCheckBox {{ color: {self.mgr["text_secondary"]}; spacing: 8px; }}
+                QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {self.mgr["border"]}; background-color: {self.mgr["bg_base"]}; }}
+                QCheckBox::indicator:checked {{ background-color: {self.mgr["accent"]}; border: 1.5px solid {self.mgr["accent"]}; }}
 
-                QPushButton {
-                    background-color: #1e293b;
-                    border: 1px solid #334155;
+                QPushButton {{
+                    background-color: {self.mgr["bg_elevated"]};
+                    border: 1px solid {self.mgr["border"]};
                     padding: 8px 12px;
                     border-radius: 6px;
                     font-weight: 600;
-                    color: #f8fafc;
+                    color: {self.mgr["text_primary"]};
                     font-size: 11px;
-                }
-                QPushButton:hover { background-color: #334155; border: 1px solid #475569; }
-                QPushButton:pressed { background-color: #0f172a; }
+                }}
+                QPushButton:hover {{ background-color: {self.mgr["bg_control_hov"]}; border: 1px solid {self.mgr["border_light"]}; }}
+                QPushButton:pressed {{ background-color: {self.mgr["bg_control_prs"]}; }}
 
-                QPushButton#accent_btn {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6);
-                    color: white;
+                QPushButton#accent_btn {{
+                    background: {self.mgr["accent"]};
+                    color: {self.mgr["text_on_accent"]};
                     border: none;
                     font-size: 12px;
-                }
-                QPushButton#accent_btn:hover { background: #3b82f6; }
+                }}
+                QPushButton#accent_btn:hover {{ background: {self.mgr["accent_hover"]}; }}
 
-                QPushButton#danger_btn {
-                    background-color: rgba(239, 68, 68, 0.1);
-                    color: #f87171;
-                    border: 1px solid rgba(239, 68, 68, 0.2);
-                }
-                QPushButton#danger_btn:hover { background-color: rgba(239, 68, 68, 0.2); }
+                QPushButton#danger_btn {{
+                    background-color: {self.mgr["bg_overlay"]};
+                    color: {self.mgr["danger"]};
+                    border: 1px solid {self.mgr["danger"]};
+                }}
 
-                QListWidget {
+                QListWidget {{
                     background-color: transparent;
                     border: none;
                     outline: none;
-                }
-                QListWidget::item {
-                    background-color: #1a1f2e;
+                }}
+                QListWidget::item {{
+                    background-color: {self.mgr["bg_overlay"]};
                     padding: 6px 10px;
                     border-radius: 5px;
                     margin-bottom: 3px;
                     border: 1px solid transparent;
-                }
-                QListWidget::item:hover { background-color: #242b3d; border: 1px solid #334155; }
-                QListWidget::item:selected { background-color: #1e293b; color: #3b82f6; border: 1px solid #3b82f6; }
+                }}
+                QListWidget::item:hover {{ background-color: {self.mgr["bg_control_hov"]}; border: 1px solid {self.mgr["border"]}; }}
+                QListWidget::item:selected {{ background-color: {self.mgr["bg_elevated"]}; color: {self.mgr["accent"]}; border: 1px solid {self.mgr["accent"]}; }}
 
-                QTabWidget::pane { border: 1px solid #1e293b; top: -1px; background-color: #0b0e14; }
-                QTabBar::tab { background: #121620; border: 1px solid #1e293b; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: #94a3b8; font-weight: bold; margin-right: 2px; }
-                QTabBar::tab:selected { background: #0b0e14; color: #3b82f6; border-bottom: 2px solid #3b82f6; }
-                QTabBar::tab:hover { background: #1a1f2e; }
+                QTabWidget::pane {{ border: 1px solid {self.mgr["border"]}; top: -1px; background-color: {self.mgr["bg_base"]}; }}
+                QTabBar::tab {{ background: {self.mgr["bg_elevated"]}; border: 1px solid {self.mgr["border"]}; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: {self.mgr["text_secondary"]}; font-weight: bold; margin-right: 2px; }}
+                QTabBar::tab:selected {{ background: {self.mgr["bg_base"]}; color: {self.mgr["accent"]}; border-bottom: 2px solid {self.mgr["accent"]}; }}
+                QTabBar::tab:hover {{ background: {self.mgr["bg_overlay"]}; }}
 
-                QTableWidget { background-color: #1a1f2e; border: 1px solid #334155; border-radius: 8px; color: #ffffff; gridline-color: transparent; outline: none; }
-                QHeaderView::section { background-color: #121620; padding: 8px; border: none; font-weight: bold; color: #94a3b8; border-bottom: 1px solid #334155; }
-                QTableWidget::item { padding: 5px; }
-                QTableWidget::item:selected { background-color: #2563eb; color: white; }
+                QTableWidget {{ background-color: {self.mgr["bg_overlay"]}; border: 1px solid {self.mgr["border"]}; border-radius: 8px; color: {self.mgr["text_primary"]}; gridline-color: transparent; outline: none; }}
+                QHeaderView::section {{ background-color: {self.mgr["bg_elevated"]}; padding: 8px; border: none; font-weight: bold; color: {self.mgr["text_secondary"]}; border-bottom: 1px solid {self.mgr["border"]}; }}
+                QTableWidget::item {{ padding: 5px; }}
+                QTableWidget::item:selected {{ background-color: {self.mgr["accent"]}; color: {self.mgr["text_on_accent"]}; }}
 
-                QProgressBar { background-color: #1a1f2e; border: none; border-radius: 2px; }
-                QProgressBar::chunk { background-color: #3b82f6; border-radius: 2px; }
+                QProgressBar {{ background-color: {self.mgr["bg_overlay"]}; border: none; border-radius: 2px; }}
+                QProgressBar::chunk {{ background-color: {self.mgr["accent"]}; border-radius: 2px; }}
 
-                QScrollBar:vertical {
+                QScrollBar:vertical {{
                     border: none; background: transparent;
                     width: 4px; margin: 0px;
-                }
-                QScrollBar::handle:vertical {
-                    background: #334155; border-radius: 2px; min-height: 40px;
-                }
-                QScrollBar::handle:vertical:hover { background: #475569; }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-            """)
-        else:
-            self.btn_theme.setText("🌙 Dark Mode")
-            self.highlight_bg = "#bfdbfe"
-            self.highlight_fg = "#1e3a8a"
-            self.setStyleSheet("""
-                QMainWindow { background-color: #f8fafc; }
-                QWidget { background-color: #f8fafc; color: #1e293b; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
-
-                QFrame#sidebar {
-                    background-color: #ffffff;
-                    border-right: 1px solid #e2e8f0;
-                }
-
-                QLabel#section_title { color: #64748b; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }
-                QLabel#mode_label { color: #64748b; }
-
-                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
-                    background-color: #ffffff;
-                    border: 1px solid #e2e8f0;
-                    padding: 12px;
-                    border-radius: 8px;
-                    color: #1e293b;
-                    font-size: 14px;
-                }
-                QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus { border: 1px solid #3b82f6; background-color: #f1f5f9; }
-                QComboBox::drop-down { border: none; }
-
-                QCheckBox { color: #64748b; spacing: 8px; }
-                QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #cbd5e1; background-color: #ffffff; }
-                QCheckBox::indicator:checked { background-color: #3b82f6; border: 1.5px solid #3b82f6; }
-
-                QPushButton {
-                    background-color: #f1f5f9;
-                    border: 1px solid #e2e8f0;
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    font-weight: 600;
-                    color: #475569;
-                    font-size: 12px;
-                }
-                QPushButton:hover { background-color: #e2e8f0; border: 1px solid #cbd5e1; }
-                QPushButton:pressed { background-color: #cbd5e1; }
-
-                QPushButton#accent_btn {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6);
-                    color: white;
-                    border: none;
-                }
-                QPushButton#accent_btn:hover { background: #1d4ed8; }
-
-                QPushButton#danger_btn {
-                    background-color: #fef2f2;
-                    color: #ef4444;
-                    border: 1px solid #fee2e2;
-                }
-                QPushButton#danger_btn:hover { background-color: #fee2e2; }
-
-                QListWidget {
-                    background-color: transparent;
-                    border: none;
-                    outline: none;
-                }
-                QListWidget::item {
-                    background-color: #ffffff;
-                    padding: 6px 10px;
-                    border-radius: 6px;
-                    margin-bottom: 4px;
-                    border: 1px solid #f1f5f9;
-                }
-                QListWidget::item:hover { background-color: #f1f5f9; border: 1px solid #e2e8f0; }
-                QListWidget::item:selected { background-color: #eff6ff; color: #2563eb; border: 1px solid #3b82f6; }
-
-                QTabWidget::pane { border: 1px solid #e2e8f0; top: -1px; background-color: #f8fafc; }
-                QTabBar::tab { background: #f1f5f9; border: 1px solid #e2e8f0; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: #64748b; font-weight: bold; margin-right: 2px; }
-                QTabBar::tab:selected { background: #f8fafc; color: #2563eb; border-bottom: 2px solid #2563eb; }
-
-                QTableWidget { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; color: #1e293b; gridline-color: transparent; }
-                QHeaderView::section { background-color: #f1f5f9; padding: 8px; border: none; font-weight: bold; color: #64748b; border-bottom: 1px solid #e2e8f0; }
-
-                QProgressBar { background-color: #e2e8f0; border: none; border-radius: 2px; }
-                QProgressBar::chunk { background-color: #3b82f6; border-radius: 2px; }
-
-                QScrollBar:vertical {
-                    border: none; background: rgba(0,0,0,0.03);
-                    width: 4px; border-radius: 2px;
-                }
-                QScrollBar::handle:vertical {
-                    background: #e2e8f0; border-radius: 2px; min-height: 30px;
-                }
-                QScrollBar::handle:vertical:hover { background: #cbd5e1; }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-            """)
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {self.mgr["border_light"]}; border-radius: 2px; min-height: 40px;
+                }}
+        """
+        self.setStyleSheet(style)
+        self.highlight_bg = self.mgr["accent"]
+        self.highlight_fg = self.mgr["text_on_accent"]
 
     # --- REGEX EVALUATION ---
     def trigger_evaluation(self):

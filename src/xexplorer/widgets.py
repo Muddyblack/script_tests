@@ -2,14 +2,13 @@
 
 import shutil
 
-from PyQt6.QtCore import QRect, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QRect, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
     QCursor,
     QFont,
     QPainter,
-    QPainterPath,
     QPen,
     QPixmap,
 )
@@ -25,14 +24,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-try:
-    from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
-
-    WATCHDOG_AVAILABLE = True
-except ImportError:
-    WATCHDOG_AVAILABLE = False
 
 from src.xexplorer.icons import Icons
 from src.xexplorer.theme import Theme
@@ -314,6 +305,7 @@ class ChipBtn(QPushButton):
 #  TOGGLE SWITCH
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ToggleSwitch(QWidget):
     toggled = pyqtSignal(bool)
 
@@ -346,7 +338,9 @@ class ToggleSwitch(QWidget):
         acc = QColor(T["accent"] if self._checked else T["bg_control"])
         p.setBrush(QBrush(acc))
         p.setPen(QPen(QColor(T["border"]), 1))
-        p.drawRoundedRect(0, 3, self._W, self._H - 6, (self._H - 6) // 2, (self._H - 6) // 2)
+        p.drawRoundedRect(
+            0, 3, self._W, self._H - 6, (self._H - 6) // 2, (self._H - 6) // 2
+        )
         p.setBrush(QBrush(QColor("#ffffff")))
         p.setPen(Qt.PenStyle.NoPen)
         thumb_x = self._W - self._H + 2 if self._checked else 2
@@ -357,6 +351,7 @@ class ToggleSwitch(QWidget):
 # ─────────────────────────────────────────────────────────────────────────────
 #  IGNORE ITEM WIDGET
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class IgnoreItemWidget(QWidget):
     stateChanged = pyqtSignal(bool)
@@ -387,14 +382,13 @@ class IgnoreItemWidget(QWidget):
         self._toggle._theme = theme
         self._toggle.update()
         if theme:
-            self._lbl.setStyleSheet(
-                f"color: {theme['text_primary']}; font-size: 12px;"
-            )
+            self._lbl.setStyleSheet(f"color: {theme['text_primary']}; font-size: 12px;")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  DRIVE ITEM WIDGET
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class _LetterBadge(QWidget):
     def __init__(self, letter: str, theme=None, parent=None):
@@ -446,8 +440,8 @@ class DriveWidget(QWidget):
 
         self._has_bar = total > 0
         if self._has_bar:
-            used_gb = used / (1024 ** 3)
-            total_gb = total / (1024 ** 3)
+            used_gb = used / (1024**3)
+            total_gb = total / (1024**3)
             self._size_lbl = QLabel(f"{used_gb:.1f} GB / {total_gb:.1f} GB")
         else:
             self._size_lbl = QLabel("")
@@ -474,9 +468,7 @@ class DriveWidget(QWidget):
         self._name_lbl.setStyleSheet(
             f"color: {T['text_primary']}; font-size: 13px; font-weight: 600;"
         )
-        self._size_lbl.setStyleSheet(
-            f"color: {T['text_secondary']}; font-size: 11px;"
-        )
+        self._size_lbl.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px;")
         if self._has_bar:
             self._bar.setStyleSheet(
                 f"QProgressBar {{ background: {T['border']}; border: none; border-radius: 1px; }}"
@@ -493,6 +485,7 @@ class DriveWidget(QWidget):
 # ─────────────────────────────────────────────────────────────────────────────
 #  EMPTY STATE WIDGET
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class EmptyStateWidget(QWidget):
     run_indexer = pyqtSignal()
@@ -570,9 +563,7 @@ class EmptyStateWidget(QWidget):
         self._title.setStyleSheet(
             f"color: {T['text_primary']}; font-size: 17px; font-weight: 600;"
         )
-        self._sub.setStyleSheet(
-            f"color: {T['text_secondary']}; font-size: 13px;"
-        )
+        self._sub.setStyleSheet(f"color: {T['text_secondary']}; font-size: 13px;")
         self._btn_clear.setStyleSheet(
             f"QPushButton {{ background: {T['bg_control']}; border: 1px solid {T['border_light']};"
             f" border-radius: 6px; padding: 6px 18px; color: {T['text_secondary']}; font-size: 13px; }}"
