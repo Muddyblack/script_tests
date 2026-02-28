@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QKeySequence, QShortcut
+from PyQt6.QtGui import QColor, QKeySequence, QShortcut, QIcon
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -474,6 +474,13 @@ class ChronosApp(QMainWindow):
         self.mgr = ThemeManager()
         init_db()
         self.setWindowTitle("Chronos Hub Ultra")
+        try:
+            from src.common.config import ICON_PATH
+
+            if os.path.exists(ICON_PATH):
+                self.setWindowIcon(QIcon(ICON_PATH))
+        except ImportError:
+            pass
         self.resize(1200, 900)
 
         self.view = QWebEngineView()
@@ -521,7 +528,9 @@ class ChronosApp(QMainWindow):
         js_css += f"--text: {self.mgr['text_primary']};"
         js_css += f"--border: {self.mgr['border']};"
         js_css += f"--accent-primary: {self.mgr['accent']};"
-        js_css += "--grain-opacity: 0.025;" if self.mgr.is_dark else "--grain-opacity: 0.015;"
+        js_css += (
+            "--grain-opacity: 0.025;" if self.mgr.is_dark else "--grain-opacity: 0.015;"
+        )
 
         script = f"document.documentElement.style.cssText += `{js_css}`;"
         self.view.page().runJavaScript(script)
@@ -546,6 +555,10 @@ class ChronosApp(QMainWindow):
 
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.chronos")
     app = QApplication(sys.argv)
     window = ChronosApp()
     window.show()

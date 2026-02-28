@@ -52,16 +52,6 @@ from src.common.config import ASSETS_DIR
 from src.common.config import X_EXPLORER_DB as DB_PATH
 from src.common.search_engine import SearchEngine
 from src.file_ops.file_ops import FileOpsWindow
-
-try:
-    from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
-
-    WATCHDOG_AVAILABLE = True
-except ImportError:
-    WATCHDOG_AVAILABLE = False
-
-
 from src.common.theme import ThemeManager
 from src.xexplorer.database import init_db
 from src.xexplorer.delegates import DetailsDelegate
@@ -79,6 +69,14 @@ from src.xexplorer.widgets import (
     SearchBar,
     SidebarList,
 )
+
+try:
+    from watchdog.events import FileSystemEventHandler  # noqa: F401
+    from watchdog.observers import Observer
+
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
 
 
 class XExplorer(QMainWindow):
@@ -221,13 +219,6 @@ class XExplorer(QMainWindow):
         self._rb_clear.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._rb_clear.clicked.connect(self.clear_index)
 
-        self._rb_theme = QPushButton()
-        self._rb_theme.setObjectName("action_btn_icon")
-        self._rb_theme.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._rb_theme.clicked.connect(self.toggle_theme)
-        self._rb_theme.setFixedSize(32, 32)
-        self._rb_theme.setToolTip("Toggle theme")
-
         self._btn_add_folder = QPushButton("+ Add Folder")
         self._btn_add_folder.setObjectName("action_btn_accent")
         self._btn_add_folder.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -237,7 +228,6 @@ class XExplorer(QMainWindow):
             self._rb_index,
             self._rb_stop,
             self._rb_clear,
-            self._rb_theme,
             self._btn_add_folder,
         ]:
             rbl.addWidget(w)
@@ -800,12 +790,6 @@ class XExplorer(QMainWindow):
         """
         self.setStyleSheet(qss)
 
-        # Theme toggle icon
-        moon_px = Icons.moon(20) if T.dark else Icons.sun(20)
-        icon = QIcon(moon_px)
-        self._rb_theme.setIcon(icon)
-        self._rb_theme.setIconSize(QSize(18, 18))
-
         # ── Windows Title Bar & Palette Sync ──
         if sys.platform == "win32":
             try:
@@ -981,12 +965,6 @@ class XExplorer(QMainWindow):
         for rule in sorted(current.keys(), key=str.lower):
             self._add_ignore_item(rule, current[rule] == "1")
 
-        c.execute("SELECT value FROM settings WHERE key='theme'")
-        res = c.fetchone()
-        if res:
-            theme_name = "light" if res[0] == "light" else "midnight-marina"
-            ThemeManager().load_theme(theme_name)
-
         self.save_settings()
         conn.close()
 
@@ -1020,10 +998,7 @@ class XExplorer(QMainWindow):
         c.execute(
             "INSERT OR REPLACE INTO settings VALUES(?,?)", ("ignore", "|".join(ignores))
         )
-        c.execute(
-            "INSERT OR REPLACE INTO settings VALUES(?,?)",
-            ("theme", "light" if not ThemeManager().is_dark else "dark"),
-        )
+
         conn.commit()
         conn.close()
 
@@ -1052,9 +1027,9 @@ class XExplorer(QMainWindow):
 
             bitmask = windll.kernel32.GetLogicalDrives()
             drives = [
-                f"{l}:\\"
-                for l in string.ascii_uppercase
-                if bitmask & (1 << ord(l) - 65)
+                f"{letter}:\\"
+                for letter in string.ascii_uppercase
+                if bitmask & (1 << ord(letter) - 65)
             ]
         except Exception:
             drives = ["/"]  # Linux fallback
@@ -1066,7 +1041,6 @@ class XExplorer(QMainWindow):
         added = []
         for d in drives:
             if d not in existing:
-
                 letter = d[0].upper() if d else "?"
                 # Friendly label e.g. "System C:\" or "Data D:\"
                 label = f"{letter}:\\"
@@ -1499,14 +1473,6 @@ class XExplorer(QMainWindow):
             )
 
     # ──────────────────────────────────────────────────────────────────────────
-    #  THEME TOGGLE
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def toggle_theme(self):
-        self.T.toggle()  # switches ThemeManager between midnight-marina / light
-        self.save_settings()
-
-    # ──────────────────────────────────────────────────────────────────────────
     #  KEYBOARD SHORTCUTS
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -1572,6 +1538,10 @@ def main():
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.xexplorer")
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")

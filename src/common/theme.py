@@ -32,6 +32,7 @@ def ThemeManager() -> "_ThemeManager":
 # The real class
 # ---------------------------------------------------------------------------
 
+
 class _ThemeManager(QObject):
     """Singleton theme manager — do NOT instantiate directly; use ThemeManager()."""
 
@@ -63,6 +64,8 @@ class _ThemeManager(QObject):
         watched = self._watcher.files()
         if watched:
             self._watcher.removePaths(watched)
+        if os.path.exists(self.settings_file):
+            self._watcher.addPath(self.settings_file)
         theme_path = os.path.join(self.themes_dir, self.current_theme_name)
         if os.path.exists(theme_path):
             for fname in os.listdir(theme_path):
@@ -70,7 +73,12 @@ class _ThemeManager(QObject):
                     self._watcher.addPath(os.path.join(theme_path, fname))
 
     def _on_file_changed(self, path: str):
-        self.load_theme(self.current_theme_name)
+        # Normalizes to handle Windows paths correctly
+        if os.path.normpath(path) == os.path.normpath(self.settings_file):
+            self.load_settings()
+            self.load_theme(self.current_theme_name, save=False)
+        else:
+            self.load_theme(self.current_theme_name, save=False)
         self.theme_changed.emit()
 
     # ------------------------------------------------------------------
@@ -94,7 +102,7 @@ class _ThemeManager(QObject):
     # ------------------------------------------------------------------
     # Theme loading
     # ------------------------------------------------------------------
-    def load_theme(self, name: str):
+    def load_theme(self, name: str, save: bool = True):
         theme_file = os.path.join(self.themes_dir, name, "theme.json")
         if not os.path.exists(theme_file):
             self.theme_data = self._default_dark()
@@ -103,7 +111,8 @@ class _ThemeManager(QObject):
             with open(theme_file) as f:
                 self.theme_data = json.load(f)
             self.current_theme_name = name
-            self.save_settings()
+            if save:
+                self.save_settings()
             self._update_watcher()
         except Exception as e:
             print(f"[ThemeManager] Error loading theme '{name}': {e}")
@@ -162,11 +171,11 @@ class _ThemeManager(QObject):
         colors = self.theme_data.get("colors", {})
         if key in colors:
             return colors[key]
-        
+
         # Fallbacks for specific common keys
         if key == "row_alt":
             return colors.get("bg_overlay", colors.get("bg_base", "#1c1c1c"))
-        
+
         return colors.get("bg_base", "#ff00ff")
 
     @property
@@ -191,12 +200,12 @@ class _ThemeManager(QObject):
                 pal.setColor(role, QColor(T[key]))
 
         R = QPalette.ColorRole
-        _set(R.Window,          "bg_base")
-        _set(R.WindowText,      "text_primary")
-        _set(R.Base,            "bg_elevated")
-        _set(R.Text,            "text_primary")
-        _set(R.Button,          "bg_control")
-        _set(R.ButtonText,      "text_primary")
-        _set(R.Highlight,       "accent")
+        _set(R.Window, "bg_base")
+        _set(R.WindowText, "text_primary")
+        _set(R.Base, "bg_elevated")
+        _set(R.Text, "text_primary")
+        _set(R.Button, "bg_control")
+        _set(R.ButtonText, "text_primary")
+        _set(R.Highlight, "accent")
         _set(R.HighlightedText, "text_on_accent")
         return pal

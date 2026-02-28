@@ -24,6 +24,7 @@ from PyQt6.QtGui import (
     QLinearGradient,
     QPainter,
     QPainterPath,
+    QIcon,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -190,6 +191,10 @@ class FileOpsWindow(QMainWindow):
         super().__init__()
         self.mgr = ThemeManager()
         self.setWindowTitle("NEXUS FILE OPS")
+        from src.common.config import ICON_PATH
+
+        if os.path.exists(ICON_PATH):
+            self.setWindowIcon(QIcon(ICON_PATH))
         self.setMinimumSize(680, 580)
         self.resize(720, 600)
         self.setAcceptDrops(True)
@@ -574,6 +579,10 @@ class FileOpsWindow(QMainWindow):
 
 
 def main():
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.fileops")
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 

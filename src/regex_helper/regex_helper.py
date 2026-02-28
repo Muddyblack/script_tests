@@ -1,3 +1,4 @@
+import contextlib
 import os
 import re
 import sqlite3
@@ -52,10 +53,8 @@ def init_db():
             )
         """)
         # Safe migration if updating from an older version of the app
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             cursor.execute("ALTER TABLE patterns ADD COLUMN mode TEXT DEFAULT 'Regex'")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -279,11 +278,6 @@ class RegexSandbox(QMainWindow):
         sidebar_layout.addWidget(btn_del)
 
         sidebar_layout.addStretch()
-
-        self.btn_theme = QPushButton("☀️ Light Mode")
-        self.btn_theme.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_theme.clicked.connect(self.toggle_theme)
-        sidebar_layout.addWidget(self.btn_theme)
 
         # --- MAIN CONTENT AREA ---
         content_wrapper = QWidget()
@@ -527,18 +521,8 @@ class RegexSandbox(QMainWindow):
         layout.addWidget(cheat_text)
         self.tabs.addTab(cheat_page, "Cheat Sheet")
 
-    def toggle_theme(self):
-        if "dark" in self.mgr.current_theme_name.lower():
-            self.mgr.load_theme("light")
-        else:
-            self.mgr.load_theme("midnight-marina")
-        self.mgr.theme_changed.emit()
-        self.trigger_evaluation()  # Re-evaluate to update text highlights
-
     def apply_theme(self):
-        # Update button text based on theme
-        is_dark = self.mgr.is_dark
-        self.btn_theme.setText("☀️ Light Mode" if is_dark else "🌙 Dark Mode")
+        self.trigger_evaluation()  # Re-evaluate to update text highlights
 
         # We can use the manager to apply the theme.
         # However, Regex Helper has a very specific complex stylesheet.
@@ -1072,6 +1056,12 @@ while ((m = regex.exec(str)) !== null) {{
 
 
 def main():
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "nexus.regexhelper"
+        )
     app = QApplication(sys.argv)
     window = RegexSandbox()
     window.show()

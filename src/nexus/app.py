@@ -16,6 +16,10 @@ from .widgets import NexusBridge
 
 def main():
     """Entry point for Nexus Search."""
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.search")
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
@@ -38,6 +42,7 @@ def main():
     if sys.platform == "win32":
         try:
             import keyboard
+
             keyboard.on_press(nexus.on_global_key)
         except Exception:
             pass

@@ -278,6 +278,12 @@ class Base64App(QWidget):
 
 
 def main():
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "nexus.base64tool"
+        )
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 

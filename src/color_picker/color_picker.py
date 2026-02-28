@@ -30,7 +30,10 @@ from PyQt6.QtWidgets import (
 from src.common.theme import ThemeManager
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "color_config.json")
-ICON_PATH = ""
+try:
+    from src.common.config import ICON_PATH
+except ImportError:
+    ICON_PATH = ""
 MAX_SAVED_COLORS = 32
 
 # Internal THEMES are replaced by ThemeManager
@@ -682,12 +685,6 @@ class ColorPickerApp(QWidget):
 
         header.addLayout(info, 1)
 
-        self.toggle_btn = QPushButton("☀")
-        self.toggle_btn.setObjectName("toggle")
-        self.toggle_btn.setFixedSize(32, 32)
-        self.toggle_btn.clicked.connect(self.toggle_theme)
-        header.addWidget(self.toggle_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-
         self.bg_layout.addLayout(header)
 
         # Divider
@@ -945,18 +942,9 @@ class ColorPickerApp(QWidget):
             QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
         )
         self.flow_widget.set_colors(self.saved_colors, self.mgr)
-        self.toggle_btn.setText("☀️" if self.mgr.is_dark else "🌙")
         self.divider.setStyleSheet(f"background-color: {self.mgr['border']};")
         self.divider2.setStyleSheet(f"background-color: {self.mgr['border']};")
         self.update()
-
-    def toggle_theme(self):
-        if "dark" in self.mgr.current_theme_name.lower():
-            self.mgr.load_theme("light")
-        else:
-            self.mgr.load_theme("midnight-marina")
-        self.mgr.theme_changed.emit()
-        self.sync_ui()
 
     def load_config(self):
         if os.path.exists(CONFIG_PATH):
@@ -1112,6 +1100,12 @@ class ColorPickerApp(QWidget):
 
 
 def main():
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "nexus.colorpicker"
+        )
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
