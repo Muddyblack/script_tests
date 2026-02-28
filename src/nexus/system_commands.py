@@ -1,7 +1,6 @@
 """System-level command execution: toggles, process management, macros."""
 
 import json
-import os
 import sqlite3
 import subprocess
 import sys
@@ -12,6 +11,8 @@ import webbrowser
 from PyQt6.QtCore import QTimer
 
 from src.common.config import GHOST_TYPIST_DB
+
+from .utils import parse_chronos_input
 
 
 def execute_system_toggle(nexus, cmd: str) -> None:
@@ -330,25 +331,47 @@ def run_macro(nexus, macro_id: int) -> None:
 
 
 def log_to_chronos(nexus, text: str) -> None:
-    """Inject an achievement into the Chronos DB."""
+    """Inject an achievement into the Chronos Hub."""
     import datetime
 
-    impact = "Medium"
-    if text.startswith("!!! "):
-        impact, text = "High", text[4:]
-    elif text.startswith(". "):
-        impact, text = "Low", text[2:]
+    # Smart parse
+    content, priority, tags, due_date = parse_chronos_input(text)
+    tags_str = ",".join(tags)
 
     try:
-        appdata = os.getenv("APPDATA", ".")
-        db_path = os.path.join(appdata, ".chronos_app", "chronos_data.db")
+        from src.common.config import CHRONOS_DB
+
         now = datetime.datetime.now()
-        with sqlite3.connect(db_path) as conn:
+        with sqlite3.connect(CHRONOS_DB) as conn:
+            # Achievements go to tasks table with is_achievement = 1 and status = Completed
             conn.execute(
-                "INSERT INTO achievements (content, impact, week_number, year) VALUES (?, ?, ?, ?)",
-                (text, impact, now.isocalendar()[1], now.year),
+                "INSERT INTO tasks (content, priority, tags, due_date, is_achievement, status, completed_at) VALUES (?, ?, ?, ?, 1, 'Completed', ?)",
+                (content, priority, tags_str, due_date, now.isoformat()),
             )
-        nexus.status_lbl.setText(f"🏆 Logged to Chronos: {text}")
+        nexus.status_lbl.setText(f"🏆 Achievement Logged: {content}")
         nexus.status_lbl.setStyleSheet("color: #fbbf24; font-weight: bold;")
     except Exception as e:
         nexus.status_lbl.setText(f"Chronos Log Error: {e}")
+        nexus.status_lbl.setStyleSheet("color: #ef4444;")
+
+
+def add_task_to_chronos(nexus, text: str) -> None:
+    """Inject a new Mission/Task into the Chronos Hub."""
+    # Smart parse
+    content, priority, tags, due_date = parse_chronos_input(text)
+    tags_str = ",".join(tags)
+
+    try:
+        from src.common.config import CHRONOS_DB
+
+        with sqlite3.connect(CHRONOS_DB) as conn:
+            # Tasks go to tasks table with is_achievement = 0 and status = Pending
+            conn.execute(
+                "INSERT INTO tasks (content, priority, tags, due_date, is_achievement, status) VALUES (?, ?, ?, ?, 0, 'Pending')",
+                (content, priority, tags_str, due_date),
+            )
+        nexus.status_lbl.setText(f"📋 Task Added to Chronos: {content}")
+        nexus.status_lbl.setStyleSheet("color: #3b82f6; font-weight: bold;")
+    except Exception as e:
+        nexus.status_lbl.setText(f"Chronos Task Error: {e}")
+        nexus.status_lbl.setStyleSheet("color: #ef4444;")

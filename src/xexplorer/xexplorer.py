@@ -145,11 +145,15 @@ class XExplorer(QMainWindow):
         logo_lbl.setObjectName("app_logo_lbl")
         logo_lbl.setFixedSize(30, 30)
         logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_lbl.setStyleSheet(
-            f"background: {T['accent']}; border-radius: 6px; color: {T['text_on_accent']};"
-            f" font-size: 15px; font-weight: 700;"
-        )
-        logo_lbl.setText("X")
+        icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
+        if os.path.exists(icon_path):
+            logo_lbl.setPixmap(QIcon(icon_path).pixmap(24, 24))
+        else:
+            logo_lbl.setStyleSheet(
+                f"background: {T['accent']}; border-radius: 6px; color: {T['text_on_accent']};"
+                f" font-size: 15px; font-weight: 700;"
+            )
+            logo_lbl.setText("X")
         rbl.addWidget(logo_lbl)
 
         title_lbl = QLabel("X-Explorer")

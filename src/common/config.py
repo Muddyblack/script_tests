@@ -26,6 +26,9 @@ APPS_CACHE_FILE = os.path.join(APPDATA, "nexus_apps_cache.json")
 SEARCH_HISTORY_FILE = os.path.join(APPDATA, "nexus_history.json")
 FILE_OPS_SETTINGS = os.path.join(APPDATA, "nexus_file_ops.json")
 ARCHIVER_SETTINGS = os.path.join(APPDATA, "nexus_archiver.json")
+CHRONOS_DIR = os.path.join(APPDATA, ".chronos_app")
+CHRONOS_DB = os.path.join(CHRONOS_DIR, "chronos_data.db")
+CHRONOS_SETTINGS = os.path.join(CHRONOS_DIR, "chronos_settings.json")
 
 # --- HOTKEY ---
 SUMMON_HOTKEY = "ctrl+shift+space"

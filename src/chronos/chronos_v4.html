@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chronos Pro</title>
+    <title>Chronos</title>
     <script crossorigin src="react.min.js"></script>
     <script crossorigin src="react-dom.min.js"></script>
     <script src="framer-motion.js"></script>
@@ -13,748 +13,153 @@
     <script src="babel.min.js"></script>
     <script src="tailwind.min.js"></script>
     <script src="qwebchannel.js"></script>
-    <!-- Generated palette mapping from VS Code JSON -->
-    <link href="../themes/midnight-marina/midnight-marina-palette.css" rel="stylesheet">
 
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+        :root {
+            /* Fallback until Python injects the real theme */
+            --bg: #03233A; --bg-1: #03233A; --bg-2: #021A2C; --bg-3: #01121F;
+            --bg-4: #032842; --bg-selection: #074F81;
+            --accent: #0EADCF; --accent-bright: #55FFCC;
+            --gold: #FFE073; --gold-dim: rgba(255,224,115,0.1); --gold-glow: rgba(255,224,115,0.2);
+            --teal: #22D4FF; --teal-dim: rgba(34,212,255,0.15);
+            --rose: #E52E2E; --rose-dim: rgba(229,46,46,0.15);
+            --sage: #44FFB1; --sage-dim: rgba(68,255,177,0.15);
+            --lavender: #aa82ff; --lav-dim: rgba(170,130,255,0.15);
+            --sky: #0FC5ED; --sky-dim: rgba(15,197,237,0.15);
+            --text: #CBE0F0; --text-2: #B8D0E0; --text-3: #A6BCC9; --text-4: #8295A0;
+            --border: #33638059; --border-h: #0EADCF80; --border-hh: #22D4FF;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.6);
+            --shadow-md: 0 8px 32px rgba(0,0,0,0.7);
+            --shadow-lg: 0 24px 64px rgba(0,0,0,0.8);
+            --grain-opacity: 0.025;
         }
 
-        html,
-        body {
-            height: 100%;
-            overflow: hidden;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; }
         body {
             font-family: 'Instrument Sans', system-ui, sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: var(--bg); color: var(--text);
             transition: background 0.4s, color 0.4s;
             position: relative;
         }
-
-        /* Grain overlay — gives depth, not harshness */
         body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
+            content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
             opacity: var(--grain-opacity);
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
             background-size: 256px;
         }
-
-        /* Ambient warm glow — very subtle */
         body::after {
-            content: '';
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
-            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(14, 173, 207, 0.04) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(68, 255, 177, 0.03) 0%, transparent 60%);
+            content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(14,173,207,0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(68,255,177,0.03) 0%, transparent 60%);
         }
+        #root { position: relative; z-index: 1; }
 
-        #root {
-            position: relative;
-            z-index: 1;
-        }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-h); border-radius: 8px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-hh); }
 
-        ::-webkit-scrollbar {
-            width: 3px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border-h);
-            border-radius: 8px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--border-hh);
-        }
-
-        input,
-        textarea,
-        select {
-            outline: none;
-            font-family: inherit;
-        }
-
+        input, textarea, select { outline: none; font-family: inherit; }
         input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-        }
-
-        select option {
-            background: var(--bg-1);
-            color: var(--text);
-        }
-
-        /* ── COMPONENTS ─────────────────────────────────────────────────────── */
-
-        .card {
-            background: var(--bg-1);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .card-inset {
-            background: var(--bg-2);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-        }
-
-        .mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .serif {
-            font-family: 'Instrument Serif', serif;
-        }
-
-        .kbd {
-            display: inline-flex;
-            align-items: center;
-            padding: 1px 5px;
-            background: var(--bg-3);
-            border: 1px solid var(--border-h);
-            border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 9px;
-            color: var(--text-3);
-        }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 2px 7px;
-            border-radius: 6px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-        }
-
-        .tag {
-            display: inline-flex;
-            align-items: center;
-            padding: 2px 8px;
-            border-radius: 100px;
-            font-size: 10px;
-            font-weight: 600;
-            background: var(--bg-3);
-            color: var(--text-2);
-            border: 1px solid var(--border);
-        }
-
-        .section-label {
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: var(--text-3);
-        }
-
-        /* ── NAV ────────────────────────────────────────────────────────────── */
-        .nav-item {
-            cursor: pointer;
-            border-radius: 10px;
-            transition: background 0.15s, color 0.15s;
-        }
-
-        .nav-item:hover:not(.active) {
-            background: var(--bg-2);
-        }
-
-        .nav-item.active {
-            background: var(--bg-3);
-        }
-
-        /* ── INPUTS ─────────────────────────────────────────────────────────── */
-        .input-field {
-            width: 100%;
-            background: var(--bg-2);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 11px 15px;
-            font-size: 14px;
-            color: var(--text);
-            transition: border-color 0.15s, box-shadow 0.15s;
-        }
-
-        .input-field:focus {
-            border-color: var(--gold);
-            box-shadow: 0 0 0 3px var(--gold-dim);
-        }
-
-        .input-field::placeholder {
-            color: var(--text-3);
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 9px 18px;
-            border-radius: 10px;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            cursor: pointer;
-            transition: all 0.15s;
-            border: none;
-            text-transform: uppercase;
-        }
-
-        .btn:active {
-            transform: scale(0.96);
-        }
-
-        .btn-gold {
-            background: var(--gold);
-            color: #111009;
-        }
-
-        .btn-ghost {
-            background: var(--bg-3);
-            color: var(--text-2);
-            border: 1px solid var(--border);
-        }
-
-        .btn-danger {
-            background: var(--rose-dim);
-            color: var(--rose);
-        }
-
-        /* ── CHECKBOX ───────────────────────────────────────────────────────── */
-        .check {
-            width: 18px;
-            height: 18px;
-            border-radius: 6px;
-            border: 1.5px solid var(--border-h);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .check:hover:not(.done) {
-            border-color: var(--gold);
-            box-shadow: 0 0 0 3px var(--gold-dim);
-        }
-
-        .check.done {
-            background: var(--sage);
-            border-color: var(--sage);
-        }
-
-        /* ── FOCUS MODE ─────────────────────────────────────────────────────── */
-        .focus-mode .can-dim {
-            opacity: 0.07;
-            filter: blur(3px);
-            pointer-events: none;
-            transition: all 0.5s;
-        }
-
-        .focus-mode .sidebar-wrap {
-            opacity: 0.05;
-            pointer-events: none;
-            transition: all 0.5s;
-        }
-
-        .focus-mode .no-dim {
-            opacity: 1 !important;
-            filter: none !important;
-            pointer-events: auto !important;
-        }
-
-        /* ── ANIMATIONS ─────────────────────────────────────────────────────── */
-        @keyframes shimmer {
-            0% {
-                background-position: -200% 0;
-            }
-
-            100% {
-                background-position: 200% 0;
-            }
-        }
-
-        .shimmer {
-            background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 50%, var(--bg-2) 75%);
-            background-size: 200%;
-            animation: shimmer 1.5s infinite;
-        }
-
-        @keyframes breathe {
-
-            0%,
-            100% {
-                opacity: 0.6;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 1;
-                transform: scale(1.15);
-            }
-        }
-
-        .breathe {
-            animation: breathe 3s ease-in-out infinite;
-        }
-
-        @keyframes pulse-ring {
-            0% {
-                box-shadow: 0 0 0 0 rgba(232, 112, 112, 0.5);
-            }
-
-            70% {
-                box-shadow: 0 0 0 8px rgba(232, 112, 112, 0);
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(232, 112, 112, 0);
-            }
-        }
-
-        .pulse-ring {
-            animation: pulse-ring 2s infinite;
-        }
-
-        @keyframes float-in {
-            from {
-                opacity: 0;
-                transform: translateY(6px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .float-in {
-            animation: float-in 0.25s ease-out forwards;
-        }
-
-        @keyframes check-pop {
-            0% {
-                transform: scale(1);
-            }
-
-            40% {
-                transform: scale(1.3) rotate(-5deg);
-            }
-
-            70% {
-                transform: scale(0.9) rotate(3deg);
-            }
-
-            100% {
-                transform: scale(1) rotate(0deg);
-            }
-        }
-
-        .check-pop {
-            animation: check-pop 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
-        }
-
-        @keyframes slide-up {
-            from {
-                opacity: 0;
-                transform: translateY(16px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .slide-up {
-            animation: slide-up 0.3s ease-out;
-        }
-
-        /* ── PROGRESS ───────────────────────────────────────────────────────── */
-        .progress-track {
-            height: 3px;
-            background: var(--bg-3);
-            border-radius: 99px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            border-radius: 99px;
-            transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        /* ── TASK ───────────────────────────────────────────────────────────── */
-        .task-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            padding: 10px 12px;
-            border-radius: 12px;
-            transition: background 0.15s;
-            position: relative;
-        }
-
-        .task-row:hover {
-            background: var(--bg-2);
-        }
-
-        .task-row.focused {
-            background: var(--bg-1);
-            box-shadow: var(--shadow-md);
-        }
-
-        .task-row.done {
-            opacity: 0.4;
-        }
-
-        .task-row.done .task-title {
-            text-decoration: line-through;
-            color: var(--text-3);
-        }
-
-        .task-actions {
-            display: flex;
-            gap: 4px;
-            opacity: 0;
-            transition: opacity 0.15s;
-        }
-
-        .task-row:hover .task-actions {
-            opacity: 1;
-        }
-
-        .action-btn {
-            width: 26px;
-            height: 26px;
-            border-radius: 7px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 13px;
-            transition: all 0.12s;
-            color: var(--text-3);
-            background: transparent;
-            border: none;
-        }
-
-        .action-btn:hover {
-            background: var(--bg-3);
-            color: var(--text);
-        }
-
-        /* ── CONTEXT MENU ───────────────────────────────────────────────────── */
-        .ctx-menu {
-            position: fixed;
-            z-index: 9999;
-            background: var(--bg-1);
-            border: 1px solid var(--border-h);
-            border-radius: 13px;
-            box-shadow: var(--shadow-lg);
-            padding: 5px;
-            min-width: 210px;
-        }
-
-        .ctx-item {
-            padding: 8px 11px;
-            border-radius: 8px;
-            font-size: 13px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: background 0.1s;
-            color: var(--text);
-            font-weight: 500;
-        }
-
-        .ctx-item:hover {
-            background: var(--bg-3);
-        }
-
-        .ctx-item.danger {
-            color: var(--rose);
-        }
-
-        .ctx-sep {
-            height: 1px;
-            background: var(--border);
-            margin: 4px 2px;
-        }
-
-        .ctx-label {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            color: var(--text-3);
-            padding: 6px 11px 3px;
-        }
-
-        /* ── TOOLTIP ────────────────────────────────────────────────────────── */
-        [data-tip] {
-            position: relative;
-        }
-
-        [data-tip]:hover::after {
-            content: attr(data-tip);
-            position: absolute;
-            top: calc(100% + 7px);
-            left: 50%;
-            transform: translateX(-50%);
-            white-space: nowrap;
-            background: var(--bg-3);
-            color: var(--text);
-            padding: 4px 9px;
-            border-radius: 7px;
-            font-size: 10px;
-            font-weight: 600;
-            border: 1px solid var(--border-h);
-            pointer-events: none;
-            z-index: 999;
-            box-shadow: var(--shadow-sm);
-        }
-
-        /* ── POMODORO ───────────────────────────────────────────────────────── */
-        .pomo-ring {
-            transform: rotate(-90deg);
-            transform-origin: center;
-        }
-
-        .pomo-track {
-            fill: none;
-            stroke: var(--bg-3);
-            stroke-width: 3;
-        }
-
-        .pomo-fill {
-            fill: none;
-            stroke-width: 3;
-            stroke-linecap: round;
-            transition: stroke-dashoffset 1s linear;
-        }
-
-        /* ── EMPTY STATE ────────────────────────────────────────────────────── */
-        .empty {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 64px 24px;
-            gap: 10px;
-            opacity: 0.35;
-        }
-
-        /* ── MODAL ──────────────────────────────────────────────────────────── */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.65);
-            backdrop-filter: blur(12px);
-        }
-
-        /* ── QUICK CAPTURE ──────────────────────────────────────────────────── */
-        .quick-bar {
-            position: fixed;
-            bottom: 32px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 200;
-            width: 580px;
-            max-width: calc(100vw - 48px);
-        }
-
-        /* ── STREAK ─────────────────────────────────────────────────────────── */
-        .streak-flame {
-            font-size: 20px;
-            filter: drop-shadow(0 0 6px rgba(232, 184, 75, 0.5));
-        }
-
-        /* ── SETTINGS ROW ───────────────────────────────────────────────────── */
-        .settings-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 14px 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .settings-row:last-child {
-            border-bottom: none;
-        }
-
-        /* ── OBSIDIAN CHIP ──────────────────────────────────────────────────── */
-        .obsidian-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            color: var(--lavender);
-            font-size: 11px;
-            font-weight: 600;
-            text-decoration: none;
-            padding: 3px 8px;
-            border-radius: 6px;
-            background: var(--lav-dim);
-            border: 1px solid rgba(184, 160, 232, 0.18);
-            transition: all 0.15s;
-        }
-
-        .obsidian-link:hover {
-            background: rgba(184, 160, 232, 0.16);
-        }
-
-        /* ── MARKDOWN ───────────────────────────────────────────────────────── */
-        .md p {
-            margin-bottom: 8px;
-            font-size: 13px;
-            line-height: 1.75;
-            color: var(--text-2);
-        }
-
-        .md h1,
-        .md h2,
-        .md h3 {
-            font-weight: 700;
-            margin-bottom: 6px;
-            color: var(--text);
-        }
-
-        .md h1 {
-            font-size: 16px;
-        }
-
-        .md h2 {
-            font-size: 14px;
-        }
-
-        .md h3 {
-            font-size: 13px;
-        }
-
-        .md ul,
-        .md ol {
-            margin-left: 18px;
-            margin-bottom: 8px;
-            font-size: 13px;
-            color: var(--text-2);
-        }
-
-        .md li {
-            margin-bottom: 3px;
-        }
-
-        .md code {
-            font-family: 'JetBrains Mono', monospace;
-            background: var(--bg-3);
-            padding: 1px 5px;
-            border-radius: 4px;
-            font-size: 11px;
-            color: var(--gold);
-        }
-
-        .md strong {
-            color: var(--text);
-            font-weight: 700;
-        }
-
-        .md blockquote {
-            border-left: 2px solid var(--border-hh);
-            padding-left: 12px;
-            color: var(--text-3);
-            font-style: italic;
-            margin-bottom: 8px;
-        }
-
-        .md a {
-            color: var(--sky);
-            text-decoration: none;
-        }
-
-        .md a:hover {
-            text-decoration: underline;
-        }
-
-        /* ── PRIORITY STRIPE ────────────────────────────────────────────────── */
-        .priority-stripe {
-            position: absolute;
-            left: 0;
-            top: 8px;
-            bottom: 8px;
-            width: 2.5px;
-            border-radius: 99px;
-        }
-
-        /* ── SCROLL FADE ────────────────────────────────────────────────────── */
-        .scroll-fade {
-            position: relative;
-        }
-
-        .scroll-fade::after {
-            content: '';
-            position: sticky;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 64px;
-            display: block;
-            pointer-events: none;
-            background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
-        }
-
-        /* ── COMPACT SIDEBAR ────────────────────────────────────────────────── */
-        .sidebar-wrap {
-            width: 220px;
-            flex-shrink: 0;
-        }
-
-        @keyframes celebrate {
-            0% {
-                transform: scale(1) rotate(0deg);
-            }
-
-            25% {
-                transform: scale(1.4) rotate(-10deg);
-            }
-
-            50% {
-                transform: scale(1.2) rotate(10deg);
-            }
-
-            75% {
-                transform: scale(1.1) rotate(-5deg);
-            }
-
-            100% {
-                transform: scale(1) rotate(0deg);
-            }
-        }
-
-        .celebrate {
-            animation: celebrate 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
-        }
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+        select option { background: var(--bg-1); color: var(--text); }
+
+        .card { background: var(--bg-1); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); }
+        .card-inset { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .kbd { display: inline-flex; align-items: center; padding: 1px 5px; background: var(--bg-3); border: 1px solid var(--border-h); border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-3); }
+        .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
+        .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+        .section-label { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
+
+        .nav-item { cursor: pointer; border-radius: 10px; transition: background 0.15s, color 0.15s; }
+        .nav-item:hover:not(.active) { background: var(--bg-2); }
+        .nav-item.active { background: var(--bg-3); }
+
+        .input-field { width: 100%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 11px 15px; font-size: 14px; color: var(--text); transition: border-color 0.15s, box-shadow 0.15s; }
+        .input-field:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
+        .input-field::placeholder { color: var(--text-3); }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 18px; border-radius: 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; cursor: pointer; transition: all 0.15s; border: none; text-transform: uppercase; }
+        .btn:active { transform: scale(0.96); }
+        .btn-gold { background: var(--gold); color: #111009; }
+        .btn-ghost { background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+        .btn-danger { background: var(--rose-dim); color: var(--rose); }
+
+        .check { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--border-h); display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; transition: all 0.2s; }
+        .check:hover:not(.done) { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
+        .check.done { background: var(--sage); border-color: var(--sage); }
+
+        .focus-mode .can-dim { opacity: 0.07; filter: blur(3px); pointer-events: none; transition: all 0.5s; }
+        .focus-mode .sidebar-wrap { opacity: 0.05; pointer-events: none; transition: all 0.5s; }
+        .focus-mode .no-dim { opacity: 1 !important; filter: none !important; pointer-events: auto !important; }
+
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .shimmer { background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 50%, var(--bg-2) 75%); background-size: 200%; animation: shimmer 1.5s infinite; }
+        @keyframes float-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .float-in { animation: float-in 0.25s ease-out forwards; }
+        @keyframes check-pop { 0% { transform: scale(1); } 40% { transform: scale(1.3) rotate(-5deg); } 70% { transform: scale(0.9) rotate(3deg); } 100% { transform: scale(1) rotate(0deg); } }
+        .check-pop { animation: check-pop 0.4s cubic-bezier(0.36,0.07,0.19,0.97); }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-up { animation: slide-up 0.3s ease-out; }
+        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(232,112,112,0.5); } 70% { box-shadow: 0 0 0 8px rgba(232,112,112,0); } 100% { box-shadow: 0 0 0 0 rgba(232,112,112,0); } }
+        .pulse-ring { animation: pulse-ring 2s infinite; }
+        @keyframes breathe { 0%,100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
+        .breathe { animation: breathe 3s ease-in-out infinite; }
+
+        .progress-track { height: 3px; background: var(--bg-3); border-radius: 99px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 99px; transition: width 0.7s cubic-bezier(0.4,0,0.2,1); }
+
+        .task-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: 12px; transition: background 0.15s; position: relative; }
+        .task-row:hover { background: var(--bg-2); }
+        .task-row.focused { background: var(--bg-1); box-shadow: var(--shadow-md); }
+        .task-row.done { opacity: 0.4; }
+        .task-row.done .task-title { text-decoration: line-through; color: var(--text-3); }
+        .task-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+        .task-row:hover .task-actions { opacity: 1; }
+
+        .action-btn { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; transition: all 0.12s; color: var(--text-3); background: transparent; border: none; }
+        .action-btn:hover { background: var(--bg-3); color: var(--text); }
+
+        .ctx-menu { position: fixed; z-index: 9999; background: var(--bg-1); border: 1px solid var(--border-h); border-radius: 13px; box-shadow: var(--shadow-lg); padding: 5px; min-width: 210px; }
+        .ctx-item { padding: 8px 11px; border-radius: 8px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.1s; color: var(--text); font-weight: 500; }
+        .ctx-item:hover { background: var(--bg-3); }
+        .ctx-item.danger { color: var(--rose); }
+        .ctx-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+        .ctx-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); padding: 6px 11px 3px; }
+
+        .priority-stripe { position: absolute; left: 0; top: 8px; bottom: 8px; width: 2.5px; border-radius: 99px; }
+        .scroll-fade { position: relative; }
+        .scroll-fade::after { content: ''; position: sticky; bottom: 0; left: 0; right: 0; height: 64px; display: block; pointer-events: none; background: linear-gradient(to top, var(--bg) 0%, transparent 100%); }
+        .sidebar-wrap { width: 220px; flex-shrink: 0; }
+
+        .modal-overlay { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.65); backdrop-filter: blur(12px); }
+        .quick-bar { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 200; width: 580px; max-width: calc(100vw - 48px); }
+        .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+        .settings-row:last-child { border-bottom: none; }
+        .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 64px 24px; gap: 10px; opacity: 0.35; }
+
+        .md p { margin-bottom: 8px; font-size: 13px; line-height: 1.75; color: var(--text-2); }
+        .md h1, .md h2, .md h3 { font-weight: 700; margin-bottom: 6px; color: var(--text); }
+        .md h1 { font-size: 16px; } .md h2 { font-size: 14px; } .md h3 { font-size: 13px; }
+        .md ul, .md ol { margin-left: 18px; margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
+        .md li { margin-bottom: 3px; }
+        .md code { font-family: 'JetBrains Mono', monospace; background: var(--bg-3); padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--gold); }
+        .md strong { color: var(--text); font-weight: 700; }
+        .md blockquote { border-left: 2px solid var(--border-hh); padding-left: 12px; color: var(--text-3); font-style: italic; margin-bottom: 8px; }
+        .md a { color: var(--sky); text-decoration: none; }
+        .md a:hover { text-decoration: underline; }
+
+        .obsidian-link { display: inline-flex; align-items: center; gap: 5px; color: var(--lavender); font-size: 11px; font-weight: 600; text-decoration: none; padding: 3px 8px; border-radius: 6px; background: var(--lav-dim); border: 1px solid rgba(184,160,232,0.18); transition: all 0.15s; }
+        .obsidian-link:hover { background: rgba(184,160,232,0.16); }
+
+        /* World clock timeline */
+        .tz-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+        .tz-bar { position: relative; height: 28px; border-radius: 6px; overflow: hidden; flex: 1; }
+        .tz-bar-bg { position: absolute; inset: 0; background: var(--bg-3); border-radius: 6px; }
+        .tz-bar-work { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+        .tz-bar-now { position: absolute; top: -2px; bottom: -2px; width: 2px; border-radius: 1px; z-index: 2; }
     </style>
 
     <script type="text/babel">
@@ -774,7 +179,7 @@
             }
         };
 
-        // ─── UTILS ──────────────────────────────────────────────────────────────────
+        // ─── UTILS ──────────────────────────────────────────────────────────────
         const fmt = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return `${h > 0 ? h + ':' : ''}${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`; };
         const fmtDate = (iso) => { if (!iso) return null; return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
         const fmtRelDate = (iso) => {
@@ -788,16 +193,16 @@
             return { label: fmtDate(iso), cls: '' };
         };
         const PC = {
-            High: { color: 'var(--rose)', bg: 'var(--rose-dim)', label: '↑ High', stripe: 'var(--rose)' },
-            Medium: { color: 'var(--gold)', bg: 'var(--gold-dim)', label: '→ Med', stripe: 'var(--gold)' },
-            Low: { color: 'var(--text-3)', bg: 'var(--bg-3)', label: '↓ Low', stripe: 'var(--border-h)' },
+            High: { color: 'var(--rose)', bg: 'var(--rose-dim)', label: 'High', stripe: 'var(--rose)' },
+            Medium: { color: 'var(--gold)', bg: 'var(--gold-dim)', label: 'Med', stripe: 'var(--gold)' },
+            Low: { color: 'var(--text-3)', bg: 'var(--bg-3)', label: 'Low', stripe: 'var(--border-h)' },
         };
         const groupByDate = (tasks) => {
-            const now = new Date(); now.setHours(0, 0, 0, 0);
+            const now = new Date(); now.setHours(0,0,0,0);
             const G = { Overdue: [], Today: [], Tomorrow: [], 'This Week': [], Later: [], 'No Date': [] };
             tasks.forEach(t => {
                 if (!t.due_date) { G['No Date'].push(t); return; }
-                const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
+                const d = new Date(t.due_date); d.setHours(0,0,0,0);
                 const diff = Math.floor((d - now) / 86400000);
                 if (diff < 0) G.Overdue.push(t);
                 else if (diff === 0) G.Today.push(t);
@@ -818,7 +223,7 @@
                 .replace(/^> (.+)/gm, '<blockquote>$1</blockquote>')
                 .replace(/^[-*] (.+)/gm, '<li>$1</li>')
                 .replace(/\n\n/g, '</p><p>')
-                .replace(/(obsidian:\/\/open\?[^\s<]+)/g, '<a href="$1" class="obsidian-link">⬡ Obsidian</a>');
+                .replace(/(obsidian:\/\/open\?[^\s<]+)/g, '<a href="$1" class="obsidian-link">Obsidian</a>');
             if (!h.match(/^<[hublp]/)) h = '<p>' + h + '</p>';
             return h;
         };
@@ -831,10 +236,10 @@
             return 'Good night';
         };
 
-        // ─── BRIDGE ─────────────────────────────────────────────────────────────────
+        // ─── BRIDGE ──────────────────────────────────────────────────────────────
         const useBridge = () => {
             const [ready, setReady] = useState(false);
-            const [data, setData] = useState({ achievements: [], tasks: [], settings: {} });
+            const [data, setData] = useState({ tasks: [], settings: {} });
             const ref = useRef(null);
             const refresh = useCallback(async () => { if (!ref.current) return; try { const r = await ref.current.get_all_data(); if (r) setData(JSON.parse(r)); } catch (e) { } }, []);
             useEffect(() => {
@@ -845,7 +250,7 @@
             return { ready, data, refresh, call };
         };
 
-        // ─── CONTEXT MENU ────────────────────────────────────────────────────────────
+        // ─── CONTEXT MENU ────────────────────────────────────────────────────────
         const CtxMenu = ({ items, pos, onClose }) => {
             useEffect(() => {
                 const h = (e) => { if (!e.target.closest('.ctx-menu')) onClose(); };
@@ -860,90 +265,17 @@
             );
         };
 
-        // ─── POMODORO WIDGET ─────────────────────────────────────────────────────────
-        const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 };
-        const PomodoroWidget = () => {
-            const [mode, setMode] = useState('work'); // work|short|long
-            const [secs, setSecs] = useState(POMO_DURATIONS.work);
-            const [running, setRunning] = useState(false);
-            const [sessions, setSessions] = useState(0);
-            const [celebrateNum, setCelebrateNum] = useState(false);
-            const ref = useRef(null);
-            const total = POMO_DURATIONS[mode];
-            const pct = (secs / total);
-            const circ = 2 * Math.PI * 28;
-
-            useEffect(() => {
-                if (running) { ref.current = setInterval(() => setSecs(s => { if (s <= 1) { clearInterval(ref.current); setRunning(false); if (mode === 'work') { setSessions(n => n + 1); setCelebrateNum(true); setTimeout(() => setCelebrateNum(false), 600); } return 0; } return s - 1; }), 1000); }
-                else clearInterval(ref.current);
-                return () => clearInterval(ref.current);
-            }, [running]);
-
-            const switchMode = (m) => { setMode(m); setSecs(POMO_DURATIONS[m]); setRunning(false); };
-            const reset = () => { setSecs(POMO_DURATIONS[mode]); setRunning(false); };
-
-            const modeColor = { work: 'var(--rose)', short: 'var(--sage)', long: 'var(--teal)' }[mode];
-
-            return (
-                <div className="card p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="section-label">Pomodoro</div>
-                        <div className={`flex items-center gap-1 text-xs font-bold mono ${celebrateNum ? 'celebrate' : ''}`} style={{ color: 'var(--gold)' }}>
-                            {sessions > 0 && <>🍅 {sessions}</>}
-                        </div>
-                    </div>
-
-                    {/* Mode tabs */}
-                    <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--bg-2)' }}>
-                        {[['work', 'Focus'], ['short', 'Short'], ['long', 'Long']].map(([m, l]) => (
-                            <button key={m} onClick={() => switchMode(m)}
-                                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                style={{ background: mode === m ? 'var(--bg-1)' : 'transparent', color: mode === m ? modeColor : 'var(--text-3)', boxShadow: mode === m ? 'var(--shadow-sm)' : 'none' }}>
-                                {l}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Ring + time */}
-                    <div className="flex items-center justify-center gap-6">
-                        <div style={{ position: 'relative', width: 80, height: 80 }}>
-                            <svg width="80" height="80" className="pomo-ring">
-                                <circle cx="40" cy="40" r="28" className="pomo-track" />
-                                <circle cx="40" cy="40" r="28" className="pomo-fill"
-                                    stroke={modeColor} strokeDasharray={circ}
-                                    strokeDashoffset={circ * (1 - pct)} />
-                            </svg>
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <span className="mono text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(secs)}</span>
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                            <button onClick={() => setRunning(!running)}
-                                className="btn btn-ghost w-24 text-xs"
-                                style={running ? { background: 'var(--rose-dim)', color: 'var(--rose)', borderColor: 'transparent' } : {}}>
-                                {running ? '⏸ Pause' : secs === total ? '▶ Start' : '▶ Resume'}
-                            </button>
-                            <button onClick={reset} className="btn btn-ghost w-24 text-xs">↺ Reset</button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // ─── DAILY FOCUS WIDGET ──────────────────────────────────────────────────────
+        // ─── DAILY FOCUS WIDGET ──────────────────────────────────────────────────
         const DailyFocusWidget = ({ tasks, safeCall }) => {
-            const [note, setNote] = useState(() => localStorage.getItem('chronos-daily-note') || '');
             const today = useMemo(() => {
-                const now = new Date(); now.setHours(0, 0, 0, 0);
+                const now = new Date(); now.setHours(0,0,0,0);
                 return tasks.filter(t => {
                     if (!t.due_date || t.status === 'Completed') return false;
-                    const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
-                    return d.getTime() === now.getTime();
+                    const d = new Date(t.due_date); d.setHours(0,0,0,0);
+                    return d.getTime() <= now.getTime();
                 });
             }, [tasks]);
-            const overdue = useMemo(() => tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(); }), [tasks]);
-
-            const saveNote = (v) => { setNote(v); localStorage.setItem('chronos-daily-note', v); };
+            const overdue = useMemo(() => tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(new Date().toDateString()); }), [tasks]);
 
             return (
                 <div className="card p-5 space-y-4">
@@ -953,120 +285,58 @@
                             <div className="text-xs" style={{ color: 'var(--text-3)' }}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
                         </div>
                     </div>
-
                     {overdue.length > 0 && (
                         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold pulse-ring"
                             style={{ background: 'var(--rose-dim)', color: 'var(--rose)', border: '1px solid rgba(232,112,112,0.2)' }}>
-                            ⚠ {overdue.length} overdue
+                            {overdue.length} overdue
                         </div>
                     )}
-
                     {today.length > 0 ? (
                         <div className="space-y-1.5">
                             <div className="section-label">Today's focus</div>
-                            {today.slice(0, 3).map(t => (
+                            {today.slice(0, 5).map(t => (
                                 <div key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--bg-2)' }}>
                                     <button onClick={() => safeCall('update_task_status', t.id, 'Completed')}
-                                        className="check" style={{ width: 14, height: 14, borderRadius: 4 }}>
-                                    </button>
+                                        className="check" style={{ width: 14, height: 14, borderRadius: 4 }} />
                                     <span className="text-xs font-medium flex-1 truncate" style={{ color: 'var(--text)' }}>{t.content}</span>
                                 </div>
                             ))}
-                            {today.length > 3 && <div className="text-xs" style={{ color: 'var(--text-3)', paddingLeft: 4 }}>+{today.length - 3} more</div>}
+                            {today.length > 5 && <div className="text-xs" style={{ color: 'var(--text-3)', paddingLeft: 4 }}>+{today.length - 5} more</div>}
                         </div>
                     ) : (
-                        <div className="text-xs" style={{ color: 'var(--text-3)' }}>No tasks scheduled for today ✓</div>
+                        <div className="text-xs" style={{ color: 'var(--text-3)' }}>No tasks scheduled for today</div>
                     )}
-
-                    <div className="space-y-1.5">
-                        <div className="section-label">Daily note</div>
-                        <textarea value={note} onChange={e => saveNote(e.target.value)} rows={2}
-                            className="input-field resize-none text-xs"
-                            placeholder="Intentions for today..." />
-                    </div>
                 </div>
             );
         };
 
-        // ─── STREAK TRACKER ──────────────────────────────────────────────────────────
-        const StreakWidget = ({ achievements }) => {
-            const streak = useMemo(() => {
-                if (!achievements.length) return 0;
-                const dates = new Set(achievements.map(a => a.created_at ? new Date(a.created_at).toDateString() : ''));
-                let count = 0, d = new Date();
-                while (dates.has(d.toDateString())) { count++; d.setDate(d.getDate() - 1); }
-                return count;
-            }, [achievements]);
-
-            const weekDots = useMemo(() => {
-                const dates = new Set(achievements.map(a => a.created_at ? new Date(a.created_at).toDateString() : ''));
-                return Array.from({ length: 7 }, (_, i) => {
-                    const d = new Date(); d.setDate(d.getDate() - 6 + i);
-                    return { date: d, active: dates.has(d.toDateString()), isToday: d.toDateString() === new Date().toDateString() };
-                });
-            }, [achievements]);
-
-            return (
-                <div className="card p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="section-label">Streak</div>
-                        {streak > 0 && <span className="streak-flame">🔥 {streak}d</span>}
-                    </div>
-                    <div className="flex items-end gap-2 justify-center">
-                        {weekDots.map((d, i) => (
-                            <div key={i} className="flex flex-col items-center gap-1.5">
-                                <div className="rounded-md" style={{
-                                    width: 24, height: 24,
-                                    background: d.active ? 'var(--gold)' : d.isToday ? 'var(--border-hh)' : 'var(--bg-3)',
-                                    border: d.isToday ? '1.5px solid var(--gold)' : '1.5px solid transparent',
-                                    opacity: d.active ? 1 : 0.4,
-                                    boxShadow: d.active ? '0 0 8px var(--gold-glow)' : 'none',
-                                    transition: 'all 0.3s',
-                                }} />
-                                <span className="text-xs" style={{ color: 'var(--text-3)', fontSize: 9 }}>
-                                    {d.date.toLocaleDateString('en-US', { weekday: 'narrow' })}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                    {streak === 0 && <div className="text-xs text-center" style={{ color: 'var(--text-3)' }}>Log a victory to start your streak</div>}
-                </div>
-            );
-        };
-
-        // ─── ADD TASK MODAL ───────────────────────────────────────────────────────────
+        // ─── ADD TASK MODAL ──────────────────────────────────────────────────────
         const AddTaskModal = ({ onAdd, onClose, parentId = 0 }) => {
             const [content, setContent] = useState('');
             const [priority, setPriority] = useState('Medium');
             const [dueDate, setDueDate] = useState('');
             const [notes, setNotes] = useState('');
             const [tags, setTags] = useState('');
+            const [isAch, setIsAch] = useState(false);
             const ref = useRef(null);
             useEffect(() => { ref.current?.focus(); }, []);
-
             const submit = () => {
                 if (!content.trim()) return;
-                onAdd({ content: content.trim(), priority, due_date: dueDate, notes, tags: tags.split(',').map(t => t.trim()).filter(Boolean), parent_id: parentId });
+                onAdd({ content: content.trim(), priority, due_date: dueDate, notes, tags: tags.split(',').map(t => t.trim()).filter(Boolean), parent_id: parentId, is_achievement: isAch });
                 onClose();
             };
-
             return (
                 <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
                     <motion.div initial={{ y: 20, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 10, opacity: 0, scale: 0.98 }}
-                        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                        transition={{ duration: 0.22, ease: [0.4,0,0.2,1] }}
                         className="card w-full max-w-lg p-6 space-y-5" style={{ boxShadow: 'var(--shadow-lg)' }}>
-
                         <div className="flex items-center justify-between">
-                            <h3 className="font-bold text-base" style={{ color: 'var(--text)' }}>
-                                {parentId ? 'Add Subtask' : 'New Task'}
-                            </h3>
+                            <h3 className="font-bold text-base" style={{ color: 'var(--text)' }}>{parentId ? 'Add Subtask' : 'New Task'}</h3>
                             <button onClick={onClose} className="action-btn">✕</button>
                         </div>
-
                         <input ref={ref} value={content} onChange={e => setContent(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(); if (e.key === 'Escape') onClose(); }}
                             className="input-field text-[15px] font-medium" placeholder="What needs to get done?" />
-
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-2">
                                 <div className="section-label">Priority</div>
@@ -1074,7 +344,7 @@
                                     {['High', 'Medium', 'Low'].map(p => (
                                         <button key={p} onClick={() => setPriority(p)}
                                             className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
-                                            style={{ background: priority === p ? PC[p].bg : 'var(--bg-3)', color: priority === p ? PC[p].color : 'var(--text-3)', border: `1px solid ${priority === p ? PC[p].color + '44' : 'var(--border)'}`, transform: priority === p ? 'translateY(-1px)' : 'none' }}>
+                                            style={{ background: priority === p ? PC[p].bg : 'var(--bg-3)', color: priority === p ? PC[p].color : 'var(--text-3)', border: `1px solid ${priority === p ? PC[p].color + '44' : 'var(--border)'}` }}>
                                             {p}
                                         </button>
                                     ))}
@@ -1082,34 +352,36 @@
                             </div>
                             <div className="space-y-2">
                                 <div className="section-label">Due Date</div>
-                                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                                    className="input-field py-2 text-sm" style={{ colorScheme: 'dark' }} />
+                                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field py-2 text-sm" />
                             </div>
                         </div>
-
                         <div className="space-y-2">
                             <div className="section-label">Tags</div>
-                            <input value={tags} onChange={e => setTags(e.target.value)}
-                                className="input-field py-2.5 text-sm" placeholder="design, backend, review…" />
+                            <input value={tags} onChange={e => setTags(e.target.value)} className="input-field py-2.5 text-sm" placeholder="design, backend, review..." />
                         </div>
-
                         <div className="space-y-2">
                             <div className="section-label">Notes <span style={{ color: 'var(--text-3)', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>— markdown ok</span></div>
-                            <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                                className="input-field text-sm resize-none" rows={3}
-                                placeholder="Context, links, details…" />
+                            <textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-field text-sm resize-none" rows={3} placeholder="Context, links, details..." />
                         </div>
-
+                        {!parentId && (
+                            <label className="flex items-center gap-3 cursor-pointer px-1">
+                                <div className="check" onClick={(e) => { e.preventDefault(); setIsAch(!isAch); }}
+                                    style={isAch ? { background: 'var(--gold)', borderColor: 'var(--gold)' } : {}}>
+                                    {isAch && <span style={{ color: 'var(--bg)', fontSize: 10, fontWeight: 900 }}>★</span>}
+                                </div>
+                                <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Mark as achievement / win</span>
+                            </label>
+                        )}
                         <div className="flex gap-2.5">
                             <button onClick={onClose} className="btn btn-ghost flex-1">Cancel</button>
-                            <button onClick={submit} className="btn btn-gold flex-1" style={{ fontSize: 13 }}>Create Task</button>
+                            <button onClick={submit} className="btn btn-gold flex-1" style={{ fontSize: 13 }}>Create</button>
                         </div>
                     </motion.div>
                 </div>
             );
         };
 
-        // ─── TASK NODE ────────────────────────────────────────────────────────────────
+        // ─── TASK NODE ────────────────────────────────────────────────────────────
         const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode, isSelected, onSelect, timers, setTimers, onAddSub }) => {
             const [expanded, setExpanded] = useState(false);
             const [localNotes, setLocalNotes] = useState(task.notes || '');
@@ -1133,21 +405,16 @@
                 setChecking(true);
                 setTimeout(() => { safeCall('update_task_status', task.id, isDone ? 'Pending' : 'Completed'); setChecking(false); }, 350);
             };
-
             const saveEdit = () => { if (editVal.trim() !== task.content) safeCall('update_task', task.id, editVal, localNotes, task.links || ''); setEditing(false); };
             const handleCtx = (e) => { e.preventDefault(); e.stopPropagation(); setCtx({ x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 300) }); };
 
             return (
                 <div className={`relative ${depth > 0 ? 'ml-6' : ''}`}>
                     {depth > 0 && <div style={{ position: 'absolute', left: -12, top: 0, bottom: 0, width: 1, background: 'var(--border)' }} />}
-
                     <div className={`task-row ${isDone ? 'done' : ''} ${isFocused ? 'focused no-dim' : ''} can-dim`}
-                        style={isFocused ? { boxShadow: 'var(--shadow-md)', ringColor: 'var(--gold)' } : {}}
+                        style={isFocused ? { boxShadow: 'var(--shadow-md)' } : {}}
                         onContextMenu={handleCtx}>
-
-                        {/* Priority stripe */}
                         {!isDone && <div className="priority-stripe" style={{ background: pc.stripe }} />}
-
                         {selMode && (
                             <button onClick={onSelect} style={{
                                 width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 2,
@@ -1158,12 +425,9 @@
                                 {isSelected && <span style={{ color: 'var(--bg)', fontSize: 9, display: 'block', textAlign: 'center', fontWeight: 900 }}>✓</span>}
                             </button>
                         )}
-
-                        {/* Checkbox */}
                         <button onClick={handleCheck} className={`check mt-0.5 ${isDone ? 'done' : ''} ${checking ? 'check-pop' : ''}`} style={{ flexShrink: 0 }}>
                             {isDone && <span style={{ color: 'var(--bg)', fontSize: 10, fontWeight: 900 }}>✓</span>}
                         </button>
-
                         <div className="flex-1 min-w-0 space-y-1.5">
                             <div className="flex items-start gap-3">
                                 {editing ? (
@@ -1177,10 +441,10 @@
                                         style={{ color: 'var(--text)' }}
                                         onClick={() => setExpanded(!expanded)}
                                         onDoubleClick={() => { setEditing(true); setExpanded(false); }}>
+                                        {task.is_achievement && <span style={{ color: 'var(--gold)', marginRight: 4 }}>★</span>}
                                         {task.content}
                                     </span>
                                 )}
-
                                 <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
                                     {timers[task.id] > 0 && (
                                         <span className={`mono text-xs font-semibold px-2 py-0.5 rounded-lg ${timerOn ? 'breathe' : ''}`}
@@ -1189,20 +453,14 @@
                                         </span>
                                     )}
                                     <div className="task-actions">
-                                        <button className="action-btn" data-tip={timerOn ? 'Stop timer' : 'Time it'}
-                                            onClick={() => setTimerOn(!timerOn)}
+                                        <button className="action-btn" onClick={() => setTimerOn(!timerOn)}
                                             style={timerOn ? { background: 'var(--lav-dim)', color: 'var(--lavender)' } : {}}>⏱</button>
-                                        {onFocus && !isFocused && !isDone && (
-                                            <button className="action-btn" data-tip="Focus" onClick={onFocus}>⌖</button>
-                                        )}
-                                        {isFocused && (
-                                            <button className="action-btn" data-tip="Exit focus" onClick={onFocus} style={{ color: 'var(--gold)' }}>⌖</button>
-                                        )}
-                                        <button className="action-btn" data-tip="More" onClick={handleCtx}>···</button>
+                                        {onFocus && !isFocused && !isDone && <button className="action-btn" onClick={onFocus}>⌖</button>}
+                                        {isFocused && <button className="action-btn" onClick={onFocus} style={{ color: 'var(--gold)' }}>⌖</button>}
+                                        <button className="action-btn" onClick={handleCtx}>···</button>
                                     </div>
                                 </div>
                             </div>
-
                             <div className="flex items-center gap-2.5 flex-wrap">
                                 {task.priority && task.priority !== 'Medium' && (
                                     <span className="badge" style={{ background: pc.bg, color: pc.color, fontSize: 9 }}>{pc.label}</span>
@@ -1210,7 +468,7 @@
                                 {due && (
                                     <span className="text-xs font-semibold flex items-center gap-1"
                                         style={{ color: due.cls === 'overdue' ? 'var(--rose)' : due.cls === 'due-soon' ? 'var(--gold)' : 'var(--text-3)' }}>
-                                        📅 {due.label}
+                                        {due.label}
                                     </span>
                                 )}
                                 {task.tags && task.tags.filter && task.tags.filter(Boolean).map(tag => (
@@ -1222,13 +480,11 @@
                                     </span>
                                 )}
                             </div>
-
                             {task.children && task.children.length > 0 && (
                                 <div className="progress-track" style={{ width: 80 }}>
                                     <div className="progress-fill" style={{ width: `${(task.children.filter(c => c.status === 'Completed').length / task.children.length) * 100}%`, background: 'var(--sage)' }} />
                                 </div>
                             )}
-
                             <AnimatePresence>
                                 {expanded && (
                                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
@@ -1238,85 +494,77 @@
                                                 onBlur={() => safeCall('update_task', task.id, task.content, localNotes, task.links || '')}
                                                 className="w-full resize-none rounded-xl p-3 text-xs mono"
                                                 style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)', minHeight: 70, lineHeight: 1.8 }}
-                                                placeholder="Add notes… (Markdown & Obsidian links supported)" />
+                                                placeholder="Add notes... (Markdown supported)" />
                                             <div className="flex items-center gap-2">
                                                 <button onClick={() => onAddSub(task.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>+ Subtask</button>
                                                 <button onClick={() => { setEditing(true); setExpanded(false); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>Edit</button>
-                                                <button onClick={() => safeCall('delete_item', task.id, 'task')} className="btn btn-danger ml-auto" style={{ fontSize: 11, padding: '6px 12px' }}>Delete</button>
+                                                <button onClick={() => safeCall('delete_task', task.id)} className="btn btn-danger ml-auto" style={{ fontSize: 11, padding: '6px 12px' }}>Delete</button>
                                             </div>
                                         </div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
 
-                            {task.children && task.children.length > 0 && !expanded && (
+                            {/* Always render children — subtasks stay visible even when completed */}
+                            {task.children && task.children.length > 0 && (
                                 <div className="space-y-0.5 mt-1">
                                     {task.children.map(c => <TaskNode key={c.id} task={c} depth={depth + 1} safeCall={safeCall} timers={timers} setTimers={setTimers} onAddSub={onAddSub} />)}
                                 </div>
                             )}
                         </div>
                     </div>
-
                     {ctx && <CtxMenu pos={ctx} onClose={() => setCtx(null)} items={[
                         { heading: 'Actions' },
                         { icon: '✏', label: 'Edit title', action: () => { setEditing(true); setExpanded(false); } },
                         { icon: '↳', label: 'Add subtask', action: () => onAddSub(task.id) },
                         { icon: isDone ? '↩' : '✓', label: isDone ? 'Mark pending' : 'Mark complete', action: () => safeCall('update_task_status', task.id, isDone ? 'Pending' : 'Completed') },
                         'sep',
-                        { icon: '⌖', label: isFocused ? 'Exit focus' : 'Focus mode', action: onFocus || (() => { }) },
+                        { icon: task.is_achievement ? '★' : '☆', label: task.is_achievement ? 'Remove achievement' : 'Mark as achievement', action: () => safeCall('update_task_achievement', task.id, !task.is_achievement) },
+                        { icon: '⌖', label: isFocused ? 'Exit focus' : 'Focus mode', action: onFocus || (() => {}) },
                         { icon: '⏱', label: timerOn ? 'Stop timer' : 'Start timer', action: () => setTimerOn(!timerOn) },
                         'sep',
-                        { icon: '✕', label: 'Delete task', danger: true, action: () => safeCall('delete_item', task.id, 'task') },
+                        { icon: '✕', label: 'Delete task', danger: true, action: () => safeCall('delete_task', task.id) },
                     ]} />}
                 </div>
             );
         });
 
-        // ─── QUICK CAPTURE (⌘K style) ─────────────────────────────────────────────────
+        // ─── QUICK CAPTURE ───────────────────────────────────────────────────────
         const QuickCapture = ({ onAdd, onClose }) => {
             const [val, setVal] = useState('');
             const [hint, setHint] = useState('');
             const ref = useRef(null);
             useEffect(() => { ref.current?.focus(); }, []);
-
             const parseQuick = (text) => {
-                // Parse: "Fix bug !high #backend due:tomorrow"
-                let content = text, priority = 'Medium', tags = [], due = '';
+                let content = text, priority = 'Medium', tags = [], due = '', isAch = false;
                 const pM = text.match(/!(?:high|h)\b/i); if (pM) { priority = 'High'; content = content.replace(pM[0], ''); }
                 const pL = text.match(/!(?:low|l)\b/i); if (pL) { priority = 'Low'; content = content.replace(pL[0], ''); }
+                const wM = text.match(/!(?:win|achievement|ach)\b/i); if (wM) { isAch = true; content = content.replace(wM[0], ''); }
                 const tagMs = [...text.matchAll(/#(\w+)/g)]; tagMs.forEach(m => { tags.push(m[1]); content = content.replace(m[0], ''); });
                 const dM = text.match(/due:(\S+)/i);
                 if (dM) {
                     const dv = dM[1].toLowerCase();
                     const d = new Date();
-                    if (dv === 'today') due = d.toISOString().slice(0, 10);
-                    else if (dv === 'tomorrow') { d.setDate(d.getDate() + 1); due = d.toISOString().slice(0, 10); }
+                    if (dv === 'today') due = d.toISOString().slice(0,10);
+                    else if (dv === 'tomorrow') { d.setDate(d.getDate() + 1); due = d.toISOString().slice(0,10); }
                     else if (dv.match(/\d{4}-\d{2}-\d{2}/)) due = dv;
                     content = content.replace(dM[0], '');
                 }
-                return { content: content.trim(), priority, tags, due_date: due };
+                return { content: content.trim(), priority, tags, due_date: due, is_achievement: isAch };
             };
-
             useEffect(() => {
                 const p = parseQuick(val);
                 const hints = [];
                 if (p.priority !== 'Medium') hints.push(`${p.priority} priority`);
+                if (p.is_achievement) hints.push('achievement');
                 if (p.tags.length) hints.push(p.tags.map(t => `#${t}`).join(' '));
                 if (p.due_date) hints.push(`due ${p.due_date}`);
                 setHint(hints.join(' · '));
             }, [val]);
-
-            const submit = () => {
-                if (!val.trim()) return;
-                const parsed = parseQuick(val);
-                onAdd(parsed);
-                onClose();
-            };
-
+            const submit = () => { if (!val.trim()) return; onAdd(parseQuick(val)); onClose(); };
             return (
                 <div className="modal-overlay" style={{ alignItems: 'flex-end', paddingBottom: '10vh' }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-                    <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
-                        className="quick-bar">
+                    <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="quick-bar">
                         <div className="card p-3 space-y-2" style={{ boxShadow: 'var(--shadow-lg)' }}>
                             <div className="flex items-center gap-3">
                                 <span style={{ color: 'var(--gold)', fontSize: 18 }}>⚡</span>
@@ -1324,12 +572,12 @@
                                     onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
                                     className="flex-1 bg-transparent text-sm font-medium"
                                     style={{ color: 'var(--text)' }}
-                                    placeholder="Quick capture… (!high, #tag, due:tomorrow)" />
+                                    placeholder="Quick capture... (!high, #tag, due:tomorrow, !win)" />
                                 <kbd className="kbd">↵</kbd>
                             </div>
                             {hint && <div className="text-xs px-7" style={{ color: 'var(--gold)', opacity: 0.7 }}>{hint}</div>}
                             <div className="text-xs px-7" style={{ color: 'var(--text-3)' }}>
-                                Use <span className="kbd">!high</span> <span className="kbd">#tag</span> <span className="kbd">due:tomorrow</span> — press <span className="kbd">Esc</span> to dismiss
+                                <span className="kbd">!high</span> <span className="kbd">#tag</span> <span className="kbd">due:tomorrow</span> <span className="kbd">!win</span>
                             </div>
                         </div>
                     </motion.div>
@@ -1337,7 +585,8 @@
             );
         };
 
-        // ─── MISSIONS PAGE ────────────────────────────────────────────────────────────
+        // ─── MISSIONS PAGE ───────────────────────────────────────────────────────
+        const PAGE_SIZE = 25;
         const MissionsPage = ({ data, safeCall, focusId, setFocusId, timers, setTimers }) => {
             const [showAdd, setShowAdd] = useState(false);
             const [showQuick, setShowQuick] = useState(false);
@@ -1347,10 +596,10 @@
             const [view, setView] = useState('list');
             const [filter, setFilter] = useState('all');
             const [showDone, setShowDone] = useState(false);
+            const [donePage, setDonePage] = useState(1);
             const [search, setSearch] = useState('');
             const [showSidebar, setShowSidebar] = useState(true);
 
-            // ⌘K shortcut
             useEffect(() => {
                 const h = (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowQuick(true); } };
                 window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
@@ -1358,19 +607,37 @@
 
             const buildTree = (tasks, pid = 0) => tasks.filter(t => t.parent_id === pid).map(t => ({ ...t, children: buildTree(tasks, t.id) }));
 
+            // Keep subtasks (parent_id !== 0) regardless of completion status
+            // Only hide completed TOP-LEVEL tasks (they go to the Completed section)
             const filtered = useMemo(() => {
-                let t = data.tasks.filter(t => t.status !== 'Completed');
-                if (search) t = t.filter(t => t.content.toLowerCase().includes(search.toLowerCase()) || t.tags?.some(tag => tag.includes(search.toLowerCase())));
-                const now = new Date(); now.setHours(0, 0, 0, 0);
-                if (filter === 'today') t = t.filter(t => { if (!t.due_date) return false; const d = new Date(t.due_date); d.setHours(0, 0, 0, 0); return d <= now; });
-                if (filter === 'high') t = t.filter(t => t.priority === 'High');
-                if (filter === 'nodate') t = t.filter(t => !t.due_date);
+                let t = data.tasks.filter(t => {
+                    if (t.parent_id !== 0) return true; // always keep subtasks in tree
+                    return t.status !== 'Completed';
+                });
+                if (search) {
+                    const q = search.toLowerCase();
+                    const matchIds = new Set();
+                    t.forEach(task => {
+                        if (task.content.toLowerCase().includes(q) || task.tags?.some(tag => tag.toLowerCase().includes(q))) {
+                            matchIds.add(task.id);
+                            // include ancestors
+                            let pid = task.parent_id;
+                            while (pid) { matchIds.add(pid); const p = t.find(x => x.id === pid); pid = p ? p.parent_id : 0; }
+                        }
+                    });
+                    t = t.filter(task => matchIds.has(task.id));
+                }
+                const now = new Date(); now.setHours(0,0,0,0);
+                if (filter === 'today') t = t.filter(t => t.parent_id !== 0 || (t.due_date && new Date(t.due_date) <= now));
+                if (filter === 'high') t = t.filter(t => t.parent_id !== 0 || t.priority === 'High');
+                if (filter === 'nodate') t = t.filter(t => t.parent_id !== 0 || !t.due_date);
                 return t;
             }, [data.tasks, filter, search]);
 
             const tree = useMemo(() => buildTree(filtered), [filtered]);
-            const groups = useMemo(() => groupByDate(filtered), [filtered]);
-            const done = useMemo(() => [...data.tasks.filter(t => t.status === 'Completed')].sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0)), [data.tasks]);
+            const groups = useMemo(() => groupByDate(filtered.filter(t => t.parent_id === 0)), [filtered]);
+            const done = useMemo(() => [...data.tasks.filter(t => t.status === 'Completed' && t.parent_id === 0)].sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0)), [data.tasks]);
+            const pagedDone = done.slice(0, donePage * PAGE_SIZE);
 
             const stats = useMemo(() => {
                 const total = data.tasks.length, comp = data.tasks.filter(t => t.status === 'Completed').length;
@@ -1378,13 +645,12 @@
                 return { total, comp, active: total - comp, overdue, momentum: total > 0 ? Math.round((comp / total) * 100) : 0 };
             }, [data.tasks]);
 
-            const handleAdd = ({ content, priority, due_date, notes, tags }) => {
-                safeCall('add_task', content, 0, notes, tags?.join(',') || '', priority, due_date, addParentId);
+            const handleAdd = ({ content, priority, due_date, notes, tags, is_achievement }) => {
+                safeCall('add_task', content, 0, notes || '', tags?.join(',') || '', priority, due_date || '', addParentId, is_achievement || false);
             };
-
             const toggleSel = (id) => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
             const bulkAction = (action) => {
-                selected.forEach(id => { if (action === 'complete') safeCall('update_task_status', id, 'Completed'); if (action === 'delete') safeCall('delete_item', id, 'task'); });
+                selected.forEach(id => { if (action === 'complete') safeCall('update_task_status', id, 'Completed'); if (action === 'delete') safeCall('delete_task', id); });
                 setSelected([]); setSelMode(false);
             };
 
@@ -1393,7 +659,6 @@
 
             return (
                 <div className="flex-1 flex overflow-hidden">
-                    {/* Main panel */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Header */}
                         <div className="flex-shrink-0 px-7 pt-7 pb-4 space-y-4">
@@ -1403,49 +668,38 @@
                                     <span className="section-label">{stats.active} active · {stats.comp} done</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {/* Search */}
                                     <div className="relative">
                                         <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontSize: 13 }}>⌕</span>
-                                        <input value={search} onChange={e => setSearch(e.target.value)}
-                                            className="input-field text-sm" style={{ paddingLeft: 30, height: 36, width: 180 }}
-                                            placeholder="Search…" />
+                                        <input value={search} onChange={e => setSearch(e.target.value)} className="input-field text-sm" style={{ paddingLeft: 30, height: 36, width: 180 }} placeholder="Search..." />
                                     </div>
                                     <button onClick={() => setShowQuick(true)} className="btn btn-ghost" style={{ fontSize: 11, height: 36, gap: 4 }}>
-                                        ⚡ Quick <span className="kbd" style={{ fontSize: 9 }}>⌘K</span>
+                                        ⚡ Quick <span className="kbd" style={{ fontSize: 9 }}>Ctrl+K</span>
                                     </button>
                                     <button onClick={() => { setSelMode(!selMode); setSelected([]); }}
-                                        className="btn btn-ghost" style={{
-                                            fontSize: 11, height: 36,
-                                            background: selMode ? 'var(--gold-dim)' : 'var(--bg-3)',
-                                            color: selMode ? 'var(--gold)' : 'var(--text-2)'
-                                        }}>
+                                        className="btn btn-ghost" style={{ fontSize: 11, height: 36, background: selMode ? 'var(--gold-dim)' : 'var(--bg-3)', color: selMode ? 'var(--gold)' : 'var(--text-2)' }}>
                                         {selMode ? '✕ Cancel' : '☑ Select'}
                                     </button>
-                                    <button onClick={() => setShowSidebar(!showSidebar)} className="btn btn-ghost" style={{ fontSize: 11, height: 36 }} data-tip="Toggle widgets">⊞</button>
+                                    <button onClick={() => setShowSidebar(!showSidebar)} className="btn btn-ghost" style={{ fontSize: 11, height: 36 }}>⊞</button>
                                 </div>
                             </div>
-
-                            {/* Overdue banner */}
                             {stats.overdue > 0 && (
                                 <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-semibold pulse-ring"
                                     style={{ background: 'var(--rose-dim)', color: 'var(--rose)', border: '1px solid rgba(232,112,112,0.2)' }}>
-                                    ⚠ {stats.overdue} overdue {stats.overdue === 1 ? 'task' : 'tasks'} — don't let them slip
+                                    {stats.overdue} overdue {stats.overdue === 1 ? 'task' : 'tasks'}
                                 </div>
                             )}
-
-                            {/* Filter + view row */}
                             <div className="flex items-center gap-2">
                                 <div className="flex items-center gap-0.5 p-1 rounded-xl" style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
                                     {FILTERS.map(f => (
                                         <button key={f.id} onClick={() => setFilter(f.id)}
                                             className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                            style={{ background: filter === f.id ? 'var(--bg-1)' : 'transparent', color: filter === f.id ? 'var(--text)' : 'var(--text-3)', boxShadow: filter === f.id ? 'var(--shadow-sm)' : 'none', transition: 'all 0.15s' }}>
+                                            style={{ background: filter === f.id ? 'var(--bg-1)' : 'transparent', color: filter === f.id ? 'var(--text)' : 'var(--text-3)', boxShadow: filter === f.id ? 'var(--shadow-sm)' : 'none' }}>
                                             {f.l}
                                         </button>
                                     ))}
                                 </div>
                                 <div className="flex items-center gap-0.5 p-1 rounded-xl ml-auto" style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
-                                    {[['list', '≡ List'], ['grouped', '⊞ Grouped']].map(([v, l]) => (
+                                    {[['list', 'List'], ['grouped', 'Grouped']].map(([v, l]) => (
                                         <button key={v} onClick={() => setView(v)}
                                             className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                                             style={{ background: view === v ? 'var(--bg-1)' : 'transparent', color: view === v ? 'var(--text)' : 'var(--text-3)' }}>
@@ -1454,8 +708,6 @@
                                     ))}
                                 </div>
                             </div>
-
-                            {/* Momentum bar */}
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
                                     <span>Momentum</span><span className="mono font-bold" style={{ color: 'var(--gold)' }}>{stats.momentum}%</span>
@@ -1475,7 +727,7 @@
                                             <div style={{ width: 6, height: 6, borderRadius: '50%', background: GROUP_COLORS[grp] || 'var(--text-3)', flexShrink: 0 }} />
                                             {grp} <span className="ml-auto">{tasks.length}</span>
                                         </div>
-                                        {tasks.map(task => (
+                                        {buildTree(tasks.concat(data.tasks.filter(t => t.parent_id !== 0))).map(task => (
                                             <TaskNode key={task.id} task={task} safeCall={safeCall}
                                                 isFocused={focusId === task.id} onFocus={() => setFocusId(focusId === task.id ? null : task.id)}
                                                 selMode={selMode} isSelected={selected.includes(task.id)} onSelect={() => toggleSel(task.id)}
@@ -1511,17 +763,26 @@
                                         {showDone && (
                                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
                                                 <div className="mt-2 space-y-0.5 opacity-45">
-                                                    {done.map(task => (
+                                                    {pagedDone.map(task => (
                                                         <div key={task.id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-bg2 transition-colors">
                                                             <button onClick={() => safeCall('update_task_status', task.id, 'Pending')}
                                                                 className="check done" style={{ width: 16, height: 16 }}>
                                                                 <span style={{ color: 'var(--bg)', fontSize: 9, fontWeight: 900 }}>✓</span>
                                                             </button>
-                                                            <span className="text-sm flex-1 line-through" style={{ color: 'var(--text-3)' }}>{task.content}</span>
+                                                            <span className="text-sm flex-1 line-through" style={{ color: 'var(--text-3)' }}>
+                                                                {task.is_achievement && <span style={{ color: 'var(--gold)', marginRight: 4 }}>★</span>}
+                                                                {task.content}
+                                                            </span>
                                                             {task.completed_at && <span className="text-xs mono" style={{ color: 'var(--text-3)' }}>{fmtDate(task.completed_at)}</span>}
-                                                            <button onClick={() => safeCall('delete_item', task.id, 'task')} className="action-btn">✕</button>
+                                                            <button onClick={() => safeCall('delete_task', task.id)} className="action-btn">✕</button>
                                                         </div>
                                                     ))}
+                                                    {pagedDone.length < done.length && (
+                                                        <button onClick={() => setDonePage(p => p + 1)}
+                                                            className="btn btn-ghost w-full mt-2" style={{ fontSize: 11 }}>
+                                                            Show more ({done.length - pagedDone.length} remaining)
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         )}
@@ -1530,7 +791,6 @@
                             )}
                         </div>
 
-                        {/* FAB */}
                         {!selMode && (
                             <motion.button onClick={() => { setAddParentId(0); setShowAdd(true); }}
                                 whileHover={{ scale: 1.05, boxShadow: '0 12px 40px var(--gold-glow)' }} whileTap={{ scale: 0.96 }}
@@ -1541,23 +801,20 @@
                         )}
                     </div>
 
-                    {/* Right sidebar — widgets */}
+                    {/* Right sidebar */}
                     <AnimatePresence>
                         {showSidebar && (
                             <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 280, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
-                                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                                transition={{ duration: 0.25, ease: [0.4,0,0.2,1] }}
                                 className="flex-shrink-0 overflow-y-auto overflow-x-hidden"
                                 style={{ borderLeft: '1px solid var(--border)', background: 'var(--bg-1)' }}>
                                 <div className="p-4 space-y-4 w-[280px]">
                                     <DailyFocusWidget tasks={data.tasks} safeCall={safeCall} />
-                                    <PomodoroWidget />
-                                    <StreakWidget achievements={data.achievements} />
                                 </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
 
-                    {/* Modals */}
                     <AnimatePresence>
                         {showAdd && <AddTaskModal onClose={() => setShowAdd(false)} parentId={addParentId} onAdd={handleAdd} />}
                     </AnimatePresence>
@@ -1565,7 +822,6 @@
                         {showQuick && <QuickCapture onClose={() => setShowQuick(false)} onAdd={handleAdd} />}
                     </AnimatePresence>
 
-                    {/* Bulk bar */}
                     <AnimatePresence>
                         {selMode && selected.length > 0 && (
                             <motion.div initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
@@ -1582,95 +838,80 @@
             );
         };
 
-        // ─── HISTORY PAGE ─────────────────────────────────────────────────────────────
+        // ─── HISTORY PAGE ────────────────────────────────────────────────────────
         const HistoryPage = ({ data, safeCall }) => {
             const [search, setSearch] = useState('');
             const [filter, setFilter] = useState('all');
             const [sortBy, setSortBy] = useState('date_desc');
             const [editingItem, setEditingItem] = useState(null);
+            const [page, setPage] = useState(1);
 
             const handleSaveLog = () => {
                 if (!editingItem) return;
-                if (editingItem.type === 'task') {
-                    safeCall('update_task', editingItem.id, editingItem.content, editingItem.notes, editingItem.links || '');
-                } else {
-                    safeCall('update_achievement', editingItem.id, editingItem.content, editingItem.impact, editingItem.notes, editingItem.links || '');
-                }
+                safeCall('update_task', editingItem.id, editingItem.content, editingItem.notes, editingItem.links || '');
                 setEditingItem(null);
             };
 
+            const IC = { High: { dot: 'var(--rose)', ring: true }, Medium: { dot: 'var(--gold)', ring: false }, Low: { dot: 'var(--sage)', ring: false } };
+
             const completedItems = useMemo(() => {
-                const tasks = data.tasks.filter(t => t.status === 'Completed').map(t => ({
-                    ...t,
-                    type: 'task',
-                    dateStr: t.completed_at || t.timestamp,
-                    impact: t.priority
+                let items = data.tasks.filter(t => t.status === 'Completed').map(t => ({
+                    ...t, dateStr: t.completed_at || t.timestamp, impact: t.priority
                 }));
-                const achs = data.achievements.map(a => ({
-                    ...a,
-                    type: 'victory',
-                    dateStr: a.created_at || a.timestamp
-                }));
-                return [...tasks, ...achs].sort((a, b) => {
+                // Filter
+                if (filter === 'tasks') items = items.filter(i => !i.is_achievement);
+                if (filter === 'achievements') items = items.filter(i => i.is_achievement);
+                if (search.trim()) {
+                    const q = search.toLowerCase();
+                    items = items.filter(i => i.content.toLowerCase().includes(q) || (i.notes && i.notes.toLowerCase().includes(q)));
+                }
+                // Sort
+                items.sort((a, b) => {
                     if (sortBy === 'date_asc') return new Date(a.dateStr || 0) - new Date(b.dateStr || 0);
                     if (sortBy === 'name_asc') return a.content.localeCompare(b.content);
                     if (sortBy === 'name_desc') return b.content.localeCompare(a.content);
                     return new Date(b.dateStr || 0) - new Date(a.dateStr || 0);
                 });
-            }, [data.tasks, data.achievements, sortBy]);
+                return items;
+            }, [data.tasks, filter, search, sortBy]);
+
+            const pagedItems = completedItems.slice(0, page * PAGE_SIZE);
 
             const byDate = useMemo(() => {
                 const G = {};
-                const filtered = completedItems.filter(item => {
-                    if (filter === 'tasks' && item.type !== 'task') return false;
-                    if (filter === 'victories' && item.type !== 'victory') return false;
-                    if (search.trim()) {
-                        const q = search.toLowerCase();
-                        if (!item.content.toLowerCase().includes(q) && !(item.notes && item.notes.toLowerCase().includes(q))) return false;
-                    }
-                    return true;
-                });
-
                 if (sortBy.startsWith('date')) {
-                    filtered.forEach(a => {
+                    pagedItems.forEach(a => {
                         const d = a.dateStr ? new Date(a.dateStr).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Earlier';
                         if (!G[d]) G[d] = [];
                         G[d].push(a);
                     });
                 } else {
-                    G['All Items'] = filtered;
+                    G['All Items'] = pagedItems;
                 }
                 return G;
-            }, [completedItems, filter, search, sortBy]);
-
-            const IC = { High: { dot: 'var(--rose)', ring: true }, Medium: { dot: 'var(--gold)', ring: false }, Low: { dot: 'var(--sage)', ring: false } };
-            const total = completedItems.length;
+            }, [pagedItems, sortBy]);
 
             return (
                 <div className="flex-1 overflow-y-auto px-7 py-7 space-y-6 max-w-3xl">
                     <header className="flex items-end justify-between">
                         <div>
                             <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Logbook</h2>
-                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>{total} items completed and recorded</p>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>{completedItems.length} items recorded</p>
                         </div>
                     </header>
-
-                    {/* Filter & Search */}
                     <div className="flex gap-3 text-sm">
-                        <input value={search} onChange={e => setSearch(e.target.value)}
+                        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
                             className="input-field py-1.5 px-3 flex-1 text-sm bg-transparent" placeholder="Search history..." style={{ border: '1px solid var(--border)' }} />
-
                         <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                            className="input-field py-1 px-2 text-xs bg-transparent" style={{ width: 'auto', border: '1px solid var(--border)', height: 34, borderRadius: 8, outline: 'none' }}>
+                            className="input-field py-1 px-2 text-xs bg-transparent" style={{ width: 'auto', border: '1px solid var(--border)', height: 34, borderRadius: 8 }}>
                             <option value="date_desc">Newest First</option>
                             <option value="date_asc">Oldest First</option>
                             <option value="name_asc">Name (A-Z)</option>
                             <option value="name_desc">Name (Z-A)</option>
                         </select>
-
                         <div className="flex gap-1.5 flex-shrink-0">
-                            {[['all', 'All'], ['tasks', 'Tasks'], ['victories', 'Victories']].map(([v, l]) => (
-                                <button key={v} onClick={() => setFilter(v)}
+                            {[['all', 'All'], ['tasks', 'Tasks'], ['achievements', 'Achievements']].map(([v, l]) => (
+                                <button key={v} onClick={() => { setFilter(v); setPage(1); }}
                                     className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                                     style={{ background: filter === v ? 'var(--bg-2)' : 'transparent', color: filter === v ? 'var(--text)' : 'var(--text-3)', border: `1px solid ${filter === v ? 'var(--border-h)' : 'transparent'}` }}>
                                     {l}
@@ -1678,45 +919,33 @@
                             ))}
                         </div>
                     </div>
-
-                    {/* List grouped by date */}
                     {Object.entries(byDate).map(([date, items]) => (
                         <div key={date} className="space-y-2">
                             <div className="section-label px-1">{date}</div>
                             {items.map(a => {
                                 const ic = IC[a.impact] || IC.Medium;
                                 return (
-                                    <div key={a.id + a.type} className="group card-inset flex items-start gap-4 p-4 hover:border-border-h transition-all"
+                                    <div key={a.id} className="group card-inset flex items-start gap-4 p-4 hover:border-border-h transition-all"
                                         onDoubleClick={() => setEditingItem(a)}>
                                         <div className={`mt-1.5 flex-shrink-0 rounded-full ${ic.ring ? 'pulse-ring' : ''}`}
-                                            style={{ width: 8, height: 8, background: a.type === 'task' ? 'var(--sage)' : ic.dot }} />
+                                            style={{ width: 8, height: 8, background: a.is_achievement ? 'var(--gold)' : ic.dot }} />
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>
-                                                {a.type === 'task' ? <span style={{ color: 'var(--sage)', marginRight: 6 }}>✓</span> : <span style={{ color: 'var(--gold)', marginRight: 6 }}>🏆</span>}
+                                                {a.is_achievement ? <span style={{ color: 'var(--gold)', marginRight: 6 }}>★</span> : <span style={{ color: 'var(--sage)', marginRight: 6 }}>✓</span>}
                                                 {a.content}
                                             </p>
                                             {a.notes && <div className="text-xs mt-2 leading-relaxed md" style={{ color: 'var(--text-2)' }} dangerouslySetInnerHTML={{ __html: md(a.notes) }} />}
-                                            {a.type === 'task' && (a.due_date || (a.tags && a.tags.length > 0)) && (
+                                            {(a.due_date || (a.tags && a.tags.length > 0)) && (
                                                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                                    {a.due_date && (
-                                                        <span className="text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--text-3)' }}>📅 {a.due_date}</span>
-                                                    )}
-                                                    {a.tags && Array.isArray(a.tags) && a.tags.filter(Boolean).map(tag => (
-                                                        <span key={tag} className="tag">#{tag}</span>
-                                                    ))}
+                                                    {a.due_date && <span className="text-xs font-semibold" style={{ color: 'var(--text-3)' }}>{a.due_date}</span>}
+                                                    {a.tags && Array.isArray(a.tags) && a.tags.filter(Boolean).map(tag => <span key={tag} className="tag">#{tag}</span>)}
                                                 </div>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
-                                            <button onClick={() => setEditingItem(a)}
-                                                className="action-btn opacity-0 group-hover:opacity-100" style={{ fontSize: 11 }}>✎ Edit</button>
-
-                                            {a.type === 'task' ? (
-                                                <button onClick={() => safeCall('update_task_status', a.id, 'Pending')}
-                                                    className="action-btn opacity-0 group-hover:opacity-100" style={{ fontSize: 10 }}>Undo</button>
-                                            ) : (
-                                                <span className="badge" style={{ background: ic.dot + '22', color: ic.dot, fontSize: 9 }}>{a.impact}</span>
-                                            )}
+                                            <button onClick={() => setEditingItem(a)} className="action-btn opacity-0 group-hover:opacity-100" style={{ fontSize: 11 }}>Edit</button>
+                                            <button onClick={() => safeCall('update_task_status', a.id, 'Pending')}
+                                                className="action-btn opacity-0 group-hover:opacity-100" style={{ fontSize: 10 }}>Undo</button>
                                         </div>
                                     </div>
                                 );
@@ -1724,38 +953,27 @@
                         </div>
                     ))}
                     {Object.keys(byDate).length === 0 && <div className="empty"><div style={{ fontSize: 40 }}>📜</div><div className="text-sm font-bold" style={{ color: 'var(--text-3)' }}>No history found</div></div>}
+                    {pagedItems.length < completedItems.length && (
+                        <button onClick={() => setPage(p => p + 1)} className="btn btn-ghost w-full" style={{ fontSize: 11 }}>
+                            Show more ({completedItems.length - pagedItems.length} remaining)
+                        </button>
+                    )}
 
                     {editingItem && (
                         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingItem(null); }}>
                             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="card p-6 space-y-4 shadow-lg w-full max-w-lg" style={{ background: 'var(--bg-1)' }}>
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Edit Log Details</h3>
-                                    <button onClick={() => setEditingItem(null)} style={{ color: 'var(--text-3)' }}>✕</button>
+                                    <h3 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Edit Details</h3>
+                                    <button onClick={() => setEditingItem(null)} style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
                                 </div>
-                                <div className="space-y-3">
-                                    <input value={editingItem.content} onChange={e => setEditingItem({ ...editingItem, content: e.target.value })}
-                                        className="input-field w-full font-bold" placeholder="Task or Victory title..." />
-
-                                    <textarea value={editingItem.notes || ''} onChange={e => setEditingItem({ ...editingItem, notes: e.target.value })}
-                                        className="input-field w-full resize-none text-xs mono" style={{ height: 120, lineHeight: 1.6 }}
-                                        placeholder="Add completion infos, context, thoughts, or markdown notes..." />
-
-                                    {editingItem.type === 'victory' && (
-                                        <div className="flex items-center gap-3 mt-2">
-                                            <div className="section-label">Impact:</div>
-                                            {['High', 'Medium', 'Low'].map(p => (
-                                                <button key={p} onClick={() => setEditingItem({ ...editingItem, impact: p })}
-                                                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                                    style={{ background: editingItem.impact === p ? IC[p].dot + '22' : 'var(--bg-3)', color: editingItem.impact === p ? IC[p].dot : 'var(--text-3)', border: `1px solid ${editingItem.impact === p ? IC[p].dot + '44' : 'transparent'}` }}>
-                                                    {p}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                                <input value={editingItem.content} onChange={e => setEditingItem({ ...editingItem, content: e.target.value })}
+                                    className="input-field w-full font-bold" placeholder="Title..." />
+                                <textarea value={editingItem.notes || ''} onChange={e => setEditingItem({ ...editingItem, notes: e.target.value })}
+                                    className="input-field w-full resize-none text-xs mono" style={{ height: 120, lineHeight: 1.6 }}
+                                    placeholder="Notes, context, markdown..." />
                                 <div className="flex gap-2.5 pt-2">
                                     <button onClick={() => setEditingItem(null)} className="btn btn-ghost flex-1">Cancel</button>
-                                    <button onClick={handleSaveLog} className="btn btn-gold flex-1">Save Completion Info</button>
+                                    <button onClick={handleSaveLog} className="btn btn-gold flex-1">Save</button>
                                 </div>
                             </motion.div>
                         </div>
@@ -1764,7 +982,7 @@
             );
         };
 
-        // ─── ANALYTICS PAGE ───────────────────────────────────────────────────────────
+        // ─── ANALYTICS PAGE ──────────────────────────────────────────────────────
         const AnalyticsPage = ({ data, safeCall }) => {
             const [timeVal, setTimeVal] = useState('24');
             const [timeUnit, setTimeUnit] = useState('hours');
@@ -1776,8 +994,8 @@
                 const total = data.tasks.length, done = data.tasks.filter(t => t.status === 'Completed').length;
                 const overdue = data.tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(); }).length;
                 const high = data.tasks.filter(t => t.priority === 'High' && t.status !== 'Completed').length;
-                const wins = data.achievements.length, highW = data.achievements.filter(a => a.impact === 'High').length;
-                return { total, done, active: total - done, overdue, high, wins, highW, momentum: total > 0 ? Math.round((done / total) * 100) : 0 };
+                const wins = data.tasks.filter(t => t.is_achievement).length;
+                return { total, done, active: total - done, overdue, high, wins, momentum: total > 0 ? Math.round((done / total) * 100) : 0 };
             }, [data]);
 
             const priDist = useMemo(() => {
@@ -1789,7 +1007,7 @@
 
             const scan = async () => { setLoading(true); const r = await safeCall('generate_summary', `-${timeVal} ${timeUnit}`); setRecap(r || 'No data in this range.'); setLoading(false); };
             const scanPreset = async (p) => { setLoading(true); const r = await safeCall('generate_summary', p); setRecap(r || 'No data in this range.'); setLoading(false); };
-            const aiSynth = async () => { setAiLoading(true); const r = await safeCall('get_ai_recap', `Give concise insights on:\n${recap}`); setRecap(r || recap); setAiLoading(false); };
+            const aiSynth = async () => { setAiLoading(true); const r = await safeCall('get_ai_recap', `Analyze this productivity data and give concise actionable insights:\n${recap}`); setRecap(r || recap); setAiLoading(false); };
 
             const CARDS = [
                 { l: 'Total', v: stats.total, c: 'var(--text)' },
@@ -1797,7 +1015,7 @@
                 { l: 'Active', v: stats.active, c: 'var(--gold)' },
                 { l: 'Overdue', v: stats.overdue, c: 'var(--rose)' },
                 { l: 'High Priority', v: stats.high, c: 'var(--rose)' },
-                { l: 'Victories', v: stats.wins, c: 'var(--teal)' },
+                { l: 'Achievements', v: stats.wins, c: 'var(--gold)' },
             ];
 
             return (
@@ -1805,15 +1023,13 @@
                     <header className="flex items-end justify-between">
                         <div>
                             <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Intelligence</h2>
-                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>System-wide analytics</p>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>Analytics & reports</p>
                         </div>
                         <div className="text-right">
                             <div className="section-label mb-1">Momentum</div>
                             <div className="text-4xl font-black mono" style={{ color: 'var(--gold)' }}>{stats.momentum}%</div>
                         </div>
                     </header>
-
-                    {/* Momentum bar */}
                     <div className="card p-4 space-y-2">
                         <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
                             <span>{stats.done} completed of {stats.total} total</span>
@@ -1823,18 +1039,14 @@
                             <div className="progress-fill" style={{ width: `${stats.momentum}%`, background: `linear-gradient(90deg, var(--gold), var(--teal))` }} />
                         </div>
                     </div>
-
-                    {/* Stat grid */}
                     <div className="grid grid-cols-3 gap-3">
                         {CARDS.map(s => (
-                            <div key={s.l} className="card p-4 stat-card space-y-1" style={{ '--hover-c': s.c }}>
+                            <div key={s.l} className="card p-4 space-y-1">
                                 <div className="section-label">{s.l}</div>
                                 <div className="text-2xl font-black mono" style={{ color: s.c }}>{s.v}</div>
                             </div>
                         ))}
                     </div>
-
-                    {/* Priority distribution */}
                     <div className="card p-5 space-y-4">
                         <div className="section-label">Active Tasks by Priority</div>
                         {priDist.map(d => (
@@ -1845,8 +1057,6 @@
                             </div>
                         ))}
                     </div>
-
-                    {/* Timeline scanner */}
                     <div className="card p-5 space-y-4">
                         <div className="flex items-center justify-between flex-wrap gap-3">
                             <div className="flex items-center gap-2">
@@ -1867,13 +1077,12 @@
                                 <select value={timeUnit} onChange={e => setTimeUnit(e.target.value)}
                                     className="mono text-sm rounded-lg py-1.5 px-3 appearance-none"
                                     style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', color: 'var(--text)' }}>
-                                    <option value="seconds">Sec</option>
-                                    <option value="minutes">Min</option>
                                     <option value="hours">Hr</option>
                                     <option value="days">Day</option>
+                                    <option value="months">Mo</option>
                                 </select>
                                 <button onClick={scan} className="btn btn-ghost" style={{ fontSize: 11 }}>{loading ? '...' : 'Scan'}</button>
-                                {recap && <button onClick={aiSynth} className="btn" style={{ background: 'var(--lavender)', color: 'var(--bg)', fontSize: 11 }}>{aiLoading ? '...' : '✦ AI'}</button>}
+                                {recap && <button onClick={aiSynth} className="btn" style={{ background: 'var(--lavender)', color: 'var(--bg)', fontSize: 11 }}>{aiLoading ? '...' : 'AI Insights'}</button>}
                             </div>
                         </div>
                         {recap ? (
@@ -1882,61 +1091,270 @@
                                 {loading ? <div className="shimmer rounded h-4 w-1/2" /> : <div dangerouslySetInnerHTML={{ __html: md(recap) }} />}
                             </div>
                         ) : (
-                            <div className="py-8 text-center text-sm" style={{ color: 'var(--text-3)' }}>Set a range and scan to see your history</div>
+                            <div className="py-8 text-center text-sm" style={{ color: 'var(--text-3)' }}>Select a range to generate a report</div>
                         )}
                     </div>
                 </div>
             );
         };
 
-        // ─── SETTINGS PAGE ────────────────────────────────────────────────────────────
+        // ─── WORLD CLOCK PAGE ────────────────────────────────────────────────────
+        const ALL_TIMEZONES = (() => {
+            try { return Intl.supportedValuesOf('timeZone'); } catch(e) { return ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Australia/Sydney']; }
+        })();
+
+        const WorldClockPage = ({ data, safeCall }) => {
+            const [clocks, setClocks] = useState(data.settings?.world_clocks || []);
+            const [now, setNow] = useState(new Date());
+            const [adding, setAdding] = useState(false);
+            const [search, setSearch] = useState('');
+            const searchRef = useRef(null);
+
+            useEffect(() => {
+                const iv = setInterval(() => setNow(new Date()), 1000);
+                return () => clearInterval(iv);
+            }, []);
+
+            useEffect(() => {
+                if (data.settings?.world_clocks) setClocks(data.settings.world_clocks);
+            }, [data.settings?.world_clocks]);
+
+            const addClock = (tz) => {
+                const label = tz.split('/').pop().replace(/_/g, ' ');
+                const updated = [...clocks, { label, tz }];
+                setClocks(updated);
+                safeCall('save_world_clocks', JSON.stringify(updated));
+                setAdding(false);
+                setSearch('');
+            };
+            const removeClock = (idx) => {
+                const updated = clocks.filter((_, i) => i !== idx);
+                setClocks(updated);
+                safeCall('save_world_clocks', JSON.stringify(updated));
+            };
+
+            const getTimeInTz = (tz) => {
+                try {
+                    return { time: now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
+                             date: now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' }),
+                             hour: parseInt(now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', hour12: false })) };
+                } catch(e) { return { time: '--:--', date: '', hour: 0 }; }
+            };
+
+            const localHour = now.getHours();
+            const filteredTz = search ? ALL_TIMEZONES.filter(tz => tz.toLowerCase().includes(search.toLowerCase())).slice(0, 12) : [];
+
+            return (
+                <div className="flex-1 overflow-y-auto px-7 py-7 space-y-6 max-w-4xl">
+                    <header className="flex items-end justify-between">
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>World Clock</h2>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+                                {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} local
+                            </p>
+                        </div>
+                        <button onClick={() => { setAdding(!adding); setTimeout(() => searchRef.current?.focus(), 100); }}
+                            className="btn btn-ghost" style={{ fontSize: 11 }}>
+                            {adding ? '✕ Cancel' : '+ Add Zone'}
+                        </button>
+                    </header>
+
+                    {adding && (
+                        <div className="card p-4 space-y-3">
+                            <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)}
+                                className="input-field text-sm" placeholder="Search timezone (e.g. Tokyo, Berlin, New York)..." />
+                            {filteredTz.length > 0 && (
+                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                                    {filteredTz.map(tz => {
+                                        const info = getTimeInTz(tz);
+                                        return (
+                                            <button key={tz} onClick={() => addClock(tz)}
+                                                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm hover:bg-bg2 transition-colors"
+                                                style={{ color: 'var(--text)', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                                                <span>{tz.replace(/_/g, ' ')}</span>
+                                                <span className="mono text-xs" style={{ color: 'var(--text-3)' }}>{info.time}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Timeline header — 24h bar */}
+                    {clocks.length > 0 && (
+                        <div className="card p-5 space-y-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="section-label">Timeline</div>
+                                <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-3)' }}>
+                                    <span className="flex items-center gap-1"><div style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--sage-dim)', border: '1px solid var(--sage)' }} /> Business hours</span>
+                                    <span className="flex items-center gap-1"><div style={{ width: 2, height: 12, borderRadius: 1, background: 'var(--gold)' }} /> Now</span>
+                                </div>
+                            </div>
+
+                            {/* Hour markers */}
+                            <div className="flex items-center" style={{ paddingLeft: 120 }}>
+                                {[0,3,6,9,12,15,18,21].map(h => (
+                                    <div key={h} className="mono text-xs" style={{ color: 'var(--text-4)', position: 'absolute', left: `calc(120px + ${(h/24)*100}% * (100% - 120px) / 100%)` }}>
+                                    </div>
+                                ))}
+                                <div className="flex-1 flex justify-between mono" style={{ fontSize: 9, color: 'var(--text-4)' }}>
+                                    <span>0</span><span>3</span><span>6</span><span>9</span><span>12</span><span>15</span><span>18</span><span>21</span><span>24</span>
+                                </div>
+                            </div>
+
+                            {clocks.map((clock, idx) => {
+                                const info = getTimeInTz(clock.tz);
+                                const workStart = 9/24 * 100;
+                                const workEnd = 17/24 * 100;
+                                // Calculate offset: difference in current hour between this tz and local
+                                const hourDiff = info.hour - localHour;
+                                const adjustedWorkStart = ((9 - hourDiff + 24) % 24) / 24 * 100;
+                                const adjustedWorkEnd = ((17 - hourDiff + 24) % 24) / 24 * 100;
+                                const nowPct = (info.hour + now.getMinutes()/60) / 24 * 100;
+
+                                return (
+                                    <div key={idx} className="tz-row group">
+                                        <div style={{ width: 110, flexShrink: 0 }}>
+                                            <div className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{clock.label}</div>
+                                            <div className="mono text-xs" style={{ color: 'var(--text-3)' }}>{info.time}</div>
+                                            <div className="text-xs" style={{ color: 'var(--text-4)', fontSize: 9 }}>{info.date}</div>
+                                        </div>
+                                        <div className="tz-bar">
+                                            <div className="tz-bar-bg" />
+                                            {/* Business hours band */}
+                                            {adjustedWorkStart < adjustedWorkEnd ? (
+                                                <div className="tz-bar-work" style={{ left: `${adjustedWorkStart}%`, width: `${adjustedWorkEnd - adjustedWorkStart}%`, background: 'var(--sage-dim)', border: '1px solid rgba(68,255,177,0.2)' }} />
+                                            ) : (
+                                                <>
+                                                    <div className="tz-bar-work" style={{ left: `${adjustedWorkStart}%`, right: 0, background: 'var(--sage-dim)', border: '1px solid rgba(68,255,177,0.2)' }} />
+                                                    <div className="tz-bar-work" style={{ left: 0, width: `${adjustedWorkEnd}%`, background: 'var(--sage-dim)', border: '1px solid rgba(68,255,177,0.2)' }} />
+                                                </>
+                                            )}
+                                            {/* Current time indicator */}
+                                            <div className="tz-bar-now" style={{ left: `${nowPct}%`, background: 'var(--gold)' }} />
+                                        </div>
+                                        <button onClick={() => removeClock(idx)}
+                                            className="action-btn opacity-0 group-hover:opacity-100" style={{ flexShrink: 0 }}>✕</button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {clocks.length === 0 && !adding && (
+                        <div className="empty">
+                            <div style={{ fontSize: 40 }}>🌍</div>
+                            <div className="text-sm font-bold" style={{ color: 'var(--text-3)' }}>No time zones configured</div>
+                            <div className="text-xs" style={{ color: 'var(--text-3)' }}>Add zones to see the timeline</div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ─── SETTINGS PAGE ───────────────────────────────────────────────────────
         const SettingsPage = ({ data, safeCall }) => {
             const [s, setS] = useState({});
+            const [models, setModels] = useState([]);
+
             useEffect(() => { if (data.settings) setS(data.settings); }, [data.settings]);
+
+            const fetchModels = async () => {
+                const r = await safeCall('get_ai_models');
+                if (r) { try { setModels(JSON.parse(r)); } catch(e) {} }
+            };
+
+            const doExport = async () => {
+                const d = await safeCall('export_data');
+                if (d) {
+                    const blob = new Blob([d], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `chronos_export_${new Date().toISOString().slice(0,10)}.json`; a.click();
+                    URL.revokeObjectURL(url);
+                }
+            };
+
+            const doClear = async () => {
+                if (confirm('Delete all completed tasks? This cannot be undone.')) {
+                    await safeCall('clear_completed');
+                }
+            };
 
             return (
                 <div className="flex-1 overflow-y-auto px-7 py-7 max-w-xl">
                     <h2 className="text-xl font-bold tracking-tight mb-8" style={{ color: 'var(--text)' }}>Settings</h2>
-
                     <div className="space-y-4">
+                        {/* Obsidian */}
                         <div className="card p-5">
-                            <div className="section-label mb-4">Integrations</div>
+                            <div className="section-label mb-4">Obsidian Sync</div>
                             <div className="settings-row">
-                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Obsidian Vault</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{s.obsidian_path || 'No vault linked'}</div></div>
+                                <div>
+                                    <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Vault Path</div>
+                                    <div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{s.obsidian_path || 'No vault linked'}</div>
+                                </div>
                                 <button onClick={() => safeCall('select_obsidian_path')} className="btn btn-ghost" style={{ fontSize: 11 }}>Browse</button>
                             </div>
                             <div className="settings-row">
-                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>AI Endpoint</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Custom LLM URL</div></div>
-                                <input value={s.ai_url || ''} onChange={e => setS({ ...s, ai_url: e.target.value })}
-                                    className="input-field py-2 text-sm" style={{ width: 200 }} placeholder="https://…" />
+                                <div>
+                                    <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Auto Sync</div>
+                                    <div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Sync tasks on every change</div>
+                                </div>
+                                <button onClick={() => setS({ ...s, sync_enabled: !s.sync_enabled })}
+                                    className="btn btn-ghost" style={{ fontSize: 11, background: s.sync_enabled ? 'var(--sage-dim)' : 'var(--bg-3)', color: s.sync_enabled ? 'var(--sage)' : 'var(--text-3)' }}>
+                                    {s.sync_enabled ? 'Enabled' : 'Disabled'}
+                                </button>
                             </div>
                         </div>
 
+                        {/* AI */}
                         <div className="card p-5">
-                            <div className="section-label mb-4">Preferences</div>
+                            <div className="section-label mb-4">AI Configuration</div>
                             <div className="settings-row">
-                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Default Priority</div></div>
-                                <div className="flex gap-1.5">
-                                    {['High', 'Medium', 'Low'].map(p => (
-                                        <button key={p} onClick={() => setS({ ...s, default_priority: p })}
-                                            className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                                            style={{ background: s.default_priority === p ? PC[p].bg : 'var(--bg-3)', color: s.default_priority === p ? PC[p].color : 'var(--text-3)' }}>
-                                            {p}
-                                        </button>
-                                    ))}
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>API URL</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>OpenAI-compatible endpoint</div></div>
+                                <input value={s.ai_url || ''} onChange={e => setS({ ...s, ai_url: e.target.value })}
+                                    className="input-field py-2 text-sm" style={{ width: 220 }} placeholder="https://..." />
+                            </div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>API Key</div></div>
+                                <input type="password" value={s.ai_key || ''} onChange={e => setS({ ...s, ai_key: e.target.value })}
+                                    className="input-field py-2 text-sm" style={{ width: 220 }} placeholder="sk-..." />
+                            </div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Model</div></div>
+                                <div className="flex gap-2 items-center">
+                                    <select value={s.ai_model || ''} onChange={e => setS({ ...s, ai_model: e.target.value })}
+                                        className="input-field py-2 text-sm" style={{ width: 160 }}>
+                                        <option value="">Select model...</option>
+                                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                    <button onClick={fetchModels} className="btn btn-ghost" style={{ fontSize: 11 }}>Refresh</button>
+                                </div>
+                            </div>
+                            <div className="settings-row">
+                                <div>
+                                    <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>CA Certificate</div>
+                                    <div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{s.ai_cert_path || 'System default'}</div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={async () => { const p = await safeCall('select_cert_path'); if (p) setS({ ...s, ai_cert_path: p }); }}
+                                        className="btn btn-ghost" style={{ fontSize: 11 }}>Browse</button>
+                                    {s.ai_cert_path && <button onClick={() => setS({ ...s, ai_cert_path: '' })} className="btn btn-ghost" style={{ fontSize: 11 }}>Clear</button>}
                                 </div>
                             </div>
                         </div>
 
+                        {/* Data */}
                         <div className="card p-5">
                             <div className="section-label mb-4">Data</div>
                             <div className="settings-row">
                                 <div><div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Export</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Download all data as JSON</div></div>
-                                <button className="btn btn-ghost" style={{ fontSize: 11 }}>Export</button>
+                                <button onClick={doExport} className="btn btn-ghost" style={{ fontSize: 11 }}>Export</button>
                             </div>
                             <div className="settings-row">
                                 <div><div className="text-sm font-semibold" style={{ color: 'var(--rose)' }}>Clear Completed</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Remove all completed tasks</div></div>
-                                <button className="btn btn-danger" style={{ fontSize: 11 }}>Clear</button>
+                                <button onClick={doClear} className="btn btn-danger" style={{ fontSize: 11 }}>Clear</button>
                             </div>
                         </div>
 
@@ -1949,81 +1367,71 @@
             );
         };
 
-        // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-        const Sidebar = ({ tab, setTab, isDark, toggle }) => {
+        // ─── SIDEBAR ─────────────────────────────────────────────────────────────
+        const Sidebar = ({ tab, setTab }) => {
             const NAV = [
                 { id: 'missions', l: 'Tasks', ic: '☐', c: 'var(--gold)' },
                 { id: 'log', l: 'Logbook', ic: '◈', c: 'var(--teal)' },
                 { id: 'analytics', l: 'Intelligence', ic: '◉', c: 'var(--lavender)' },
+                { id: 'worldclock', l: 'World Clock', ic: '◷', c: 'var(--sky)' },
                 { id: 'settings', l: 'Settings', ic: '◎', c: 'var(--text-3)' },
             ];
             return (
                 <aside className="sidebar-wrap flex flex-col pt-7 pb-6" style={{ borderRight: '1px solid var(--border)', background: 'var(--bg-1)' }}>
                     <div className="px-5 mb-8">
-                        <div className="font-bold text-base tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.02em', fontFamily: "'Instrument Sans'" }}>
+                        <div className="font-bold text-base tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.02em' }}>
                             CHRONOS<span style={{ color: 'var(--gold)' }}>_</span>
                         </div>
-                        <div className="mono text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>pro</div>
                     </div>
-
                     <nav className="flex-1 space-y-0.5 px-3">
                         {NAV.map(item => (
                             <button key={item.id} onClick={() => setTab(item.id)}
                                 className={`nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm ${tab === item.id ? 'active' : ''}`}
-                                style={{ color: tab === item.id ? item.c : 'var(--text-3)' }}>
+                                style={{ color: tab === item.id ? item.c : 'var(--text-3)', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
                                 <span style={{ fontSize: 13, opacity: .75 }}>{item.ic}</span>
                                 <span className="font-semibold">{item.l}</span>
                                 {tab === item.id && <div style={{ width: 5, height: 5, borderRadius: '50%', background: item.c, marginLeft: 'auto', flexShrink: 0 }} />}
                             </button>
                         ))}
                     </nav>
-
-                    <div className="px-3 mt-4">
-                        <div style={{ height: 1, background: 'var(--border)', marginBottom: 12 }} />
-                        <button onClick={toggle} className="nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm" style={{ color: 'var(--text-3)' }}>
-                            <span style={{ fontSize: 13 }}>{isDark ? '☀' : '☾'}</span>
-                            <span className="font-semibold">{isDark ? 'Light' : 'Dark'} Mode</span>
-                        </button>
-                    </div>
                 </aside>
             );
         };
 
-        // ─── APP ROOT ─────────────────────────────────────────────────────────────────
+        // ─── APP ROOT ────────────────────────────────────────────────────────────
         const App = () => {
             const { data, call: safeCall } = useBridge();
             const [tab, setTab] = useState('missions');
             const [focusId, setFocusId] = useState(null);
-            const [isDark, setIsDark] = useState(() => localStorage.getItem('chronos-theme') !== 'light');
             const [timers, setTimers] = useState({});
 
-            useEffect(() => { document.documentElement.classList.toggle('light', !isDark); localStorage.setItem('chronos-theme', isDark ? 'dark' : 'light'); }, [isDark]);
             useEffect(() => { document.body.classList.toggle('focus-mode', !!focusId); }, [focusId]);
             useEffect(() => {
-                const h = (e) => {
-                    if (e.shiftKey && e.key === 'F') setFocusId(null);
-                };
+                const h = (e) => { if (e.shiftKey && e.key === 'F') setFocusId(null); };
                 window.addEventListener('keydown', h);
                 return () => window.removeEventListener('keydown', h);
             }, []);
 
+            // Reminder popup handler
+            window.triggerReminderPopup = () => {
+                // Could show a notification — for now just flash the tab
+                setTab('missions');
+            };
+
             return (
                 <div id="app" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}>
-                    <Sidebar tab={tab} setTab={setTab} isDark={isDark} toggle={() => setIsDark(!isDark)} />
+                    <Sidebar tab={tab} setTab={setTab} />
                     <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-
-                        {/* Focus indicator */}
                         <AnimatePresence>
                             {focusId && (
                                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                                     className="no-dim" style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 50, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px', borderRadius: 99, background: 'var(--bg-1)', border: '1px solid var(--border-h)', boxShadow: 'var(--shadow-md)' }}>
                                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)' }} className="breathe" />
                                     <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--gold)' }}>Deep Focus</span>
-                                    <button onClick={() => setFocusId(null)} style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6, fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none' }}>Exit <span className="kbd">⇧F</span></button>
+                                    <button onClick={() => setFocusId(null)} style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6, fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none' }}>Exit <span className="kbd">Shift+F</span></button>
                                 </motion.div>
                             )}
                         </AnimatePresence>
-
                         <AnimatePresence mode="wait">
                             {tab === 'missions' && (
                                 <motion.div key="m" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -2038,6 +1446,11 @@
                             {tab === 'analytics' && (
                                 <motion.div key="a" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                                     <AnalyticsPage data={data} safeCall={safeCall} />
+                                </motion.div>
+                            )}
+                            {tab === 'worldclock' && (
+                                <motion.div key="w" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    <WorldClockPage data={data} safeCall={safeCall} />
                                 </motion.div>
                             )}
                             {tab === 'settings' && (

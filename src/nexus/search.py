@@ -66,6 +66,9 @@ from src.file_ops.file_ops import FileOpsWindow
 from src.img_to_text import start_snip_to_text
 
 from .system_commands import (
+    add_task_to_chronos as _add_task_chronos,
+)
+from .system_commands import (
     execute_system_toggle as _exec_toggle,
 )
 from .system_commands import (
@@ -105,7 +108,7 @@ from .system_commands import (
     update_process_cache as _update_procs,
 )
 from .themes import get_nexus_theme
-from .utils import format_display_name
+from .utils import format_display_name, parse_chronos_input
 from .widgets import IconWorker, NexusInput, RainbowFrame
 
 # ---------------------------------------------------------------------------
@@ -117,7 +120,9 @@ class _ThemePickerPopup(QFrame):
     """Floating theme picker — live preview on hover, confirm on click/Enter."""
 
     def __init__(self, parent: QWidget):
-        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        super().__init__(
+            parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(280)
 
@@ -132,6 +137,9 @@ class _ThemePickerPopup(QFrame):
 
         # Re-style popup when theme changes (live preview)
         self._mgr.theme_changed.connect(self._apply_popup_style)
+
+        # Ensure the list has focus so arrow keys work immediately
+        self._list.setFocus()
 
     # ------------------------------------------------------------------
     def _build_ui(self):
@@ -249,8 +257,24 @@ class _ThemePickerPopup(QFrame):
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self._confirmed = True
             self.close()
+            event.accept()
         elif key == Qt.Key.Key_Escape:
             self.close()
+            event.accept()
+        elif key == Qt.Key.Key_Up:
+            row = self._list.currentRow()
+            if row > 0:
+                self._list.setCurrentRow(row - 1)
+            event.accept()
+        elif key == Qt.Key.Key_Down:
+            row = self._list.currentRow()
+            if row < self._list.count() - 1:
+                self._list.setCurrentRow(row + 1)
+            event.accept()
+        elif key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
+            # Pass to list for page-wise navigation
+            self._list.keyPressEvent(event)
+            event.accept()
         else:
             super().keyPressEvent(event)
 
@@ -352,7 +376,7 @@ class NexusSearch(QWidget):
         if sys.platform == "win32":
             keyboard.on_press(self.on_global_key)
         else:
-            #Best effort local focus handling instead of global keyboard hook
+            # Best effort local focus handling instead of global keyboard hook
             pass
 
     # ------------------------------------------------------------------
@@ -426,7 +450,9 @@ class NexusSearch(QWidget):
         """Redirect keys to Nexus when it is visible but not focused."""
         if not self.isVisible():
             return
-        if self.isActiveWindow():
+        # If any window in our application is active (including popups),
+        # letting standard Qt event handling take over.
+        if QApplication.activeWindow():
             return
 
         key_name = event.name.lower()
@@ -822,7 +848,9 @@ class NexusSearch(QWidget):
 
         # Theme picker button (VS Code-style)
         _mgr = ThemeManager()
-        self._theme_btn = QPushButton(f"◑ {_mgr.theme_data.get('name', _mgr.current_theme_name)}")
+        self._theme_btn = QPushButton(
+            f"◑ {_mgr.theme_data.get('name', _mgr.current_theme_name)}"
+        )
         self._theme_btn.setObjectName("theme_btn")
         self._theme_btn.setFixedHeight(24)
         self._theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -832,7 +860,7 @@ class NexusSearch(QWidget):
 
         # Settings folder button
         self._settings_btn = QPushButton("📂")
-        self._settings_btn.setObjectName("theme_btn") # reuse style
+        self._settings_btn.setObjectName("theme_btn")  # reuse style
         self._settings_btn.setFixedSize(28, 24)
         self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._settings_btn.setToolTip("Open Settings Folder")
@@ -1245,17 +1273,55 @@ class NexusSearch(QWidget):
             tl = text.lower()
             return all(t in tl for t in terms)
 
-        # 0. CHRONOS QUICK-LOG
+        # 0. CHRONOS QUICK-LOG (Achievement)
         if search.startswith("+") and len(search) > 1:
-            log_text = search[1:].strip()
+            raw_text = search[1:].strip()
+            content, priority, tags, due_date = parse_chronos_input(raw_text)
             candidates.append(
                 {
                     "score": 10000,
-                    "title": f"CHRONOS: Log '{log_text}'",
-                    "path": "Record this achievement instantly to Chronos Hub",
+                    "title": f"🏆 {content}",
+                    "path": f"Achievement • {priority} • {', '.join(tags) if tags else 'No tags'}",
                     "icon": "clock.svg",
                     "color": "#fbbf24",
-                    "data": {"type": "chronos_log", "content": log_text},
+                    "data": {
+                        "type": "chronos_log",
+                        "content": raw_text,
+                        "parsed": {
+                            "content": content,
+                            "priority": priority,
+                            "tags": tags,
+                            "due_date": due_date,
+                        },
+                    },
+                }
+            )
+            self.results_list.clear()
+            self.results_tree.clear()
+            self.populate_list_results(candidates)
+            return
+
+        # 0.5 CHRONOS QUICK-TASK
+        if search.startswith("-") and len(search) > 1:
+            raw_text = search[1:].strip()
+            content, priority, tags, due_date = parse_chronos_input(raw_text)
+            candidates.append(
+                {
+                    "score": 10000,
+                    "title": f"📋 {content}",
+                    "path": f"Mission • {priority} • {', '.join(tags) if tags else 'No tags'}",
+                    "icon": "clock.svg",
+                    "color": "#3b82f6",
+                    "data": {
+                        "type": "chronos_task",
+                        "content": raw_text,
+                        "parsed": {
+                            "content": content,
+                            "priority": priority,
+                            "tags": tags,
+                            "due_date": due_date,
+                        },
+                    },
                 }
             )
             self.results_list.clear()
@@ -1860,6 +1926,8 @@ class NexusSearch(QWidget):
         self.results_list.setUpdatesEnabled(False)
 
         for idx, c in enumerate(self.current_candidates):
+            d = c["data"]
+            dtype = d.get("type")
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, c["data"])
             item.setData(Qt.ItemDataRole.UserRole + 1, c)
@@ -1922,6 +1990,44 @@ class NexusSearch(QWidget):
             path_lbl.setObjectName("item_path")
 
             text_container.addWidget(title_lbl)
+
+            # --- Chronos Badges ---
+            if dtype in ("chronos_log", "chronos_task"):
+                badge_layout = QHBoxLayout()
+                badge_layout.setSpacing(6)
+                parsed = d.get("parsed", {})
+
+                # Priority Badge
+                pri = parsed.get("priority", "Medium")
+                if pri != "Medium":
+                    pri_lbl = QLabel(pri)
+                    pri_bg = "#450a0a" if pri == "High" else "#064e3b"
+                    pri_fg = "#f87171" if pri == "High" else "#34d399"
+                    pri_lbl.setStyleSheet(
+                        f"background: {pri_bg}; color: {pri_fg}; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
+                    )
+                    badge_layout.addWidget(pri_lbl)
+
+                # Due Date Badge
+                due = parsed.get("due_date")
+                if due:
+                    due_lbl = QLabel(f"📅 {due}")
+                    due_lbl.setStyleSheet(
+                        "background: #1e293b; color: #94a3b8; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
+                    )
+                    badge_layout.addWidget(due_lbl)
+
+                # Tags
+                for tag in parsed.get("tags", []):
+                    tag_lbl = QLabel(f"#{tag}")
+                    tag_lbl.setStyleSheet(
+                        "background: #1e1b4b; color: #818cf8; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
+                    )
+                    badge_layout.addWidget(tag_lbl)
+
+                badge_layout.addStretch()
+                text_container.addLayout(badge_layout)
+
             text_container.addWidget(path_lbl)
             row_layout.addLayout(text_container, stretch=1)
 
@@ -1932,9 +2038,7 @@ class NexusSearch(QWidget):
                 hk_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 row_layout.addWidget(hk_lbl)
 
-            # -- Inline action buttons --
-            d = c["data"]
-            dtype = d.get("type")
+            # -- Shortcut Badge --
 
             if dtype in ("file", "app", "script", None) and d.get("path"):
                 p_val = d["path"]
@@ -2252,6 +2356,8 @@ class NexusSearch(QWidget):
                 subprocess.Popen(f"start cmd /k ssh {data['host']}", shell=True)
             elif data["type"] == "chronos_log":
                 _log_to_chronos(self, data["content"])
+            elif data["type"] == "chronos_task":
+                _add_task_chronos(self, data["content"])
             elif data["type"] == "url":
                 webbrowser.open(data["url"])
                 self.status_lbl.setText(f"Opened URL: {data['url']}")
@@ -2283,6 +2389,9 @@ class NexusSearch(QWidget):
     def _log_to_chronos(self, text):
         _log_to_chronos(self, text)
 
+    def _add_task_to_chronos(self, text):
+        _add_task_chronos(self, text)
+
     # ------------------------------------------------------------------
     # Theme
     # ------------------------------------------------------------------
@@ -2291,16 +2400,23 @@ class NexusSearch(QWidget):
         self.setStyleSheet(get_nexus_theme(mgr))
         # Update theme button label with current theme name
         if hasattr(self, "_theme_btn"):
-            self._theme_btn.setText(f"◑ {mgr.theme_data.get('name', mgr.current_theme_name)}")
+            self._theme_btn.setText(
+                f"◑ {mgr.theme_data.get('name', mgr.current_theme_name)}"
+            )
 
     def _open_theme_picker(self):
         """Open the VS Code-style floating theme picker."""
-        picker = _ThemePickerPopup(self)
+        # Close existing if open
+        if hasattr(self, "_theme_picker") and self._theme_picker:
+            self._theme_picker.close()
+
+        self._theme_picker = _ThemePickerPopup(self)
         # Position it below the theme button
         btn_pos = self._theme_btn.mapToGlobal(self._theme_btn.rect().bottomLeft())
-        picker.move(btn_pos.x(), btn_pos.y() + 4)
-        picker.show()
-        picker.raise_()
+        self._theme_picker.move(btn_pos.x(), btn_pos.y() + 4)
+        self._theme_picker.show()
+        self._theme_picker.raise_()
+        self._theme_picker.activateWindow()
 
     def _open_settings_folder(self):
         """Open the folder where Nexus settings are stored."""
