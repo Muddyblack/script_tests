@@ -56,7 +56,13 @@ from .extractor import ocr_qimage
 
 class _C:
     def __init__(self):
-        self.mgr = ThemeManager()
+        self._mgr = None
+
+    @property
+    def mgr(self):
+        if self._mgr is None:
+            self._mgr = ThemeManager()
+        return self._mgr
 
     @property
     def ACCENT(self):

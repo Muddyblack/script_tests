@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(\"$VENV_PYTHON\":*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)"
     ]
   }
 }

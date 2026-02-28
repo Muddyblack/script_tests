@@ -1,0 +1,33 @@
+{
+  "name": "forest-dreams",
+  "dark": true,
+  "colors": {
+    "bg_base": "#0F172A",
+    "bg_elevated": "#0D1525",
+    "bg_overlay": "#0B1220",
+    "bg_control": "#112033",
+    "bg_control_hov": "#16304A",
+    "bg_control_prs": "#0B1220",
+    "accent": "#22C55E",
+    "accent_hover": "#4ADE80",
+    "accent_pressed": "#16A34A",
+    "accent_subtle": "rgba(34, 197, 94, 0.1)",
+    "border": "#37415159",
+    "border_light": "#37415180",
+    "border_focus": "#22C55E",
+    "text_primary": "#E5E7EB",
+    "text_secondary": "#D1D5DB",
+    "text_disabled": "#9CA3AF",
+    "text_on_accent": "#0B1220",
+    "success": "#22C55E",
+    "danger": "#EF4444",
+    "warning": "#F59E0B",
+    "icon_folder": "#F59E0B",
+    "icon_file": "#D1D5DB",
+    "sidebar_bg": "#0F172A",
+    "sidebar_item": "#0D1525",
+    "sidebar_hover": "#0B1220",
+    "sidebar_sel": "rgba(34, 197, 94, 0.1)",
+    "sidebar_sel_bar": "#22C55E"
+  }
+}

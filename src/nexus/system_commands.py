@@ -37,18 +37,29 @@ def execute_system_toggle(nexus, cmd: str) -> None:
                 key, "SystemUsesLightTheme", 0, winreg.REG_DWORD, new_state
             )
             winreg.CloseKey(key)
+            from src.common.theme import ThemeManager
+
             state_name = "Dark" if new_state == 0 else "Light"
             nexus.status_lbl.setText(f"🌓 System Theme set to {state_name}")
-            nexus.is_light_mode = new_state == 1
-            nexus.save_settings()
-            nexus.apply_theme()
+            _mgr = ThemeManager()
+            if new_state == 1:  # light
+                _mgr.load_theme("light")
+            else:
+                _mgr.load_theme("midnight-marina")
+            _mgr.theme_changed.emit()
 
         elif cmd == "toggle_nexus_theme":
-            nexus.is_light_mode = not nexus.is_light_mode
-            state_name = "Light" if nexus.is_light_mode else "Dark"
+            from src.common.theme import ThemeManager
+
+            _mgr = ThemeManager()
+            # Toggle between dark (midnight-marina) and light themes
+            if _mgr.is_dark:
+                _mgr.load_theme("light")
+            else:
+                _mgr.load_theme("midnight-marina")
+            _mgr.theme_changed.emit()
+            state_name = "Light" if not _mgr.is_dark else "Dark"
             nexus.status_lbl.setText(f"🌓 Nexus Theme set to {state_name}")
-            nexus.save_settings()
-            nexus.apply_theme()
 
         elif cmd == "toggle_hidden_files":
             import winreg

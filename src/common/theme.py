@@ -1,3 +1,12 @@
+"""Centralized theme manager for all Nexus tools.
+
+Usage everywhere:
+    from src.common.theme import ThemeManager
+    mgr = ThemeManager()          # always returns the same singleton
+    mgr.theme_changed.connect(...)
+    mgr.apply_to_widget(widget, QSS_TEMPLATE)
+"""
+
 import json
 import os
 
@@ -5,23 +14,30 @@ from PyQt6.QtCore import QFileSystemWatcher, QObject, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication
 
+# ---------------------------------------------------------------------------
+# Singleton holder — module-level, avoids __new__ on QObject (which crashes)
+# ---------------------------------------------------------------------------
+_instance: "_ThemeManager | None" = None
 
-class ThemeManager(QObject):
-    """Centralized theme manager for all Nexus tools."""
+
+def ThemeManager() -> "_ThemeManager":
+    """Return the process-wide ThemeManager singleton, creating it on first call."""
+    global _instance
+    if _instance is None:
+        _instance = _ThemeManager()
+    return _instance
+
+
+# ---------------------------------------------------------------------------
+# The real class
+# ---------------------------------------------------------------------------
+
+class _ThemeManager(QObject):
+    """Singleton theme manager — do NOT instantiate directly; use ThemeManager()."""
 
     theme_changed = pyqtSignal()
 
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
     def __init__(self):
-        if self._initialized:
-            return
         super().__init__()
 
         from src.common.config import APPDATA, PROJECT_ROOT
@@ -30,51 +46,43 @@ class ThemeManager(QObject):
         self.settings_file = os.path.join(APPDATA, "theme_settings.json")
 
         self.current_theme_name = "midnight-marina"
-        self.theme_data = {}
+        self.theme_data: dict = {}
 
-        # Ensure themes directory exists
-        if not os.path.exists(self.themes_dir):
-            os.makedirs(self.themes_dir, exist_ok=True)
+        os.makedirs(self.themes_dir, exist_ok=True)
+
+        self._watcher = QFileSystemWatcher()
+        self._watcher.fileChanged.connect(self._on_file_changed)
 
         self.load_settings()
         self.load_theme(self.current_theme_name)
 
-        self.watcher = QFileSystemWatcher()
-        self._update_watcher()
-        self.watcher.fileChanged.connect(self._on_file_changed)
-        self.watcher.directoryChanged.connect(self._on_dir_changed)
-
-        self._initialized = True
-
+    # ------------------------------------------------------------------
+    # File watching
+    # ------------------------------------------------------------------
     def _update_watcher(self):
-        # Remove all existing paths
-        paths = self.watcher.files()
-        if paths:
-            self.watcher.removePaths(paths)
-
-        # Add current theme files
+        watched = self._watcher.files()
+        if watched:
+            self._watcher.removePaths(watched)
         theme_path = os.path.join(self.themes_dir, self.current_theme_name)
         if os.path.exists(theme_path):
-            for f in os.listdir(theme_path):
-                if f.endswith((".json", ".css", ".qss")):
-                    self.watcher.addPath(os.path.join(theme_path, f))
+            for fname in os.listdir(theme_path):
+                if fname.endswith((".json", ".css", ".qss")):
+                    self._watcher.addPath(os.path.join(theme_path, fname))
 
-    def _on_file_changed(self, path):
-        print(f"Theme file changed: {path}")
+    def _on_file_changed(self, path: str):
         self.load_theme(self.current_theme_name)
         self.theme_changed.emit()
 
-    def _on_dir_changed(self, path):
-        self._update_watcher()
-
+    # ------------------------------------------------------------------
+    # Settings persistence
+    # ------------------------------------------------------------------
     def load_settings(self):
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file) as f:
-                    data = json.load(f)
-                    self.current_theme_name = data.get("theme", "midnight-marina")
-            except Exception:
-                pass
+        try:
+            with open(self.settings_file) as f:
+                data = json.load(f)
+                self.current_theme_name = data.get("theme", "midnight-marina")
+        except Exception:
+            pass
 
     def save_settings(self):
         try:
@@ -83,13 +91,14 @@ class ThemeManager(QObject):
         except Exception:
             pass
 
-    def load_theme(self, name):
+    # ------------------------------------------------------------------
+    # Theme loading
+    # ------------------------------------------------------------------
+    def load_theme(self, name: str):
         theme_file = os.path.join(self.themes_dir, name, "theme.json")
         if not os.path.exists(theme_file):
-            # Fallback to default if not found
-            self.theme_data = self.get_default_dark()
+            self.theme_data = self._default_dark()
             return
-
         try:
             with open(theme_file) as f:
                 self.theme_data = json.load(f)
@@ -97,60 +106,87 @@ class ThemeManager(QObject):
             self.save_settings()
             self._update_watcher()
         except Exception as e:
-            print(f"Error loading theme {name}: {e}")
-            self.theme_data = self.get_default_dark()
+            print(f"[ThemeManager] Error loading theme '{name}': {e}")
+            self.theme_data = self._default_dark()
 
-    def get_default_dark(self):
+    def _default_dark(self) -> dict:
         return {
             "name": "Classic Dark",
             "dark": True,
             "colors": {
                 "bg_base": "#1c1c1c",
                 "bg_elevated": "#252525",
+                "bg_overlay": "#1a1a1a",
                 "bg_control": "#333333",
                 "accent": "#0078d4",
+                "accent_subtle": "rgba(0,120,212,0.12)",
+                "accent_pressed": "#0063b1",
+                "border": "#404040",
+                "border_light": "#505050",
                 "text_primary": "#f3f3f3",
                 "text_secondary": "#ababab",
-                "border": "#404040",
+                "text_disabled": "#6b7280",
+                "text_on_accent": "#ffffff",
+                "success": "#44ffb1",
+                "danger": "#ff4466",
+                "warning": "#ffe073",
             },
         }
 
-    def __getitem__(self, key):
-        # Allow direct access to colors
-        colors = self.theme_data.get("colors", {})
-        return colors.get(key, "#ff00ff")  # Neon pink for missing keys
+    # ------------------------------------------------------------------
+    # Available themes
+    # ------------------------------------------------------------------
+    def get_available_themes(self) -> list[tuple[str, str]]:
+        """Return [(folder_name, display_name), ...] for every installed theme."""
+        themes = []
+        try:
+            for folder in sorted(os.listdir(self.themes_dir)):
+                jf = os.path.join(self.themes_dir, folder, "theme.json")
+                if os.path.exists(jf):
+                    try:
+                        with open(jf) as f:
+                            data = json.load(f)
+                        themes.append((folder, data.get("name", folder)))
+                    except Exception:
+                        themes.append((folder, folder))
+        except Exception:
+            pass
+        return themes
+
+    # ------------------------------------------------------------------
+    # Convenience accessors
+    # ------------------------------------------------------------------
+    def __getitem__(self, key: str) -> str:
+        return self.theme_data.get("colors", {}).get(key, "#ff00ff")
 
     @property
-    def is_dark(self):
+    def is_dark(self) -> bool:
         return self.theme_data.get("dark", True)
 
-    def apply_to_widget(self, widget, template_qss):
-        """Apply a QSS template to a widget, replacing {{var}} with theme colors."""
+    def apply_to_widget(self, widget, template_qss: str):
+        """Apply a QSS template to a widget, substituting {{color_key}} placeholders."""
         qss = template_qss
-        colors = self.theme_data.get("colors", {})
-        for key, value in colors.items():
+        for key, value in self.theme_data.get("colors", {}).items():
             qss = qss.replace(f"{{{{{key}}}}}", value)
-            # Also support legacy var(--name) just in case
             qss = qss.replace(f"var(--{key.replace('_', '-')})", value)
-
         widget.setStyleSheet(qss)
 
-    def get_palette(self):
-        """Build a QPalette for standard dialogs/menus."""
+    def get_palette(self) -> QPalette:
+        """Build a QPalette from the current theme colors."""
         pal = QApplication.palette()
         T = self.theme_data.get("colors", {})
 
-        def set_col(role, color_key):
-            if color_key in T:
-                pal.setColor(role, QColor(T[color_key]))
+        def _set(role, key):
+            if key in T:
+                pal.setColor(role, QColor(T[key]))
 
-        set_col(QPalette.ColorRole.Window, "bg_base")
-        set_col(QPalette.ColorRole.WindowText, "text_primary")
-        set_col(QPalette.ColorRole.Base, "bg_elevated")
-        set_col(QPalette.ColorRole.Text, "text_primary")
-        set_col(QPalette.ColorRole.Button, "bg_control")
-        set_col(QPalette.ColorRole.ButtonText, "text_primary")
-        set_col(QPalette.ColorRole.Highlight, "accent")
-        set_col(QPalette.ColorRole.HighlightedText, "text_on_accent")
-
+        R = QPalette.ColorRole
+        _set(R.Window,          "bg_base")
+        _set(R.WindowText,      "text_primary")
+        _set(R.Base,            "bg_elevated")
+        _set(R.Text,            "text_primary")
+        _set(R.Button,          "bg_control")
+        _set(R.ButtonText,      "text_primary")
+        _set(R.Highlight,       "accent")
+        _set(R.HighlightedText, "text_on_accent")
         return pal

@@ -1,5 +1,7 @@
 archiv/
 color_config.json
+.claude/
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

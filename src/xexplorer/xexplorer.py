@@ -66,6 +66,7 @@ from src.xexplorer.database import init_db
 from src.xexplorer.delegates import DetailsDelegate
 from src.xexplorer.icons import Icons
 from src.xexplorer.indexer import IndexerWorker
+from src.common.theme import ThemeManager
 from src.xexplorer.theme import Theme
 from src.xexplorer.watcher import LiveCacheUpdater
 from src.xexplorer.widgets import (
@@ -98,6 +99,7 @@ class XExplorer(QMainWindow):
         self._build_all()
         self.load_settings()
         self._apply_theme()
+        ThemeManager().theme_changed.connect(self._on_theme_changed)
 
         icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
         if os.path.exists(icon_path):
@@ -480,6 +482,10 @@ class XExplorer(QMainWindow):
     # ──────────────────────────────────────────────────────────────────────────
     #  THEMING
     # ──────────────────────────────────────────────────────────────────────────
+
+    def _on_theme_changed(self):
+        self._icon_cache.clear()
+        self._apply_theme()
 
     def _apply_theme(self):
         T = self.T
@@ -977,9 +983,8 @@ class XExplorer(QMainWindow):
         c.execute("SELECT value FROM settings WHERE key='theme'")
         res = c.fetchone()
         if res:
-            self.T.dark = res[0] == "dark"
-            if not self.T.dark:
-                self.T._t = Theme.LIGHT.copy()
+            theme_name = "light" if res[0] == "light" else "midnight-marina"
+            ThemeManager().load_theme(theme_name)
 
         self.save_settings()
         conn.close()
@@ -1016,7 +1021,7 @@ class XExplorer(QMainWindow):
         )
         c.execute(
             "INSERT OR REPLACE INTO settings VALUES(?,?)",
-            ("theme", "dark" if self.T.dark else "light"),
+            ("theme", "light" if not ThemeManager().is_dark else "dark"),
         )
         conn.commit()
         conn.close()
@@ -1497,9 +1502,7 @@ class XExplorer(QMainWindow):
     # ──────────────────────────────────────────────────────────────────────────
 
     def toggle_theme(self):
-        self.T.toggle()
-        self._icon_cache.clear()
-        self._apply_theme()
+        self.T.toggle()  # switches ThemeManager between midnight-marina / light
         self.save_settings()
 
     # ──────────────────────────────────────────────────────────────────────────

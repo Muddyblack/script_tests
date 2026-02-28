@@ -6,6 +6,7 @@ from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from src.common.config import ICON_PATH
+from src.common.theme import ThemeManager
 
 
 def create_tray_icon(app, nexus) -> QSystemTrayIcon:
@@ -25,11 +26,17 @@ def create_tray_icon(app, nexus) -> QSystemTrayIcon:
 
     # --- Context menu ---
     menu = QMenu()
+    _c = ThemeManager().theme_data.get("colors", {})
+    _bg = _c.get("bg_elevated", "#1e293b")
+    _txt = _c.get("text_primary", "#f8fafc")
+    _brd = _c.get("border", "#334155")
+    _acc = _c.get("accent", "#3b82f6")
+    _acc_txt = _c.get("text_on_accent", "white")
     menu.setStyleSheet(
-        "QMenu { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; "
-        "border-radius: 8px; } "
-        "QMenu::item { padding: 6px 20px; } "
-        "QMenu::item:selected { background-color: #3b82f6; color: white; }"
+        f"QMenu {{ background-color: {_bg}; color: {_txt}; border: 1px solid {_brd}; "
+        f"border-radius: 8px; }} "
+        f"QMenu::item {{ padding: 6px 20px; }} "
+        f"QMenu::item:selected {{ background-color: {_acc}; color: {_acc_txt}; }}"
     )
 
     show_action = QAction("🔍  Show Nexus", menu)

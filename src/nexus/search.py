@@ -60,6 +60,7 @@ from src.common.config import (
 
 # Import SearchEngine
 from src.common.search_engine import SearchEngine
+from src.common.theme import ThemeManager
 from src.file_ops.file_ops import FileOpsWindow
 from src.img_to_text import start_snip_to_text
 
@@ -102,9 +103,164 @@ from .system_commands import (
 from .system_commands import (
     update_process_cache as _update_procs,
 )
-from .themes import get_dark_theme, get_light_theme
+from .themes import get_nexus_theme
 from .utils import format_display_name
 from .widgets import IconWorker, NexusInput, RainbowFrame
+
+
+# ---------------------------------------------------------------------------
+# VS Code-style theme picker popup
+# ---------------------------------------------------------------------------
+
+
+class _ThemePickerPopup(QFrame):
+    """Floating theme picker — live preview on hover, confirm on click/Enter."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedWidth(280)
+
+        self._mgr = ThemeManager()
+        self._prev_theme = self._mgr.current_theme_name
+        self._confirmed = False
+        self._themes: list[tuple[str, str]] = []  # (folder, display name)
+
+        self._build_ui()
+        self._load_themes()
+        self._apply_popup_style()
+
+        # Re-style popup when theme changes (live preview)
+        self._mgr.theme_changed.connect(self._apply_popup_style)
+
+    # ------------------------------------------------------------------
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        hdr = QLabel("COLOR THEME")
+        hdr.setObjectName("_picker_hdr")
+        layout.addWidget(hdr)
+
+        self._list = QListWidget()
+        self._list.setObjectName("_picker_list")
+        self._list.setFrameShape(QListWidget.Shape.NoFrame)
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.setFixedHeight(260)
+        self._list.itemClicked.connect(self._on_click)
+        self._list.currentRowChanged.connect(self._on_hover)
+        layout.addWidget(self._list)
+
+        hint = QLabel("↑↓ Preview  •  Enter Confirm  •  Esc Cancel")
+        hint.setObjectName("_picker_hint")
+        layout.addWidget(hint)
+
+    def _load_themes(self):
+        from src.common.config import PROJECT_ROOT
+
+        themes_dir = os.path.join(PROJECT_ROOT, "src", "themes")
+        self._themes = []
+        try:
+            for folder in sorted(os.listdir(themes_dir)):
+                jf = os.path.join(themes_dir, folder, "theme.json")
+                if os.path.exists(jf):
+                    try:
+                        with open(jf) as f:
+                            data = json.load(f)
+                        name = data.get("name", folder)
+                    except Exception:
+                        name = folder
+                    self._themes.append((folder, name))
+        except Exception:
+            pass
+
+        self._list.clear()
+        current = self._mgr.current_theme_name
+        for i, (folder, name) in enumerate(self._themes):
+            item = QListWidgetItem(f"  {'●' if folder == current else '○'}  {name}")
+            self._list.addItem(item)
+            if folder == current:
+                self._list.setCurrentRow(i)
+
+    def _apply_popup_style(self):
+        c = self._mgr.theme_data.get("colors", {})
+        bg = c.get("bg_elevated", "#1e2a3a")
+        bg2 = c.get("bg_overlay", "#01121f")
+        text = c.get("text_primary", "#cbe0f0")
+        text2 = c.get("text_secondary", "#8aa0b0")
+        accent = c.get("accent", "#0eadcf")
+        accent_s = c.get("accent_subtle", "rgba(14,173,207,0.12)")
+        border = c.get("border", "#336380")
+
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {bg};
+                border: 1px solid {border};
+                border-radius: 10px;
+            }}
+            QLabel#_picker_hdr {{
+                color: {text2}; font-size: 9px; font-weight: 700;
+                letter-spacing: 3px; padding: 2px 6px;
+                font-family: 'Outfit','Inter','Segoe UI';
+            }}
+            QLabel#_picker_hint {{
+                color: {text2}; font-size: 9px; padding: 2px 6px;
+                font-family: 'Outfit','Inter','Segoe UI';
+            }}
+            QListWidget#_picker_list {{
+                background: {bg2}; border: none; outline: none;
+                border-radius: 6px;
+                font-family: 'Outfit','Inter','Segoe UI';
+                font-size: 12px; color: {text};
+            }}
+            QListWidget#_picker_list::item {{
+                padding: 7px 10px; border-radius: 6px;
+            }}
+            QListWidget#_picker_list::item:selected {{
+                background: {accent_s}; color: {accent};
+            }}
+            QListWidget#_picker_list::item:hover {{
+                background: {accent_s};
+            }}
+            QScrollBar:vertical {{
+                background: transparent; width: 4px; margin: 2px 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {border}; border-radius: 2px; min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+
+    def _on_hover(self, row: int):
+        """Live-preview the hovered theme."""
+        if 0 <= row < len(self._themes):
+            folder, _ = self._themes[row]
+            self._mgr.load_theme(folder)
+            self._mgr.theme_changed.emit()
+
+    def _on_click(self, item):
+        """Confirm the selected theme."""
+        self._confirmed = True
+        self.close()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._confirmed = True
+            self.close()
+        elif key == Qt.Key.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        """Revert to original theme if not confirmed."""
+        self._mgr.theme_changed.disconnect(self._apply_popup_style)
+        if not self._confirmed:
+            self._mgr.load_theme(self._prev_theme)
+            self._mgr.theme_changed.emit()
+        super().closeEvent(event)
 
 
 class NexusSearch(QWidget):
@@ -145,7 +301,6 @@ class NexusSearch(QWidget):
             "side_panel_visible": True,
         }
         self.view_mode = "list"
-        self.is_light_mode = False
         self.load_settings()
 
         self.usage_stats = {}
@@ -173,6 +328,7 @@ class NexusSearch(QWidget):
 
         self.setup_ui()
         self.apply_theme()
+        ThemeManager().theme_changed.connect(self.apply_theme)
         self.center_on_screen()
 
         # Slow app scanning in background
@@ -370,18 +526,15 @@ class NexusSearch(QWidget):
                     data = json.load(f)
                     if isinstance(data, dict):
                         self.modes.update(
-                            {k: v for k, v in data.items() if k != "light_mode"}
+                            {k: v for k, v in data.items() if k not in ("light_mode",)}
                         )
-                        self.is_light_mode = data.get("light_mode", False)
         except Exception:
             pass
 
     def save_settings(self):
         try:
-            settings = self.modes.copy()
-            settings["light_mode"] = self.is_light_mode
             with open(SETTINGS_FILE, "w") as f:
-                json.dump(settings, f)
+                json.dump(self.modes, f)
         except Exception:
             pass
 
@@ -652,7 +805,7 @@ class NexusSearch(QWidget):
 
         # Toggle button (in right panel top-left, visible when panel hidden)
         top_bar = QHBoxLayout()
-        self.btn_side_toggle = QPushButton("menu.svg")
+        self.btn_side_toggle = QPushButton("≡")
         self.btn_side_toggle.setObjectName("panel_toggle")
         self.btn_side_toggle.setFixedSize(28, 24)
         self.btn_side_toggle.setToolTip("Toggle Sources Panel")
@@ -660,6 +813,16 @@ class NexusSearch(QWidget):
         self.btn_side_toggle.clicked.connect(self.toggle_side_panel)
         top_bar.addWidget(self.btn_side_toggle)
         top_bar.addStretch()
+
+        # Theme picker button (VS Code-style)
+        _mgr = ThemeManager()
+        self._theme_btn = QPushButton(f"◑ {_mgr.theme_data.get('name', _mgr.current_theme_name)}")
+        self._theme_btn.setObjectName("theme_btn")
+        self._theme_btn.setFixedHeight(24)
+        self._theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._theme_btn.setToolTip("Color Theme (Ctrl+K Ctrl+T)")
+        self._theme_btn.clicked.connect(self._open_theme_picker)
+        top_bar.addWidget(self._theme_btn)
         right_layout.addLayout(top_bar)
 
         # Rainbow-wrapped search input
@@ -901,18 +1064,17 @@ class NexusSearch(QWidget):
         if not data_list:
             return
         menu = QMenu(self)
-        if self.is_light_mode:
-            menu.setStyleSheet(
-                "QMenu { background-color: #ffffff; color: #111827; border: 1px solid #d1d5db; "
-                "border-radius: 8px; } QMenu::item { padding: 6px 20px; } "
-                "QMenu::item:selected { background-color: #3b82f6; color: white; }"
-            )
-        else:
-            menu.setStyleSheet(
-                "QMenu { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; "
-                "border-radius: 8px; } QMenu::item { padding: 6px 20px; } "
-                "QMenu::item:selected { background-color: #3b82f6; color: white; }"
-            )
+        _mgr = ThemeManager()
+        _c = _mgr.theme_data.get("colors", {})
+        _bg = _c.get("bg_elevated", "#1e293b")
+        _txt = _c.get("text_primary", "#f8fafc")
+        _brd = _c.get("border", "#334155")
+        _acc = _c.get("accent", "#3b82f6")
+        menu.setStyleSheet(
+            f"QMenu {{ background-color: {_bg}; color: {_txt}; border: 1px solid {_brd}; "
+            f"border-radius: 8px; }} QMenu::item {{ padding: 6px 20px; }} "
+            f"QMenu::item:selected {{ background-color: {_acc}; color: {_c.get('text_on_accent', 'white')}; }}"
+        )
 
         paths = [
             d.get("path") for d in data_list if isinstance(d, dict) and d.get("path")
@@ -2108,7 +2270,17 @@ class NexusSearch(QWidget):
     # Theme
     # ------------------------------------------------------------------
     def apply_theme(self):
-        if self.is_light_mode:
-            self.setStyleSheet(get_light_theme())
-        else:
-            self.setStyleSheet(get_dark_theme())
+        mgr = ThemeManager()
+        self.setStyleSheet(get_nexus_theme(mgr))
+        # Update theme button label with current theme name
+        if hasattr(self, "_theme_btn"):
+            self._theme_btn.setText(f"◑ {mgr.theme_data.get('name', mgr.current_theme_name)}")
+
+    def _open_theme_picker(self):
+        """Open the VS Code-style floating theme picker."""
+        picker = _ThemePickerPopup(self)
+        # Position it below the theme button
+        btn_pos = self._theme_btn.mapToGlobal(self._theme_btn.rect().bottomLeft())
+        picker.move(btn_pos.x(), btn_pos.y() + 4)
+        picker.show()
+        picker.raise_()

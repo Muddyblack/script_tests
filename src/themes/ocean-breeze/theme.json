@@ -1,0 +1,33 @@
+{
+  "name": "ocean-breeze",
+  "dark": true,
+  "colors": {
+    "bg_base": "#1E293B",
+    "bg_elevated": "#1C2836",
+    "bg_overlay": "#19232E",
+    "bg_control": "#1F2E3E",
+    "bg_control_hov": "#2A3B4E",
+    "bg_control_prs": "#16202A",
+    "accent": "#3B82F6",
+    "accent_hover": "#60A5FA",
+    "accent_pressed": "#2563EB",
+    "accent_subtle": "rgba(59, 130, 246, 0.1)",
+    "border": "#64748B59",
+    "border_light": "#64748B80",
+    "border_focus": "#3B82F6",
+    "text_primary": "#E2E8F0",
+    "text_secondary": "#CBD5E1",
+    "text_disabled": "#94A3B8",
+    "text_on_accent": "#16202A",
+    "success": "#22C55E",
+    "danger": "#EF4444",
+    "warning": "#F59E0B",
+    "icon_folder": "#F59E0B",
+    "icon_file": "#CBD5E1",
+    "sidebar_bg": "#1E293B",
+    "sidebar_item": "#1C2836",
+    "sidebar_hover": "#19232E",
+    "sidebar_sel": "rgba(59, 130, 246, 0.1)",
+    "sidebar_sel_bar": "#3B82F6"
+  }
+}

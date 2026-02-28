@@ -213,11 +213,12 @@ class NexusInput(QLineEdit):
 
         painter = QPainter(self)
 
-        # Ghost color for dark / light mode
-        if getattr(self.nexus, "is_light_mode", False):
-            painter.setPen(QColor(156, 163, 175, 180))  # gray-400
-        else:
-            painter.setPen(QColor(107, 114, 128, 160))  # gray-500
+        # Ghost color — derive from active theme
+        from src.common.theme import ThemeManager as _TM
+        _ghost_hex = _TM().theme_data.get("colors", {}).get("text_disabled", "#6b7280")
+        _ghost = QColor(_ghost_hex)
+        _ghost.setAlpha(160)
+        painter.setPen(_ghost)
 
         painter.setFont(self.font())
 

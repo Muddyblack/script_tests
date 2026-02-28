@@ -447,6 +447,10 @@ class FlowWidget(QWidget):
     colorRequested = pyqtSignal(str)
     removeRequested = pyqtSignal(str)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setLayout(FlowLayout(h_spacing=4, v_spacing=4))
+
     def set_colors(self, colors, theme_mgr):
         layout = self.layout()
         while layout.count():

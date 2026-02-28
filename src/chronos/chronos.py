@@ -513,7 +513,7 @@ class ChronosApp(QMainWindow):
     def _apply_theme(self):
         # Inject the entire palette as CSS variables to the web view
         js_css = ""
-        for name, color in self.mgr.palette_dict.items():
+        for name, color in self.mgr.theme_data.get("colors", {}).items():
             js_css += f"--{name.replace('_', '-')}: {color};"
 
         # Mappings for Chronos's existing CSS variables
@@ -521,6 +521,7 @@ class ChronosApp(QMainWindow):
         js_css += f"--text: {self.mgr['text_primary']};"
         js_css += f"--border: {self.mgr['border']};"
         js_css += f"--accent-primary: {self.mgr['accent']};"
+        js_css += "--grain-opacity: 0.025;" if self.mgr.is_dark else "--grain-opacity: 0.015;"
 
         script = f"document.documentElement.style.cssText += `{js_css}`;"
         self.view.page().runJavaScript(script)
