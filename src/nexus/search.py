@@ -23,8 +23,9 @@ from PyQt6.QtCore import (
     Qt,
     QThreadPool,
     QTimer,
+    QUrl,
 )
-from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QIcon
+from PyQt6.QtGui import QColor, QCursor, QDesktopServices, QGuiApplication, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QFileIconProvider,
@@ -106,7 +107,6 @@ from .system_commands import (
 from .themes import get_nexus_theme
 from .utils import format_display_name
 from .widgets import IconWorker, NexusInput, RainbowFrame
-
 
 # ---------------------------------------------------------------------------
 # VS Code-style theme picker popup
@@ -349,7 +349,11 @@ class NexusSearch(QWidget):
         self.current_candidates = []
 
         # Global input redirect
-        keyboard.on_press(self.on_global_key)
+        if sys.platform == "win32":
+            keyboard.on_press(self.on_global_key)
+        else:
+            #Best effort local focus handling instead of global keyboard hook
+            pass
 
     # ------------------------------------------------------------------
     # App scanning
@@ -460,29 +464,31 @@ class NexusSearch(QWidget):
     # Focus management
     # ------------------------------------------------------------------
     def summon_and_focus(self):
-        """Aggressively grab focus on Windows."""
+        """Aggressively grab focus. Uses Windows API on Windows, else PyQt."""
         self.show()
         self.raise_()
         self.activateWindow()
 
-        hwnd = int(self.winId())
-        foreground_thread = ctypes.windll.user32.GetWindowThreadProcessId(
-            ctypes.windll.user32.GetForegroundWindow(), None
-        )
-        current_thread = ctypes.windll.kernel32.GetCurrentThreadId()
-
-        if foreground_thread != current_thread:
-            ctypes.windll.user32.AttachThreadInput(
-                foreground_thread, current_thread, True
+        if sys.platform == "win32":
+            hwnd = int(self.winId())
+            foreground_thread = ctypes.windll.user32.GetWindowThreadProcessId(
+                ctypes.windll.user32.GetForegroundWindow(), None
             )
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-            ctypes.windll.user32.AttachThreadInput(
-                foreground_thread, current_thread, False
-            )
-        else:
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            current_thread = ctypes.windll.kernel32.GetCurrentThreadId()
 
-        ctypes.windll.user32.ShowWindow(hwnd, 5)
+            if foreground_thread != current_thread:
+                ctypes.windll.user32.AttachThreadInput(
+                    foreground_thread, current_thread, True
+                )
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                ctypes.windll.user32.AttachThreadInput(
+                    foreground_thread, current_thread, False
+                )
+            else:
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+
+            ctypes.windll.user32.ShowWindow(hwnd, 5)
+
         self.search_input.setFocus(Qt.FocusReason.OtherFocusReason)
         self.search_input.activateWindow()
 
@@ -823,6 +829,16 @@ class NexusSearch(QWidget):
         self._theme_btn.setToolTip("Color Theme (Ctrl+K Ctrl+T)")
         self._theme_btn.clicked.connect(self._open_theme_picker)
         top_bar.addWidget(self._theme_btn)
+
+        # Settings folder button
+        self._settings_btn = QPushButton("📂")
+        self._settings_btn.setObjectName("theme_btn") # reuse style
+        self._settings_btn.setFixedSize(28, 24)
+        self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_btn.setToolTip("Open Settings Folder")
+        self._settings_btn.clicked.connect(self._open_settings_folder)
+        top_bar.addWidget(self._settings_btn)
+
         right_layout.addLayout(top_bar)
 
         # Rainbow-wrapped search input
@@ -1001,8 +1017,9 @@ class NexusSearch(QWidget):
             super().keyPressEvent(event)
 
     def focusOutEvent(self, event):
-        """Auto-hide when clicking outside."""
-        QTimer.singleShot(150, self.check_focus_and_hide)
+        """Auto-hide when clicking outside (Windows only)."""
+        if sys.platform == "win32":
+            QTimer.singleShot(150, self.check_focus_and_hide)
         super().focusOutEvent(event)
 
     def check_focus_and_hide(self):
@@ -2284,3 +2301,11 @@ class NexusSearch(QWidget):
         picker.move(btn_pos.x(), btn_pos.y() + 4)
         picker.show()
         picker.raise_()
+
+    def _open_settings_folder(self):
+        """Open the folder where Nexus settings are stored."""
+        settings_dir = os.path.dirname(SETTINGS_FILE)
+        if os.path.exists(settings_dir):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(settings_dir))
+        else:
+            self.status_lbl.setText("Settings directory not found")

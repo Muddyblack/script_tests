@@ -5,7 +5,6 @@ import sys
 # Prevent Intel OpenMP conflict (torch vs Qt) which causes DLL load errors
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-import keyboard
 from PyQt6.QtWidgets import QApplication
 
 from src.common.config import IMG_TO_TEXT_HOTKEY, SUMMON_HOTKEY
@@ -30,16 +29,19 @@ def main():
     )
     bridge.snip_to_text_signal.connect(nexus.start_img_to_text)
 
-    # RegisterHotKey-based hotkeys — survive lock/unlock/hibernate without
-    # any re-registration, unlike WH_KEYBOARD_LL hooks.
+    # RegisterHotKey-based hotkeys (Win) or pynput (Linux)
     hw = _HotkeyWindow()
     hw.toggle_signal.connect(bridge.toggle_signal)
     hw.ocr_signal.connect(bridge.snip_to_text_signal)
     hw.start(SUMMON_HOTKEY, IMG_TO_TEXT_HOTKEY)
 
-    # keyboard.on_press for window-visible navigation redirect (best-effort)
-    with contextlib.suppress(Exception):
-        keyboard.on_press(nexus.on_global_key)
+    # Global input redirect (Best effort, usually requires sudo/root on Linux)
+    if sys.platform == "win32":
+        try:
+            import keyboard
+            keyboard.on_press(nexus.on_global_key)
+        except Exception:
+            pass
 
     # System tray icon
     tray = create_tray_icon(app, nexus)  # noqa: F841 — prevent GC

@@ -149,16 +149,46 @@ def _capture_virtual_desktop() -> tuple[QPixmap, QRect]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Snip Overlay
+#  Snip Overlay  (Flameshot-style inline toolbar)
 # ══════════════════════════════════════════════════════════════════════════════
 
 _LOUPE_PX = 200
 _LOUPE_ZOOM = 6
 
+_TOOLBAR_BTN_STYLE = """
+QPushButton {{
+    background: rgba(15, 15, 25, 0.96);
+    color: rgba(255,255,255,0.88);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    padding: 0 10px;
+    font: 9pt 'Segoe UI';
+}}
+QPushButton:hover {{
+    background: {color};
+    border-color: {color};
+    color: #ffffff;
+}}
+QPushButton:pressed {{
+    background: {color};
+}}
+"""
+
 
 class SnipOverlay(QWidget):
-    snip_taken = pyqtSignal(QRect)
+    # Now emits (rect, action) so the caller doesn't need a separate menu
+    snip_taken = pyqtSignal(QRect, str)
     snip_cancelled = pyqtSignal()
+
+    _TOOLBAR = [
+        ("✓", "Accept", "text", "#22c55e"),
+        ("✗", "Cancel", "cancel", "#ef4444"),
+        ("💾", "Save", "save", "#3b82f6"),
+        ("💾", "Save As", "save", "#2563eb"),
+        ("📋", "Copy", "image", "#8b5cf6"),
+        ("📝", "Copy Text", "text", "#6366f1"),
+        ("📤", "Export", "editor", "#06b6d4"),
+    ]
 
     def __init__(self, desktop: QPixmap, virtual_geo: QRect):
         super().__init__()
@@ -177,24 +207,49 @@ class SnipOverlay(QWidget):
         self._origin: QPoint | None = None
         self._current: QPoint | None = None
         self._mouse: QPoint = QPoint(0, 0)
+        self._confirmed = False
+        self._toolbar_btns: list[QPushButton] = []
 
     def _sel_rect(self) -> QRect:
         if self._origin is None or self._current is None:
             return QRect()
         return QRect(self._origin, self._current).normalized()
 
+    def _reset_to_selecting(self) -> None:
+        self._confirmed = False
+        for btn in self._toolbar_btns:
+            btn.deleteLater()
+        self._toolbar_btns.clear()
+        self.setCursor(Qt.CursorShape.CrossCursor)
+
     def keyPressEvent(self, ev):
         if ev.key() == Qt.Key.Key_Escape:
-            self.snip_cancelled.emit()
-            self.close()
+            if self._confirmed:
+                self._reset_to_selecting()
+                self._origin = None
+                self._current = None
+                self.update()
+            else:
+                self.snip_cancelled.emit()
+                self.close()
+        elif ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._confirmed:
+            self._on_action("text")
         else:
             super().keyPressEvent(ev)
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            self._dragging = True
-            self._origin = self._current = ev.position().toPoint()
-            self.update()
+            if self._confirmed:
+                # Click outside selection → restart draw
+                if not self._sel_rect().contains(ev.position().toPoint()):
+                    self._reset_to_selecting()
+                    self._dragging = True
+                    self._origin = self._current = ev.position().toPoint()
+                    self.update()
+            else:
+                self._dragging = True
+                self._origin = self._current = ev.position().toPoint()
+                self.update()
 
     def mouseMoveEvent(self, ev):
         self._mouse = ev.position().toPoint()
@@ -209,9 +264,58 @@ class SnipOverlay(QWidget):
             rect = self._sel_rect()
             if rect.width() < 4 or rect.height() < 4:
                 self.snip_cancelled.emit()
+                self.close()
             else:
-                self.snip_taken.emit(rect)
-            self.close()
+                self._confirmed = True
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+                self._show_toolbar(rect)
+                self.update()
+
+    def _show_toolbar(self, sel: QRect) -> None:
+        for btn in self._toolbar_btns:
+            btn.deleteLater()
+        self._toolbar_btns.clear()
+
+        for icon, label, action, color in self._TOOLBAR:
+            btn = QPushButton(f"{icon}  {label}", self)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(28)
+            btn.setStyleSheet(_TOOLBAR_BTN_STYLE.format(color=color))
+            btn.clicked.connect(lambda _, a=action: self._on_action(a))
+            self._toolbar_btns.append(btn)
+
+        spacing = 4
+        for btn in self._toolbar_btns:
+            btn.adjustSize()
+
+        total_w = (
+            sum(b.width() for b in self._toolbar_btns)
+            + spacing * max(0, len(self._toolbar_btns) - 1)
+        )
+
+        # Right-align toolbar to selection's right edge, below selection
+        x = sel.right() - total_w
+        x = max(4, min(x, self.width() - total_w - 4))
+        y = sel.bottom() + 8
+        if y + 28 > self.height() - 4:
+            y = sel.top() - 28 - 8
+        y = max(4, y)
+
+        cur_x = x
+        for btn in self._toolbar_btns:
+            btn.move(cur_x, y)
+            btn.show()
+            cur_x += btn.width() + spacing
+
+    def _on_action(self, action: str) -> None:
+        rect = self._sel_rect()
+        for btn in self._toolbar_btns:
+            btn.hide()
+        if action == "cancel":
+            self.snip_cancelled.emit()
+        else:
+            self.snip_taken.emit(rect, action)
+        self.close()
 
     def paintEvent(self, _ev):
         p = QPainter(self)
@@ -221,8 +325,9 @@ class SnipOverlay(QWidget):
         rect = self._sel_rect()
         if not rect.isNull():
             self._paint_selection(p, rect)
-        self._draw_loupe(p, self._mouse)
-        self._paint_toolbar(p)
+        if not self._confirmed:
+            self._draw_loupe(p, self._mouse)
+            self._paint_hint_bar(p)
         p.end()
 
     def _paint_selection(self, p: QPainter, r: QRect):
@@ -249,20 +354,21 @@ class SnipOverlay(QWidget):
         ]:
             p.drawEllipse(QPoint(cx, cy), 5, 5)
 
-        # Dimension badge
-        badge = f"{r.width()} × {r.height()}"
-        font = QFont("Segoe UI", 8)
-        p.setFont(font)
-        fm = QFontMetrics(font)
-        tw = fm.horizontalAdvance(badge) + 16
-        th = fm.height() + 8
-        bx = r.center().x() - tw // 2
-        by = r.bottom() + 8
-        path = QPainterPath()
-        path.addRoundedRect(float(bx), float(by), float(tw), float(th), 4, 4)
-        p.fillPath(path, QColor(0, 0, 0, 180))
-        p.setPen(C.TEXT)
-        p.drawText(bx + 8, by + fm.ascent() + 4, badge)
+        # Dimension badge — only while dragging, toolbar replaces it when confirmed
+        if not self._confirmed:
+            badge = f"{r.width()} × {r.height()}"
+            font = QFont("Segoe UI", 8)
+            p.setFont(font)
+            fm = QFontMetrics(font)
+            tw = fm.horizontalAdvance(badge) + 16
+            th = fm.height() + 8
+            bx = r.center().x() - tw // 2
+            by = r.bottom() + 8
+            path = QPainterPath()
+            path.addRoundedRect(float(bx), float(by), float(tw), float(th), 4, 4)
+            p.fillPath(path, QColor(0, 0, 0, 180))
+            p.setPen(C.TEXT)
+            p.drawText(bx + 8, by + fm.ascent() + 4, badge)
 
     def _draw_loupe(self, p: QPainter, pos: QPoint) -> None:
         sz = _LOUPE_PX
@@ -339,7 +445,7 @@ class SnipOverlay(QWidget):
         p.setPen(C.TEXT_DIM)
         p.drawText(bx + 6, by + fm.ascent() + 3, coord)
 
-    def _paint_toolbar(self, p: QPainter):
+    def _paint_hint_bar(self, p: QPainter):
         bar_h = 36
         path = QPainterPath()
         path.addRoundedRect(0.0, 0.0, float(self.width()), float(bar_h), 0, 0)
@@ -401,114 +507,6 @@ class Toast(QWidget):
         t = Toast(msg, icon, color, duration_ms)
         t.show()
         t._ref = t
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  Action Menu
-# ══════════════════════════════════════════════════════════════════════════════
-
-_BTN_STYLE = """
-QPushButton {{
-    background: rgba(20,20,34,0.98);
-    color: rgba(255,255,255,0.85);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 8px;
-    padding: 9px 16px 9px 12px;
-    font: 10pt 'Segoe UI';
-    text-align: left;
-    min-width: 200px;
-}}
-QPushButton:hover {{
-    background: {color};
-    border-color: {color};
-    color: #fff;
-}}
-QPushButton:pressed {{ background: {color}; }}
-"""
-
-
-class ActionMenu(QWidget):
-    action_chosen = pyqtSignal(str)
-
-    _ACTIONS = [
-        ("1", "📋", "Copy Text", "text", "#6366f1"),
-        ("2", "🖼️", "Copy Image", "image", "#8b5cf6"),
-        ("3", "📑", "Copy Both", "both", "#06b6d4"),
-        ("4", "💾", "Save Image…", "save", "#22c55e"),
-        ("5", "⌨️", "Insert Text", "insert", "#f59e0b"),
-        ("6", "📝", "Open in Editor", "editor", "#ec4899"),
-    ]
-
-    def __init__(self, anchor: QPoint):
-        super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(4)
-
-        title = QLabel("Snip Actions  ·  Windows OCR")
-        title.setStyleSheet(
-            "color: rgba(255,255,255,0.4); font: bold 8pt 'Segoe UI'; padding-bottom: 6px;"
-        )
-        layout.addWidget(title)
-
-        self._buttons: dict[str, QPushButton] = {}
-        for num, icon, label, key, color in self._ACTIONS:
-            btn = QPushButton(f" {icon}  {label}")
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(_BTN_STYLE.format(color=color))
-            _k = key
-            btn.clicked.connect(lambda _, k=_k: self._emit(k))
-            layout.addWidget(btn)
-            self._buttons[num] = btn
-
-        hint = QLabel("Press 1-6 or click  ·  Esc to dismiss")
-        hint.setStyleSheet(
-            "color: rgba(255,255,255,0.25); font: 7pt 'Segoe UI'; padding-top: 4px;"
-        )
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(hint)
-
-        self.setStyleSheet("""
-            ActionMenu {
-                background: rgba(12, 12, 22, 0.97);
-                border-radius: 12px;
-                border: 1px solid rgba(255,255,255,0.08);
-            }
-        """)
-        self.adjustSize()
-
-        screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
-        sg = screen.geometry()
-        x = min(anchor.x() + 16, sg.right() - self.width() - 10)
-        y = min(anchor.y() + 16, sg.bottom() - self.height() - 10)
-        self.move(x, y)
-
-        self._timer = QTimer(self)
-        self._timer.setSingleShot(True)
-        self._timer.timeout.connect(lambda: self._emit("cancel"))
-        self._timer.start(20_000)
-
-    def _emit(self, key: str) -> None:
-        self._timer.stop()
-        self.action_chosen.emit(key)
-        self.close()
-
-    def keyPressEvent(self, ev):
-        k = ev.text()
-        if k in self._buttons:
-            self._buttons[k].click()
-        elif ev.key() == Qt.Key.Key_Escape:
-            self._emit("cancel")
-        else:
-            super().keyPressEvent(ev)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -666,7 +664,7 @@ def start_snip_to_text(
     on_done: Callable[[SnipResult], None] | None = None,
     on_error: Callable[[str], None] | None = None,
 ) -> None:
-    """Start the snip → action-menu → OCR/action flow inside an existing Qt app."""
+    """Start the snip → Flameshot-style toolbar → OCR/action flow."""
 
     def _status(msg: str) -> None:
         if nexus is not None and hasattr(nexus, "status_lbl"):
@@ -749,21 +747,12 @@ def start_snip_to_text(
         w.signals.error.connect(_err)
         _pool().start(w)
 
-    def _show_menu(image: QImage, rect: QRect) -> None:
+    def _on_taken(rect: QRect, action: str, overlay: SnipOverlay) -> None:
+        image = overlay.crop_selection(rect)
         screens = QGuiApplication.screens()
         vgeo = screens[0].virtualGeometry() if screens else QRect()
         anchor = QPoint(rect.right() + vgeo.x(), rect.bottom() + vgeo.y())
-        menu = ActionMenu(anchor)
-        menu.action_chosen.connect(lambda a: _handle(a, image, anchor))
-        menu.show()
-        menu.raise_()
-        menu.activateWindow()
-        menu.setFocus()
-        menu._alive = menu
-
-    def _on_taken(rect: QRect, overlay: SnipOverlay) -> None:
-        image = overlay.crop_selection(rect)
-        QTimer.singleShot(60, lambda: _show_menu(image, rect))
+        QTimer.singleShot(60, lambda: _handle(action, image, anchor))
 
     def _start_overlay(desktop: QPixmap, vgeo: QRect) -> None:
         ov = SnipOverlay(desktop, vgeo)
@@ -773,7 +762,7 @@ def start_snip_to_text(
                 Toast.show_toast("Cancelled", "—", C.TEXT_DIM, 1200),
             )
         )
-        ov.snip_taken.connect(lambda r: _on_taken(r, ov))
+        ov.snip_taken.connect(lambda r, a: _on_taken(r, a, ov))
         ov.show()
         ov.raise_()
         ov.activateWindow()

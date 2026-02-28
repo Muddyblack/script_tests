@@ -167,8 +167,8 @@ class SearchBar(QWidget):
         self._focused = False
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 0, 8, 0)
-        layout.setSpacing(6)
+        layout.setContentsMargins(10, 0, 10, 0)
+        layout.setSpacing(8)
 
         self._icon_lbl = QLabel()
         self._icon_lbl.setFixedSize(16, 16)
@@ -180,10 +180,25 @@ class SearchBar(QWidget):
         self.input.setFrame(False)
         self.input.setClearButtonEnabled(True)
         self.input.textChanged.connect(self.textChanged)
+        self.input.installEventFilter(self)
         layout.addWidget(self.input)
 
-        self.setMinimumHeight(34)
+        self._hint_lbl = QLabel("Ctrl+K")
+        self._hint_lbl.setObjectName("search_hint")
+        self._hint_lbl.setFixedSize(44, 18)
+        self._hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._hint_lbl)
+
+        self.setMinimumHeight(36)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.apply_input_style()
+
+    def eventFilter(self, obj, event):
+        if obj == self.input:
+            if event.type() in (event.Type.FocusIn, event.Type.FocusOut):
+                self.update()
+                self._hint_lbl.setVisible(not self.input.hasFocus())
+        return super().eventFilter(obj, event)
 
     def _update_icon(self):
         px = Icons.search(self._theme["text_secondary"], 16)
@@ -191,19 +206,30 @@ class SearchBar(QWidget):
 
     def update_theme(self):
         self._update_icon()
+        self.apply_input_style()
         self.update()
 
     def paintEvent(self, e):
         T = self._theme
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = self.rect().adjusted(0, 2, 0, -2)
+        
         focused = self.input.hasFocus()
-        bg = QColor(T["bg_elevated"] if T.dark else T["bg_control"])
-        border = QColor(T["border_focus"] if focused else T["border"])
+        r = self.rect().adjusted(1, 3, -1, -3)
+        
+        bg = QColor(T["bg_overlay"] if focused else (T["bg_elevated"] if T.dark else T["bg_control"]))
+        border = QColor(T["accent"] if focused else T["border_light"])
+        
+        if focused:
+            # Subtle glow
+            glow = QColor(T["accent"])
+            glow.setAlpha(40)
+            p.setPen(QPen(glow, 4))
+            p.drawRoundedRect(r.adjusted(-1, -1, 1, 1), 6, 6)
+
         p.setBrush(QBrush(bg))
-        p.setPen(QPen(border, 1.5 if focused else 1))
-        p.drawRoundedRect(r, 5, 5)
+        p.setPen(QPen(border, 1.2 if focused else 1))
+        p.drawRoundedRect(r, 6, 6)
         p.end()
 
     def apply_input_style(self):
@@ -213,9 +239,19 @@ class SearchBar(QWidget):
                 background: transparent;
                 border: none;
                 color: {T["text_primary"]};
-                font-family: 'Segoe UI';
+                font-family: 'Segoe UI', system-ui;
                 font-size: 13px;
                 selection-background-color: {T["accent"]};
+            }}
+        """)
+        self._hint_lbl.setStyleSheet(f"""
+            QLabel#search_hint {{
+                background: {T["bg_control"]};
+                color: {T["text_secondary"]};
+                border: 1px solid {T["border_light"]};
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 600;
             }}
         """)
 

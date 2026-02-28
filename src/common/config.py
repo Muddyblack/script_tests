@@ -1,9 +1,21 @@
 """Centralized configuration and path constants for Nexus Search."""
 
+
 import os
 
 # --- CONFIGURATION (Shared with other apps) ---
-APPDATA = os.getenv("APPDATA", ".")
+def get_appdata_dir():
+    if os.name == "nt":
+        # Windows: use APPDATA
+        return os.getenv("APPDATA", ".")
+    # Unix/Linux: use XDG_DATA_HOME or ~/.local/share/fast-explorer
+    xdg_data_home = os.getenv("XDG_DATA_HOME")
+    if xdg_data_home:
+        return os.path.join(xdg_data_home, "fast-explorer")
+    return os.path.expanduser("~/.local/share/fast-explorer")
+
+APPDATA = get_appdata_dir()
+os.makedirs(APPDATA, exist_ok=True)
 DB_PATH = os.path.join(APPDATA, "context_switcher.db")
 X_EXPLORER_DB = os.path.join(APPDATA, "x_explorer_cache.db")
 GHOST_TYPIST_DB = os.path.join(APPDATA, "ghost_typist.db")

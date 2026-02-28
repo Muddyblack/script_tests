@@ -62,11 +62,11 @@ except ImportError:
     WATCHDOG_AVAILABLE = False
 
 
+from src.common.theme import ThemeManager
 from src.xexplorer.database import init_db
 from src.xexplorer.delegates import DetailsDelegate
 from src.xexplorer.icons import Icons
 from src.xexplorer.indexer import IndexerWorker
-from src.common.theme import ThemeManager
 from src.xexplorer.theme import Theme
 from src.xexplorer.watcher import LiveCacheUpdater
 from src.xexplorer.widgets import (
@@ -1511,7 +1511,7 @@ class XExplorer(QMainWindow):
 
     def keyPressEvent(self, event):
         if (
-            event.key() == Qt.Key.Key_F
+            event.key() in (Qt.Key.Key_F, Qt.Key.Key_K)
             and event.modifiers() == Qt.KeyboardModifier.ControlModifier
         ):
             self._search_bar.input.setFocus()
