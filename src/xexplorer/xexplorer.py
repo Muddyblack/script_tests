@@ -876,7 +876,7 @@ class XExplorer(QMainWindow):
         item.setData(Qt.ItemDataRole.UserRole, path)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
         w = DriveWidget(path, label, self.T)
-        item.setSizeHint(w.sizeHint())
+        item.setSizeHint(QSize(0, 66))
         self.folder_list.addItem(item)
         self.folder_list.setItemWidget(item, w)
 

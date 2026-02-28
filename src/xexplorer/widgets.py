@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -267,7 +266,38 @@ class SidebarList(QListWidget):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSpacing(1)
         self.setUniformItemSizes(False)
+        self.setMouseTracking(True)
+        self.itemSelectionChanged.connect(self._sync_widget_states)
         self.update_style()
+
+    def _widget_at(self, item):
+        w = self.itemWidget(item)
+        if isinstance(w, (DriveWidget, IgnoreItemWidget)):
+            return w
+        return None
+
+    def _sync_widget_states(self):
+        for i in range(self.count()):
+            item = self.item(i)
+            w = self._widget_at(item)
+            if w:
+                w.set_selected(item.isSelected())
+
+    def mouseMoveEvent(self, e):
+        item = self.itemAt(e.pos())
+        for i in range(self.count()):
+            it = self.item(i)
+            w = self._widget_at(it)
+            if w:
+                w.set_hovered(it is item)
+        super().mouseMoveEvent(e)
+
+    def leaveEvent(self, e):
+        for i in range(self.count()):
+            w = self._widget_at(self.item(i))
+            if w:
+                w.set_hovered(False)
+        super().leaveEvent(e)
 
     def update_style(self):
         T = self._theme
@@ -281,14 +311,10 @@ class SidebarList(QListWidget):
             QListWidget::item {{
                 border-radius: 6px;
                 padding: 0;
-                color: {T["text_primary"]};
+                background: transparent;
             }}
-            QListWidget::item:hover {{
-                background: {T["sidebar_hover"]};
-            }}
-            QListWidget::item:selected {{
-                background: {T["accent"]}22;
-            }}
+            QListWidget::item:hover {{ background: transparent; }}
+            QListWidget::item:selected {{ background: transparent; }}
             QListWidget::indicator {{ width: 0; height: 0; }}
             QScrollBar:vertical {{
                 background: transparent; width: 4px;
@@ -398,6 +424,8 @@ class IgnoreItemWidget(QWidget):
         super().__init__(parent)
         self._text = text
         self._theme = theme
+        self._hovered = False
+        self._selected = False
         hl = QHBoxLayout(self)
         hl.setContentsMargins(10, 0, 8, 0)
         hl.setSpacing(10)
@@ -412,6 +440,33 @@ class IgnoreItemWidget(QWidget):
         hl.addWidget(self._lbl, 1)
 
         self.setFixedHeight(32)
+
+    def set_hovered(self, val: bool):
+        if self._hovered != val:
+            self._hovered = val
+            self.update()
+
+    def set_selected(self, val: bool):
+        if self._selected != val:
+            self._selected = val
+            self.update()
+
+    def paintEvent(self, e):
+        T = self._theme
+        if T is None:
+            return super().paintEvent(e)
+        if self._selected or self._hovered:
+            p = QPainter(self)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            if self._selected:
+                color = QColor(T["accent"])
+                color.setAlpha(34)
+            else:
+                color = QColor(T["sidebar_hover"])
+            p.setBrush(QBrush(color))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(self.rect().adjusted(2, 1, -2, -1), 6, 6)
+            p.end()
 
     def isChecked(self) -> bool:
         return self._toggle.isChecked()
@@ -459,6 +514,9 @@ class DriveWidget(QWidget):
         super().__init__(parent)
         self._path = path
         self._theme = theme
+        self._hovered = False
+        self._selected = False
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         hl = QHBoxLayout(self)
         hl.setContentsMargins(12, 8, 12, 8)
         hl.setSpacing(10)
@@ -480,6 +538,8 @@ class DriveWidget(QWidget):
         except Exception:
             total, used = 0, 0
 
+        self._used = used
+        self._total = total
         self._has_bar = total > 0
         if self._has_bar:
             used_gb = used / (1024**3)
@@ -490,18 +550,62 @@ class DriveWidget(QWidget):
         self._size_lbl.setObjectName("drive_size_lbl")
         vl.addWidget(self._size_lbl)
 
+        # Reserve space for the drawn bar (no QProgressBar — it doesn't resize correctly)
         if self._has_bar:
-            self._bar = QProgressBar()
-            self._bar.setRange(0, 100)
-            self._bar.setValue(int(used / total * 100))
-            self._bar.setTextVisible(False)
-            self._bar.setFixedHeight(3)
-            self._bar.setObjectName("drive_bar")
-            vl.addWidget(self._bar)
+            spacer = QWidget()
+            spacer.setFixedHeight(6)
+            vl.addWidget(spacer)
 
         hl.addLayout(vl, 1)
         self.setFixedHeight(66)
         self._apply_style()
+
+    def set_hovered(self, val: bool):
+        if self._hovered != val:
+            self._hovered = val
+            self.update()
+
+    def set_selected(self, val: bool):
+        if self._selected != val:
+            self._selected = val
+            self.update()
+
+    def paintEvent(self, e):
+        T = self._theme
+        if T is None:
+            return super().paintEvent(e)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Hover / selection background
+        if self._selected or self._hovered:
+            if self._selected:
+                color = QColor(T["accent"])
+                color.setAlpha(34)
+            else:
+                color = QColor(T["sidebar_hover"])
+            p.setBrush(QBrush(color))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(self.rect().adjusted(2, 1, -2, -1), 6, 6)
+
+        # Usage bar — drawn directly so it always matches the current widget width
+        if self._has_bar and self._total > 0:
+            # Position: same left/right margins as the layout, just above bottom edge
+            ml, mr = 12 + 32 + 10, 12  # badge(32) + spacing(10) + left margin(12)
+            bar_x = ml
+            bar_w = self.width() - ml - mr
+            bar_y = self.height() - 10
+            bar_h = 3
+            ratio = min(self._used / self._total, 1.0)
+
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(T["border"])))
+            p.drawRoundedRect(bar_x, bar_y, bar_w, bar_h, 1, 1)
+            if ratio > 0:
+                p.setBrush(QBrush(QColor(T["accent"])))
+                p.drawRoundedRect(bar_x, bar_y, max(4, int(bar_w * ratio)), bar_h, 1, 1)
+
+        p.end()
 
     def _apply_style(self):
         T = self._theme
@@ -511,11 +615,6 @@ class DriveWidget(QWidget):
             f"color: {T['text_primary']}; font-size: 13px; font-weight: 600;"
         )
         self._size_lbl.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px;")
-        if self._has_bar:
-            self._bar.setStyleSheet(
-                f"QProgressBar {{ background: {T['border']}; border: none; border-radius: 1px; }}"
-                f"QProgressBar::chunk {{ background: {T['accent']}; border-radius: 1px; }}"
-            )
 
     def update_theme(self, theme):
         self._theme = theme

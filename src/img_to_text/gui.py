@@ -127,6 +127,69 @@ _recent_snips: deque[_SnipRecord] = deque(maxlen=10)
 # ---------------------------------------------------------------------------
 
 
+def _is_wayland() -> bool:
+    import sys
+
+    if sys.platform != "linux":
+        return False
+    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    display = os.environ.get("WAYLAND_DISPLAY", "")
+    return session == "wayland" or bool(display)
+
+
+def _capture_wayland() -> tuple[QPixmap, QRect] | None:
+    """Try to capture the screen on Wayland using grim or spectacle CLI."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    screens = QGuiApplication.screens()
+    virtual_geo = QRect(
+        min(s.geometry().left() for s in screens),
+        min(s.geometry().top() for s in screens),
+        max(s.geometry().right() for s in screens) - min(s.geometry().left() for s in screens),
+        max(s.geometry().bottom() for s in screens) - min(s.geometry().top() for s in screens),
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp = f.name
+
+    try:
+        # grim: wlroots/KDE Wayland screenshooter (most reliable)
+        if shutil.which("grim"):
+            ret = subprocess.run(["grim", tmp], timeout=5)
+            if ret.returncode == 0:
+                px = QPixmap(tmp)
+                if not px.isNull():
+                    return px, virtual_geo
+
+        # spectacle (KDE) — background fullscreen capture
+        if shutil.which("spectacle"):
+            ret = subprocess.run(
+                ["spectacle", "--background", "--nonotify", "--fullscreen", "--output", tmp],
+                timeout=8,
+            )
+            if ret.returncode == 0:
+                px = QPixmap(tmp)
+                if not px.isNull():
+                    return px, virtual_geo
+
+        # gnome-screenshot fallback
+        if shutil.which("gnome-screenshot"):
+            ret = subprocess.run(["gnome-screenshot", "-f", tmp], timeout=5)
+            if ret.returncode == 0:
+                px = QPixmap(tmp)
+                if not px.isNull():
+                    return px, virtual_geo
+    except Exception:
+        pass
+    finally:
+        with contextlib.suppress(Exception):
+            os.unlink(tmp)
+
+    return None
+
+
 def _capture_virtual_desktop() -> tuple[QPixmap, QRect]:
     """Capture the virtual desktop with robust handling for Linux/KDE/Wayland."""
     # Aggressive event pump and delay to ensure launcher is hidden
@@ -137,6 +200,12 @@ def _capture_virtual_desktop() -> tuple[QPixmap, QRect]:
     screens = QGuiApplication.screens()
     if not screens:
         raise RuntimeError("No screens detected")
+
+    # On Wayland, grabWindow(0) returns black — use native tools instead
+    if _is_wayland():
+        result = _capture_wayland()
+        if result is not None:
+            return result
 
     # Calculate virtual geometry
     v_left = min(s.geometry().left() for s in screens)
@@ -152,7 +221,6 @@ def _capture_virtual_desktop() -> tuple[QPixmap, QRect]:
 
     for screen in screens:
         geo = screen.geometry()
-        # Compositing individual screen grabs is the most stable approach on Unix
         shot = screen.grabWindow(0)
         if not shot.isNull():
             painter.drawPixmap(
