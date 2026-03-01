@@ -404,7 +404,9 @@ class WebThemeBridge:
     def _apply_titlebar(self):
         win = self._view.window()
         if win and win.isVisible():
-            apply_win32_titlebar(int(win.winId()), self._mgr["bg_base"], self._mgr.is_dark)
+            apply_win32_titlebar(
+                int(win.winId()), self._mgr["bg_base"], self._mgr.is_dark
+            )
 
     def _on_theme_changed(self):
         self._inject_script()

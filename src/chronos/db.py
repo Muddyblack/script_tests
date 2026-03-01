@@ -1,6 +1,7 @@
 """
 Chronos — database initialisation & migrations.
 """
+
 import sqlite3
 
 from src.common.config import CHRONOS_DB

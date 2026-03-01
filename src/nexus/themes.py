@@ -30,36 +30,35 @@ def get_nexus_theme(mgr) -> str:
     dark = mgr.is_dark
 
     # Gradient stops for the main panel (hex + alpha channel)
-    bg_top = _c_rgba(c, "bg_base",     235 if dark else 250)
+    bg_top = _c_rgba(c, "bg_base", 235 if dark else 250)
     bg_mid = _c_rgba(c, "bg_elevated", 240 if dark else 252)
-    bg_bot = _c_rgba(c, "bg_overlay",  245 if dark else 255)
+    bg_bot = _c_rgba(c, "bg_overlay", 245 if dark else 255)
 
     # Translucent overlays — white-on-dark vs black-on-light
     if dark:
-        ov_xs  = "rgba(255,255,255,0.01)"
-        ov_sm  = "rgba(255,255,255,0.03)"
-        ov_md  = "rgba(255,255,255,0.05)"
-        ov_lg  = "rgba(255,255,255,0.08)"
+        ov_xs = "rgba(255,255,255,0.01)"
+        ov_sm = "rgba(255,255,255,0.03)"
+        ov_md = "rgba(255,255,255,0.05)"
+        ov_lg = "rgba(255,255,255,0.08)"
         ov_brd = "rgba(255,255,255,0.06)"
-        scrl   = "rgba(255,255,255,0.08)"
+        scrl = "rgba(255,255,255,0.08)"
         scrl_h = "rgba(255,255,255,0.15)"
     else:
-        ov_xs  = "rgba(0,0,0,0.005)"
-        ov_sm  = "rgba(0,0,0,0.02)"
-        ov_md  = "rgba(0,0,0,0.04)"
-        ov_lg  = "rgba(0,0,0,0.07)"
+        ov_xs = "rgba(0,0,0,0.005)"
+        ov_sm = "rgba(0,0,0,0.02)"
+        ov_md = "rgba(0,0,0,0.04)"
+        ov_lg = "rgba(0,0,0,0.07)"
         ov_brd = "rgba(0,0,0,0.06)"
-        scrl   = "rgba(0,0,0,0.08)"
+        scrl = "rgba(0,0,0,0.08)"
         scrl_h = "rgba(0,0,0,0.15)"
 
-    accent        = _c(c, "accent",         "#60a5fa")
-    accent_subtle = _c(c, "accent_subtle",  "rgba(96,165,250,0.12)")
-    accent_press  = _c(c, "accent_pressed", "#3b82f6")
-    border        = _c(c, "border",         "rgba(255,255,255,0.08)")
-    border_light  = _c(c, "border_light",   "rgba(255,255,255,0.12)")
-    text          = _c(c, "text_primary",   "#e5e7eb")
-    text2         = _c(c, "text_secondary", "#78849e")
-    text_dis      = _c(c, "text_disabled",  "#6b7280")
+    accent = _c(c, "accent", "#60a5fa")
+    accent_subtle = _c(c, "accent_subtle", "rgba(96,165,250,0.12)")
+    # accent_pressed is used in TOOL_SHEET but not here
+    border = _c(c, "border", "rgba(255,255,255,0.08)")
+    text = _c(c, "text_primary", "#e5e7eb")
+    text2 = _c(c, "text_secondary", "#78849e")
+    text_dis = _c(c, "text_disabled", "#6b7280")
 
     font = "'Outfit','Inter','Segoe UI'"
 

@@ -62,7 +62,6 @@ if sys.platform == "win32":
         **{f"f{i}": 0x6F + i for i in range(1, 13)},
     }
 
-
     def _parse_hotkey(hotkey_str: str) -> tuple[int, int]:
         """Parse 'ctrl+shift+q' into (modifiers, vk_code) for RegisterHotKey."""
         mods = 0
@@ -83,7 +82,6 @@ if sys.platform == "win32":
                 vk = ord(part.upper())
         return mods, vk
 
-
     class WNDCLASSW(ctypes.Structure):
         _fields_ = [
             ("style", wt.UINT),
@@ -97,7 +95,6 @@ if sys.platform == "win32":
             ("lpszMenuName", wt.LPCWSTR),
             ("lpszClassName", wt.LPCWSTR),
         ]
-
 
     class _HotkeyWindow(QObject):
         """Message-only window that uses RegisterHotKey.
@@ -159,7 +156,9 @@ if sys.platform == "win32":
                 print(
                     f"[HotkeyWindow] RegisterHotKey (toggle) failed: {ctypes.GetLastError()}"
                 )
-            if not _user32.RegisterHotKey(hwnd, self._OCR_ID, self._ocr_mods, self._ocr_vk):
+            if not _user32.RegisterHotKey(
+                hwnd, self._OCR_ID, self._ocr_mods, self._ocr_vk
+            ):
                 print(
                     f"[HotkeyWindow] RegisterHotKey (ocr) failed: {ctypes.GetLastError()}"
                 )
@@ -190,7 +189,19 @@ else:
                 for p in hk.lower().split("+"):
                     p = p.strip()
                     # pynput special keys: ctrl, shift, alt, cmd, space, enter, etc.
-                    if p in ("ctrl", "shift", "alt", "win", "cmd", "space", "enter", "tab", "esc", "backspace", "delete"):
+                    if p in (
+                        "ctrl",
+                        "shift",
+                        "alt",
+                        "win",
+                        "cmd",
+                        "space",
+                        "enter",
+                        "tab",
+                        "esc",
+                        "backspace",
+                        "delete",
+                    ):
                         parts.append(f"<{p}>")
                     else:
                         parts.append(p)
@@ -208,5 +219,6 @@ else:
                 except Exception as e:
                     print(f"Hotkey listener error: {e}")
 
-            threading.Thread(target=run_listener, daemon=True, name="PynputHotkeyListener").start()
-
+            threading.Thread(
+                target=run_listener, daemon=True, name="PynputHotkeyListener"
+            ).start()

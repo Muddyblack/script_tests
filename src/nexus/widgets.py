@@ -215,6 +215,7 @@ class NexusInput(QLineEdit):
 
         # Ghost color — derive from active theme
         from src.common.theme import ThemeManager as _TM
+
         _ghost_hex = _TM().theme_data.get("colors", {}).get("text_disabled", "#6b7280")
         _ghost = QColor(_ghost_hex)
         _ghost.setAlpha(160)

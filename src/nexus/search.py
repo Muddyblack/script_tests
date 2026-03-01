@@ -87,13 +87,28 @@ from .system_commands import (
     launch_chronos as _launch_chronos,
 )
 from .system_commands import (
+    launch_clipboard_manager as _launch_clipboard,
+)
+from .system_commands import (
     launch_color_picker as _launch_color_picker,
+)
+from .system_commands import (
+    launch_env_var_explorer as _launch_env_var,
 )
 from .system_commands import (
     launch_file_ops as _launch_file_ops,
 )
 from .system_commands import (
+    launch_hash_tool as _launch_hash_tool,
+)
+from .system_commands import (
+    launch_port_inspector as _launch_port_inspector,
+)
+from .system_commands import (
     launch_regex_helper as _launch_regex,
+)
+from .system_commands import (
+    launch_window_manager as _launch_window_manager,
 )
 from .system_commands import (
     launch_xexplorer as _launch_xexplorer,
@@ -1510,6 +1525,41 @@ class NexusSearch(QWidget):
                     "image.svg",
                     "#22c55e",
                 ),
+                (
+                    "Clipboard Manager",
+                    "Persistent multi-history clipboard with search & pin",
+                    "clipboard_manager",
+                    "copy.svg",
+                    "#f472b6",
+                ),
+                (
+                    "Port Inspector",
+                    "Real-time network ports · kill by PID",
+                    "port_inspector",
+                    "server.svg",
+                    "#38bdf8",
+                ),
+                (
+                    "Hash Tool",
+                    "MD5 · SHA-1 · SHA-256 · SHA-512  file & text hashing",
+                    "hash_tool",
+                    "hash.svg",
+                    "#a3e635",
+                ),
+                (
+                    "Window Manager",
+                    "Snap · tile · save & restore window layouts",
+                    "window_manager",
+                    "menu.svg",
+                    "#fb923c",
+                ),
+                (
+                    "Env Var Explorer",
+                    "Browse · edit · add system & user env vars",
+                    "env_var_explorer",
+                    "settings.svg",
+                    "#e879f9",
+                ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
                 if not terms or matches_all_terms(title, t_terms):
@@ -2323,6 +2373,16 @@ class NexusSearch(QWidget):
                     _launch_chronos(self)
                 elif data["cmd"] == "img_to_text":
                     self.start_img_to_text()
+                elif data["cmd"] == "clipboard_manager":
+                    _launch_clipboard(self)
+                elif data["cmd"] == "port_inspector":
+                    _launch_port_inspector(self)
+                elif data["cmd"] == "hash_tool":
+                    _launch_hash_tool(self)
+                elif data["cmd"] == "window_manager":
+                    _launch_window_manager(self)
+                elif data["cmd"] == "env_var_explorer":
+                    _launch_env_var(self)
                 elif (
                     data["cmd"].startswith("toggle_")
                     or data["cmd"].startswith("cmd_")

@@ -5,6 +5,7 @@ Heavy lifting lives in dedicated modules:
   db.py     — SQLite schema & migrations
   bridge.py — Qt/Python backend bridge (ChronosBridge + _AIWorker)
 """
+
 import datetime
 import os
 import sys

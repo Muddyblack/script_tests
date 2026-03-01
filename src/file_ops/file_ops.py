@@ -337,9 +337,7 @@ class FileToolsWindow(QMainWindow):
             }
         """
         self.mgr.apply_to_widget(self, TOOL_SHEET + extra)
-        self.status_dot.setStyleSheet(
-            f"color: {self.mgr['success']}; font-size: 10px;"
-        )
+        self.status_dot.setStyleSheet(f"color: {self.mgr['success']}; font-size: 10px;")
         self.arc_opts_frame.setStyleSheet(
             f"background: {self.mgr['bg_overlay']}; border-radius: 10px;"
             f" border: 1px solid {self.mgr['border_light']};"
@@ -616,9 +614,9 @@ class FileToolsWindow(QMainWindow):
         opts_lay.setSpacing(16)
 
         for attr, label, items, default in [
-            ("combo_lvl",  "LEVEL",     list(MX_MAP.keys()), "Normal"),
+            ("combo_lvl", "LEVEL", list(MX_MAP.keys()), "Normal"),
             ("combo_dict", "DICT SIZE", list(MD_MAP.keys()), "16 MB"),
-            ("combo_mt",   "THREADS",   list(MT_MAP.keys()), "Auto"),
+            ("combo_mt", "THREADS", list(MT_MAP.keys()), "Auto"),
         ]:
             col = QVBoxLayout()
             lbl = QLabel(label)
@@ -858,7 +856,9 @@ class FileToolsWindow(QMainWindow):
         if has:
             archives = [p for p in self.arc_sources if is_archive(p)]
             non_arcs = [p for p in self.arc_sources if not is_archive(p)]
-            unextractable = [p for p in archives if not get_capabilities(p)["can_extract"]]
+            unextractable = [
+                p for p in archives if not get_capabilities(p)["can_extract"]
+            ]
 
             if unextractable:
                 self._set_status(
@@ -888,9 +888,13 @@ class FileToolsWindow(QMainWindow):
         dst = self.arc_dst_input.text().strip() or os.path.dirname(self.arc_sources[0])
         fmt = self.arc_fmt_combo.currentText()
         ext_map = {
-            "zip": ".zip", "7z": ".7z", "tar": ".tar",
-            "tar.gz": ".tar.gz", "tar.bz2": ".tar.bz2",
-            "tar.xz": ".tar.xz", "gz": ".gz",
+            "zip": ".zip",
+            "7z": ".7z",
+            "tar": ".tar",
+            "tar.gz": ".tar.gz",
+            "tar.bz2": ".tar.bz2",
+            "tar.xz": ".tar.xz",
+            "gz": ".gz",
         }
         ext = ext_map.get(fmt, f".{fmt}")
         base = os.path.splitext(os.path.basename(self.arc_sources[0]))[0]
@@ -908,9 +912,14 @@ class FileToolsWindow(QMainWindow):
 
         def worker():
             errors = create_archive(
-                self.arc_sources, out_path, fmt,
-                password=pwd, level=level, dict_size=dict_sz,
-                threads=threads, solid=solid,
+                self.arc_sources,
+                out_path,
+                fmt,
+                password=pwd,
+                level=level,
+                dict_size=dict_sz,
+                threads=threads,
+                solid=solid,
                 on_progress=lambda d, t: self._arc_progress.emit(d, t),
             )
             self._arc_done.emit(errors, f"Created: {os.path.basename(out_path)}")
@@ -940,7 +949,9 @@ class FileToolsWindow(QMainWindow):
                 out = dst or os.path.dirname(arc)
                 all_errors.extend(
                     extract_archive(
-                        arc, out, password=pwd,
+                        arc,
+                        out,
+                        password=pwd,
                         on_progress=lambda d, t: self._arc_progress.emit(d, t),
                     )
                 )
@@ -992,9 +1003,7 @@ class FileToolsWindow(QMainWindow):
 
     def _reset_status(self):
         self._set_status("READY", self.mgr["text_secondary"])
-        self.status_dot.setStyleSheet(
-            f"color: {self.mgr['success']}; font-size: 10px;"
-        )
+        self.status_dot.setStyleSheet(f"color: {self.mgr['success']}; font-size: 10px;")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1006,9 +1015,7 @@ def main():
     if sys.platform == "win32":
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "nexus.filetools"
-        )
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.filetools")
     import argparse
 
     parser = argparse.ArgumentParser()

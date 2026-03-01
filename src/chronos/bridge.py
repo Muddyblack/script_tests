@@ -1,6 +1,7 @@
 """
 Chronos — Qt/Python backend bridge exposed to the WebEngine page.
 """
+
 import datetime
 import json
 import os

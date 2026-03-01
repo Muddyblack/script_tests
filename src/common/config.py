@@ -1,6 +1,5 @@
 """Centralized configuration and path constants for Nexus Search."""
 
-
 import os
 
 
@@ -14,6 +13,7 @@ def get_appdata_dir():
     if xdg_data_home:
         return os.path.join(xdg_data_home, "fast-explorer")
     return os.path.expanduser("~/.local/share/fast-explorer")
+
 
 APPDATA = get_appdata_dir()
 os.makedirs(APPDATA, exist_ok=True)

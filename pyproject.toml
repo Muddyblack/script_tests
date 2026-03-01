@@ -22,6 +22,11 @@ xexplorer = "src.xexplorer.xexplorer:main"
 regex-helper = "src.regex_helper.regex_helper:main"
 file-ops = "src.file_ops.file_ops:main"
 archiver = "src.archiver.archiver:main"
+clipboard-manager = "src.clipboard_manager.clipboard_manager:main"
+port-inspector = "src.port_inspector.port_inspector:main"
+hash-tool = "src.hash_tool.hash_tool:main"
+window-manager = "src.window_manager.window_manager:main"
+env-var-explorer = "src.env_var_explorer.env_var_explorer:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

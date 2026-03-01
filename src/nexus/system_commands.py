@@ -274,13 +274,17 @@ def launch_regex_helper(nexus) -> None:
 def launch_file_ops(nexus) -> None:
     """Launch the Nexus File Tools on the FILE OPS tab."""
     nexus.status_lbl.setText("📂 Launching File Tools...")
-    subprocess.Popen([sys.executable, "-m", "src.file_ops.file_ops", "--tab", "fileops"])
+    subprocess.Popen(
+        [sys.executable, "-m", "src.file_ops.file_ops", "--tab", "fileops"]
+    )
 
 
 def launch_archiver(nexus) -> None:
     """Launch the Nexus File Tools on the ARCHIVER tab."""
     nexus.status_lbl.setText("📦 Launching Archiver...")
-    subprocess.Popen([sys.executable, "-m", "src.file_ops.file_ops", "--tab", "archiver"])
+    subprocess.Popen(
+        [sys.executable, "-m", "src.file_ops.file_ops", "--tab", "archiver"]
+    )
 
 
 def launch_color_picker(nexus) -> None:
@@ -299,6 +303,36 @@ def launch_chronos(nexus) -> None:
     """Launch the Chronos Hub."""
     nexus.status_lbl.setText("⏳ Launching Chronos Hub...")
     subprocess.Popen([sys.executable, "-m", "src.chronos.chronos"])
+
+
+def launch_clipboard_manager(nexus) -> None:
+    """Launch the Clipboard Manager."""
+    nexus.status_lbl.setText("📋 Launching Clipboard Manager...")
+    subprocess.Popen([sys.executable, "-m", "src.clipboard_manager.clipboard_manager"])
+
+
+def launch_port_inspector(nexus) -> None:
+    """Launch the Port Inspector."""
+    nexus.status_lbl.setText("🌐 Launching Port Inspector...")
+    subprocess.Popen([sys.executable, "-m", "src.port_inspector.port_inspector"])
+
+
+def launch_hash_tool(nexus) -> None:
+    """Launch the Hash Tool."""
+    nexus.status_lbl.setText("🔑 Launching Hash Tool...")
+    subprocess.Popen([sys.executable, "-m", "src.hash_tool.hash_tool"])
+
+
+def launch_window_manager(nexus) -> None:
+    """Launch the Window Manager."""
+    nexus.status_lbl.setText("🪟 Launching Window Manager...")
+    subprocess.Popen([sys.executable, "-m", "src.window_manager.window_manager"])
+
+
+def launch_env_var_explorer(nexus) -> None:
+    """Launch the Env Var Explorer."""
+    nexus.status_lbl.setText("⚙️ Launching Env Var Explorer...")
+    subprocess.Popen([sys.executable, "-m", "src.env_var_explorer.env_var_explorer"])
 
 
 def run_macro(nexus, macro_id: int) -> None:

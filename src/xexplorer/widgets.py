@@ -193,10 +193,12 @@ class SearchBar(QWidget):
         self.apply_input_style()
 
     def eventFilter(self, obj, event):
-        if obj == self.input:
-            if event.type() in (event.Type.FocusIn, event.Type.FocusOut):
-                self.update()
-                self._hint_lbl.setVisible(not self.input.hasFocus())
+        if obj == self.input and event.type() in (
+            event.Type.FocusIn,
+            event.Type.FocusOut,
+        ):
+            self.update()
+            self._hint_lbl.setVisible(not self.input.hasFocus())
         return super().eventFilter(obj, event)
 
     def _update_icon(self):
@@ -216,7 +218,11 @@ class SearchBar(QWidget):
         focused = self.input.hasFocus()
         r = self.rect().adjusted(1, 3, -1, -3)
 
-        bg = QColor(T["bg_overlay"] if focused else (T["bg_elevated"] if T.dark else T["bg_control"]))
+        bg = QColor(
+            T["bg_overlay"]
+            if focused
+            else (T["bg_elevated"] if T.dark else T["bg_control"])
+        )
         border = QColor(T["accent"] if focused else T["border_light"])
 
         if focused:
