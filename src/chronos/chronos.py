@@ -7,7 +7,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEngineSettings
@@ -96,14 +96,36 @@ def init_db():
 
 
 # ---------------------------------------------------------------------------
+# Async AI Worker
+# ---------------------------------------------------------------------------
+class _AIWorker(QThread):
+    finished = pyqtSignal(str, str)  # (request_id, response_text)
+
+    def __init__(self, bridge, messages, request_id):
+        super().__init__()
+        self.bridge = bridge
+        self.messages = messages
+        self.request_id = request_id
+
+    def run(self):
+        try:
+            result = self.bridge._send_chat(self.messages)
+        except Exception as e:
+            result = f"Error: {e}"
+        self.finished.emit(self.request_id, result)
+
+
+# ---------------------------------------------------------------------------
 # Backend Bridge
 # ---------------------------------------------------------------------------
 class ChronosBridge(QObject):
     data_updated = pyqtSignal()
+    ai_response = pyqtSignal(str, str)  # (request_id, response_text) → JS
 
     def __init__(self):
         super().__init__()
         self.settings = self._load_settings()
+        self._ai_worker = None
 
     def _load_settings(self):
         if os.path.exists(CHRONOS_SETTINGS):
@@ -121,6 +143,7 @@ class ChronosBridge(QObject):
             "ai_model": "",
             "ai_cert_path": "",
             "ai_provider": "openai_compat",
+            "ai_system_prompt": "",
             "world_clocks": [],
         }
 
@@ -373,67 +396,87 @@ class ChronosBridge(QObject):
         except Exception:
             return json.dumps([])
 
-    @pyqtSlot(str, result=str)
-    def get_ai_recap(self, prompt):
+    def _send_chat(self, messages):
+        """Send a list of {role, content} messages to the AI. Returns text.
+
+        Called from worker threads — must not touch Qt widgets.
+        """
         provider = self.settings.get("ai_provider", "openai_compat")
         base_url = self.settings.get("ai_url", "").rstrip("/")
         api_key = self.settings.get("ai_key", "")
         model = self.settings.get("ai_model", "")
+
         if not api_key and provider in ("google_gemini", "anthropic"):
             return "Error: No API key configured in settings."
+
+        if provider == "google_gemini":
+            host = base_url or "https://generativelanguage.googleapis.com"
+            model_id = model or "gemini-2.0-flash"
+            url = f"{host}/v1beta/models/{model_id}:generateContent?key={api_key}"
+            contents = []
+            for m in messages:
+                role = "model" if m["role"] == "assistant" else "user"
+                contents.append({"role": role, "parts": [{"text": m["content"]}]})
+            payload = {"contents": contents}
+            data = self._fetch_json(
+                url, {"Content-Type": "application/json"}, payload
+            )
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+
+        elif provider == "anthropic":
+            host = base_url or "https://api.anthropic.com"
+            url = f"{host}/v1/messages"
+            # Anthropic expects system as a top-level param, not in messages
+            sys_msgs = [m["content"] for m in messages if m["role"] == "system"]
+            chat_msgs = [m for m in messages if m["role"] != "system"]
+            payload = {
+                "model": model or "claude-sonnet-4-6",
+                "max_tokens": 1024,
+                "messages": chat_msgs,
+            }
+            if sys_msgs:
+                payload["system"] = "\n\n".join(sys_msgs)
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            }
+            data = self._fetch_json(url, headers, payload)
+            return data["content"][0]["text"]
+
+        else:
+            # openai_compat
+            if not base_url:
+                return "Error: No AI API URL configured in settings."
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "temperature": 0.7,
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }
+            last_err = None
+            for path in ("/v1/chat/completions", "/api/chat/completions"):
+                try:
+                    data = self._fetch_json(f"{base_url}{path}", headers, payload)
+                    if "choices" in data:
+                        return data["choices"][0]["message"]["content"]
+                    if "message" in data:
+                        return data["message"]["content"]
+                    return json.dumps(data)
+                except Exception as e:
+                    last_err = e
+                    continue
+            return f"Error: {last_err}"
+
+    @pyqtSlot(str, result=str)
+    def get_ai_recap(self, prompt):
+        """Synchronous single-prompt AI call (kept for non-chat uses)."""
         try:
-            if provider == "google_gemini":
-                host = base_url or "https://generativelanguage.googleapis.com"
-                model_id = model or "gemini-2.0-flash"
-                url = f"{host}/v1beta/models/{model_id}:generateContent?key={api_key}"
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                data = self._fetch_json(url, {"Content-Type": "application/json"}, payload)
-                return (
-                    data["candidates"][0]["content"]["parts"][0]["text"]
-                )
-            elif provider == "anthropic":
-                host = base_url or "https://api.anthropic.com"
-                url = f"{host}/v1/messages"
-                payload = {
-                    "model": model or "claude-sonnet-4-6",
-                    "max_tokens": 1024,
-                    "messages": [{"role": "user", "content": prompt}],
-                }
-                headers = {
-                    "Content-Type": "application/json",
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                }
-                data = self._fetch_json(url, headers, payload)
-                return data["content"][0]["text"]
-            else:
-                # openai_compat
-                if not base_url:
-                    return "Error: No AI API URL configured in settings."
-                # Try /v1/chat/completions first (OpenAI standard), then /api/chat/completions (OpenWebUI)
-                payload = {
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                    "temperature": 0.7,
-                }
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                }
-                last_err = None
-                for path in ("/v1/chat/completions", "/api/chat/completions"):
-                    try:
-                        data = self._fetch_json(f"{base_url}{path}", headers, payload)
-                        if "choices" in data:
-                            return data["choices"][0]["message"]["content"]
-                        if "message" in data:
-                            return data["message"]["content"]
-                        return json.dumps(data)
-                    except Exception as e:
-                        last_err = e
-                        continue
-                return f"Error: {last_err}"
+            return self._send_chat([{"role": "user", "content": prompt}])
         except FileNotFoundError as e:
             return f"Error: {e}"
         except urllib.error.URLError as e:
@@ -442,6 +485,85 @@ class ChronosBridge(QObject):
             return f"Error parsing response: {e}"
         except Exception as e:
             return f"Error: {e}"
+
+    @pyqtSlot(str, str)
+    def send_ai_chat(self, messages_json, request_id):
+        """Async AI chat — runs in a QThread, emits ai_response when done."""
+        messages = json.loads(messages_json)
+        # Prepend system prompt if configured
+        sys_prompt = self.settings.get("ai_system_prompt", "").strip()
+        if sys_prompt and not any(m["role"] == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": sys_prompt})
+        worker = _AIWorker(self, messages, request_id)
+        worker.finished.connect(self._on_ai_done)
+        # prevent GC
+        self._ai_worker = worker
+        worker.start()
+
+    def _on_ai_done(self, request_id, text):
+        self.ai_response.emit(request_id, text)
+
+    @pyqtSlot(result=str)
+    def get_task_context(self):
+        """Return a compact summary of active tasks for AI context."""
+        with sqlite3.connect(CHRONOS_DB) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT content, priority, status, due_date, notes, tags "
+                "FROM tasks WHERE status='Pending' ORDER BY priority DESC LIMIT 20"
+            )
+            pending = cursor.fetchall()
+        lines = ["## Active Tasks"]
+        for c, pri, _s, due, notes, tags in pending:
+            extra = []
+            if due:
+                extra.append(f"due:{due}")
+            if tags:
+                extra.append(f"#{tags}")
+            suffix = f" ({', '.join(extra)})" if extra else ""
+            lines.append(f"- [{pri}] {c}{suffix}")
+            if notes:
+                lines.append(f"  Notes: {notes}")
+        return "\n".join(lines)
+
+    @pyqtSlot(int, result=str)
+    def get_task_detail(self, task_id):
+        """Return detailed info about a single task for AI chat."""
+        with sqlite3.connect(CHRONOS_DB) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT content, priority, status, due_date, notes, tags, "
+                "timestamp, completed_at, time_spent "
+                "FROM tasks WHERE id=?",
+                (task_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return ""
+            c, pri, status, due, notes, tags, ts, done, spent = row
+            # Also get subtasks
+            cursor.execute(
+                "SELECT content, status, priority FROM tasks WHERE parent_id=?",
+                (task_id,),
+            )
+            subs = cursor.fetchall()
+        lines = [f"## Task: {c}"]
+        lines.append(f"- Priority: {pri}")
+        lines.append(f"- Status: {status}")
+        if due:
+            lines.append(f"- Due: {due}")
+        if tags:
+            lines.append(f"- Tags: {tags}")
+        if notes:
+            lines.append(f"- Notes: {notes}")
+        if spent:
+            lines.append(f"- Time spent: {spent}s")
+        if subs:
+            lines.append("\n### Subtasks")
+            for sc, ss, sp in subs:
+                check = "[x]" if ss == "Completed" else "[ ]"
+                lines.append(f"- {check} [{sp}] {sc}")
+        return "\n".join(lines)
 
     # --- Timeline Scanner ---
     @pyqtSlot(str, result=str)

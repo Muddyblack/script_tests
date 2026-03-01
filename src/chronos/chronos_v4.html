@@ -15,133 +15,733 @@
     <script src="qwebchannel.js"></script>
 
     <style>
-        :root { --grain-opacity: 0; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow: hidden; }
+        :root {
+            --grain-opacity: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
             font-family: 'Instrument Sans', system-ui, sans-serif;
-            background: var(--bg-base); color: var(--text-primary);
+            background: var(--bg-base);
+            color: var(--text-primary);
             transition: background 0.4s, color 0.4s;
             position: relative;
         }
+
         body::before {
-            content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
             opacity: var(--grain-opacity);
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
             background-size: 256px;
         }
+
         body::after {
-            content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(14,173,207,0.04) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(68,255,177,0.03) 0%, transparent 60%);
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(14, 173, 207, 0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(68, 255, 177, 0.03) 0%, transparent 60%);
         }
-        #root { position: relative; z-index: 1; }
 
-        ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 8px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--border-focus); }
+        #root {
+            position: relative;
+            z-index: 1;
+        }
 
-        input, textarea, select { outline: none; font-family: inherit; }
+        ::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-light);
+            border-radius: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-focus);
+        }
+
+        input,
+        textarea,
+        select {
+            outline: none;
+            font-family: inherit;
+        }
+
         input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-        select option { background: var(--bg-base); color: var(--text-primary); }
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+        }
 
-        .card { background: var(--bg-base); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); }
-        .card-inset { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        .kbd { display: inline-flex; align-items: center; padding: 1px 5px; background: var(--bg-overlay); border: 1px solid var(--border-light); border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-disabled); }
-        .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
-        .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600; background: var(--bg-overlay); color: var(--text-secondary); border: 1px solid var(--border); }
-        .section-label { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-disabled); }
+        select option {
+            background: var(--bg-base);
+            color: var(--text-primary);
+        }
 
-        .nav-item { cursor: pointer; border-radius: 10px; transition: background 0.15s, color 0.15s; }
-        .nav-item:hover:not(.active) { background: var(--bg-elevated); }
-        .nav-item.active { background: var(--bg-overlay); }
+        .card {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow-sm);
+        }
 
-        .input-field { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 11px 15px; font-size: 14px; color: var(--text-primary); transition: border-color 0.15s, box-shadow 0.15s; }
-        .input-field:focus { border-color: var(--warning); box-shadow: 0 0 0 3px var(--warning-dim); }
-        .input-field::placeholder { color: var(--text-disabled); }
+        .card-inset {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
 
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 18px; border-radius: 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; cursor: pointer; transition: all 0.15s; border: none; text-transform: uppercase; }
-        .btn:active { transform: scale(0.96); }
-        .btn-gold { background: var(--warning); color: #111009; }
-        .btn-ghost { background: var(--bg-overlay); color: var(--text-secondary); border: 1px solid var(--border); }
-        .btn-danger { background: var(--danger-dim); color: var(--danger); }
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
 
-        .check { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--border-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; transition: all 0.2s; }
-        .check:hover:not(.done) { border-color: var(--warning); box-shadow: 0 0 0 3px var(--warning-dim); }
-        .check.done { background: var(--success); border-color: var(--success); }
+        .kbd {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 5px;
+            background: var(--bg-overlay);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text-disabled);
+        }
 
-        .focus-mode .can-dim { opacity: 0.07; filter: blur(3px); pointer-events: none; transition: all 0.5s; }
-        .focus-mode .sidebar-wrap { opacity: 0.05; pointer-events: none; transition: all 0.5s; }
-        .focus-mode .no-dim { opacity: 1 !important; filter: none !important; pointer-events: auto !important; }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 7px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
 
-        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        .shimmer { background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-overlay) 50%, var(--bg-elevated) 75%); background-size: 200%; animation: shimmer 1.5s infinite; }
-        @keyframes float-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .float-in { animation: float-in 0.25s ease-out forwards; }
-        @keyframes check-pop { 0% { transform: scale(1); } 40% { transform: scale(1.3) rotate(-5deg); } 70% { transform: scale(0.9) rotate(3deg); } 100% { transform: scale(1) rotate(0deg); } }
-        .check-pop { animation: check-pop 0.4s cubic-bezier(0.36,0.07,0.19,0.97); }
-        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        .slide-up { animation: slide-up 0.3s ease-out; }
-        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(232,112,112,0.5); } 70% { box-shadow: 0 0 0 8px rgba(232,112,112,0); } 100% { box-shadow: 0 0 0 0 rgba(232,112,112,0); } }
-        .pulse-ring { animation: pulse-ring 2s infinite; }
-        @keyframes breathe { 0%,100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
-        .breathe { animation: breathe 3s ease-in-out infinite; }
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 100px;
+            font-size: 10px;
+            font-weight: 600;
+            background: var(--bg-overlay);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
 
-        .progress-track { height: 3px; background: var(--bg-overlay); border-radius: 99px; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 99px; transition: width 0.7s cubic-bezier(0.4,0,0.2,1); }
+        .section-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--text-disabled);
+        }
 
-        .task-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: 12px; transition: background 0.15s; position: relative; }
-        .task-row:hover { background: var(--bg-elevated); }
-        .task-row.focused { background: var(--bg-base); box-shadow: var(--shadow-md); }
-        .task-row.done { opacity: 0.4; }
-        .task-row.done .task-title { text-decoration: line-through; color: var(--text-disabled); }
-        .task-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
-        .task-row:hover .task-actions { opacity: 1; }
+        .nav-item {
+            cursor: pointer;
+            border-radius: 10px;
+            transition: background 0.15s, color 0.15s;
+        }
 
-        .action-btn { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; transition: all 0.12s; color: var(--text-disabled); background: transparent; border: none; }
-        .action-btn:hover { background: var(--bg-overlay); color: var(--text-primary); }
+        .nav-item:hover:not(.active) {
+            background: var(--bg-elevated);
+        }
 
-        .ctx-menu { position: fixed; z-index: 9999; background: var(--bg-base); border: 1px solid var(--border-light); border-radius: 13px; box-shadow: var(--shadow-lg); padding: 5px; min-width: 210px; }
-        .ctx-item { padding: 8px 11px; border-radius: 8px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.1s; color: var(--text-primary); font-weight: 500; }
-        .ctx-item:hover { background: var(--bg-overlay); }
-        .ctx-item.danger { color: var(--danger); }
-        .ctx-sep { height: 1px; background: var(--border); margin: 4px 2px; }
-        .ctx-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-disabled); padding: 6px 11px 3px; }
+        .nav-item.active {
+            background: var(--bg-overlay);
+        }
 
-        .priority-stripe { position: absolute; left: 0; top: 8px; bottom: 8px; width: 2.5px; border-radius: 99px; }
-        .scroll-fade { position: relative; }
-        .scroll-fade::after { content: ''; position: sticky; bottom: 0; left: 0; right: 0; height: 64px; display: block; pointer-events: none; background: linear-gradient(to top, var(--bg-base) 0%, transparent 100%); }
-        .sidebar-wrap { width: 220px; flex-shrink: 0; }
+        .input-field {
+            width: 100%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 11px 15px;
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
 
-        .modal-overlay { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.65); backdrop-filter: blur(12px); }
-        .quick-bar { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 200; width: 580px; max-width: calc(100vw - 48px); }
-        .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
-        .settings-row:last-child { border-bottom: none; }
-        .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 64px 24px; gap: 10px; opacity: 0.35; }
+        .input-field:focus {
+            border-color: var(--warning);
+            box-shadow: 0 0 0 3px var(--warning-dim);
+        }
 
-        .md p { margin-bottom: 8px; font-size: 13px; line-height: 1.75; color: var(--text-secondary); }
-        .md h1, .md h2, .md h3 { font-weight: 700; margin-bottom: 6px; color: var(--text-primary); }
-        .md h1 { font-size: 16px; } .md h2 { font-size: 14px; } .md h3 { font-size: 13px; }
-        .md ul, .md ol { margin-left: 18px; margin-bottom: 8px; font-size: 13px; color: var(--text-secondary); }
-        .md li { margin-bottom: 3px; }
-        .md code { font-family: 'JetBrains Mono', monospace; background: var(--bg-overlay); padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--warning); }
-        .md strong { color: var(--text-primary); font-weight: 700; }
-        .md blockquote { border-left: 2px solid var(--border-focus); padding-left: 12px; color: var(--text-disabled); font-style: italic; margin-bottom: 8px; }
-        .md a { color: var(--accent-pressed); text-decoration: none; }
-        .md a:hover { text-decoration: underline; }
+        .input-field::placeholder {
+            color: var(--text-disabled);
+        }
 
-        .obsidian-link { display: inline-flex; align-items: center; gap: 5px; color: var(--accent-hover); font-size: 11px; font-weight: 600; text-decoration: none; padding: 3px 8px; border-radius: 6px; background: var(--accent-hover-dim); border: 1px solid rgba(184,160,232,0.18); transition: all 0.15s; }
-        .obsidian-link:hover { background: rgba(184,160,232,0.16); }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 18px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: none;
+            text-transform: uppercase;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-gold {
+            background: var(--warning);
+            color: #111009;
+        }
+
+        .btn-ghost {
+            background: var(--bg-overlay);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-danger {
+            background: var(--danger-dim);
+            color: var(--danger);
+        }
+
+        .check {
+            width: 18px;
+            height: 18px;
+            border-radius: 6px;
+            border: 1.5px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .check:hover:not(.done) {
+            border-color: var(--warning);
+            box-shadow: 0 0 0 3px var(--warning-dim);
+        }
+
+        .check.done {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .focus-mode .can-dim {
+            opacity: 0.07;
+            filter: blur(3px);
+            pointer-events: none;
+            transition: all 0.5s;
+        }
+
+        .focus-mode .sidebar-wrap {
+            opacity: 0.05;
+            pointer-events: none;
+            transition: all 0.5s;
+        }
+
+        .focus-mode .no-dim {
+            opacity: 1 !important;
+            filter: none !important;
+            pointer-events: auto !important;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0;
+            }
+
+            100% {
+                background-position: 200% 0;
+            }
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-overlay) 50%, var(--bg-elevated) 75%);
+            background-size: 200%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes float-in {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .float-in {
+            animation: float-in 0.25s ease-out forwards;
+        }
+
+        @keyframes check-pop {
+            0% {
+                transform: scale(1);
+            }
+
+            40% {
+                transform: scale(1.3) rotate(-5deg);
+            }
+
+            70% {
+                transform: scale(0.9) rotate(3deg);
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        .check-pop {
+            animation: check-pop 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+        }
+
+        @keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide-up {
+            animation: slide-up 0.3s ease-out;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                box-shadow: 0 0 0 0 rgba(232, 112, 112, 0.5);
+            }
+
+            70% {
+                box-shadow: 0 0 0 8px rgba(232, 112, 112, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(232, 112, 112, 0);
+            }
+        }
+
+        .pulse-ring {
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes breathe {
+
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.15);
+            }
+        }
+
+        .breathe {
+            animation: breathe 3s ease-in-out infinite;
+        }
+
+        .progress-track {
+            height: 3px;
+            background: var(--bg-overlay);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .task-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            transition: background 0.15s;
+            position: relative;
+        }
+
+        .task-row:hover {
+            background: var(--bg-elevated);
+        }
+
+        .task-row.focused {
+            background: var(--bg-base);
+            box-shadow: var(--shadow-md);
+        }
+
+        .task-row.done {
+            opacity: 0.4;
+        }
+
+        .task-row.done .task-title {
+            text-decoration: line-through;
+            color: var(--text-disabled);
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .task-row:hover .task-actions {
+            opacity: 1;
+        }
+
+        .action-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.12s;
+            color: var(--text-disabled);
+            background: transparent;
+            border: none;
+        }
+
+        .action-btn:hover {
+            background: var(--bg-overlay);
+            color: var(--text-primary);
+        }
+
+        .ctx-menu {
+            position: fixed;
+            z-index: 9999;
+            background: var(--bg-base);
+            border: 1px solid var(--border-light);
+            border-radius: 13px;
+            box-shadow: var(--shadow-lg);
+            padding: 5px;
+            min-width: 210px;
+        }
+
+        .ctx-item {
+            padding: 8px 11px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.1s;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .ctx-item:hover {
+            background: var(--bg-overlay);
+        }
+
+        .ctx-item.danger {
+            color: var(--danger);
+        }
+
+        .ctx-sep {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 2px;
+        }
+
+        .ctx-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-disabled);
+            padding: 6px 11px 3px;
+        }
+
+        .priority-stripe {
+            position: absolute;
+            left: 0;
+            top: 8px;
+            bottom: 8px;
+            width: 2.5px;
+            border-radius: 99px;
+        }
+
+        .scroll-fade {
+            position: relative;
+        }
+
+        .scroll-fade::after {
+            content: '';
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            display: block;
+            pointer-events: none;
+            background: linear-gradient(to top, var(--bg-base) 0%, transparent 100%);
+        }
+
+        .sidebar-wrap {
+            width: 220px;
+            flex-shrink: 0;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(12px);
+        }
+
+        .quick-bar {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            width: 580px;
+            max-width: calc(100vw - 48px);
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .settings-row:last-child {
+            border-bottom: none;
+        }
+
+        .empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 64px 24px;
+            gap: 10px;
+            opacity: 0.35;
+        }
+
+        .md p {
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.75;
+            color: var(--text-secondary);
+        }
+
+        .md h1,
+        .md h2,
+        .md h3 {
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        .md h1 {
+            font-size: 16px;
+        }
+
+        .md h2 {
+            font-size: 14px;
+        }
+
+        .md h3 {
+            font-size: 13px;
+        }
+
+        .md ul,
+        .md ol {
+            margin-left: 18px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .md li {
+            margin-bottom: 3px;
+        }
+
+        .md code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-overlay);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--warning);
+        }
+
+        .md strong {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        .md blockquote {
+            border-left: 2px solid var(--border-focus);
+            padding-left: 12px;
+            color: var(--text-disabled);
+            font-style: italic;
+            margin-bottom: 8px;
+        }
+
+        .md a {
+            color: var(--accent-pressed);
+            text-decoration: none;
+        }
+
+        .md a:hover {
+            text-decoration: underline;
+        }
+
+        .obsidian-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--accent-hover);
+            font-size: 11px;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--accent-hover-dim);
+            border: 1px solid rgba(184, 160, 232, 0.18);
+            transition: all 0.15s;
+        }
+
+        .obsidian-link:hover {
+            background: rgba(184, 160, 232, 0.16);
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            z-index: 9999;
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            background: var(--bg-elevated);
+            color: var(--success);
+            border: 1px solid var(--success);
+            box-shadow: var(--shadow-lg);
+            animation: toast-in 0.3s ease forwards;
+            pointer-events: none;
+        }
+        .toast.error { color: var(--danger); border-color: var(--danger); }
+        @keyframes toast-in { to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+        /* AI Chat panel */
+        .chat-msg {
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 12px;
+            line-height: 1.65;
+            max-width: 88%;
+            word-wrap: break-word;
+        }
+        .chat-msg.user {
+            background: var(--accent-subtle);
+            color: var(--text-primary);
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-msg.ai {
+            background: var(--bg-overlay);
+            color: var(--text-secondary);
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-msg.ai .md p { font-size: 12px; }
+        .chat-msg.ai .md li { font-size: 12px; }
+        .chat-msg.ai .md h1, .chat-msg.ai .md h2, .chat-msg.ai .md h3 { font-size: 12px; }
 
         /* World clock timeline */
-        .tz-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
-        .tz-bar { position: relative; height: 28px; border-radius: 6px; overflow: hidden; flex: 1; }
-        .tz-bar-bg { position: absolute; inset: 0; background: var(--bg-overlay); border-radius: 6px; }
-        .tz-bar-work { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
-        .tz-bar-now { position: absolute; top: -2px; bottom: -2px; width: 2px; border-radius: 1px; z-index: 2; }
+        .tz-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+        }
+
+        .tz-bar {
+            position: relative;
+            height: 28px;
+            border-radius: 6px;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        .tz-bar-bg {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-overlay);
+            border-radius: 6px;
+        }
+
+        .tz-bar-work {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            border-radius: 4px;
+        }
+
+        .tz-bar-now {
+            position: absolute;
+            top: -2px;
+            bottom: -2px;
+            width: 2px;
+            border-radius: 1px;
+            z-index: 2;
+        }
     </style>
 
     <script type="text/babel">
@@ -181,11 +781,11 @@
             Low: { color: 'var(--text-disabled)', bg: 'var(--bg-overlay)', label: 'Low', stripe: 'var(--border-light)' },
         };
         const groupByDate = (tasks) => {
-            const now = new Date(); now.setHours(0,0,0,0);
+            const now = new Date(); now.setHours(0, 0, 0, 0);
             const G = { Overdue: [], Today: [], Tomorrow: [], 'This Week': [], Later: [], 'No Date': [] };
             tasks.forEach(t => {
                 if (!t.due_date) { G['No Date'].push(t); return; }
-                const d = new Date(t.due_date); d.setHours(0,0,0,0);
+                const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
                 const diff = Math.floor((d - now) / 86400000);
                 if (diff < 0) G.Overdue.push(t);
                 else if (diff === 0) G.Today.push(t);
@@ -204,6 +804,7 @@
                 .replace(/`([^`]+)`/g, '<code>$1</code>')
                 .replace(/^### (.+)/gm, '<h3>$1</h3>').replace(/^## (.+)/gm, '<h2>$1</h2>').replace(/^# (.+)/gm, '<h1>$1</h1>')
                 .replace(/^> (.+)/gm, '<blockquote>$1</blockquote>')
+                .replace(/^\d+\.\s+(.+)/gm, '<li>$1</li>')
                 .replace(/^[-*] (.+)/gm, '<li>$1</li>')
                 .replace(/\n\n/g, '</p><p>')
                 .replace(/(obsidian:\/\/open\?[^\s<]+)/g, '<a href="$1" class="obsidian-link">Obsidian</a>');
@@ -219,14 +820,36 @@
             return 'Good night';
         };
 
+        // ─── TOAST ───────────────────────────────────────────────────────────────
+        const showToast = (msg, isError) => {
+            const el = document.createElement('div');
+            el.className = 'toast' + (isError ? ' error' : '');
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 2000);
+        };
+
         // ─── BRIDGE ──────────────────────────────────────────────────────────────
+        const aiListeners = new Set();
         const useBridge = () => {
             const [ready, setReady] = useState(false);
             const [data, setData] = useState({ tasks: [], settings: {} });
             const ref = useRef(null);
             const refresh = useCallback(async () => { if (!ref.current) return; try { const r = await ref.current.get_all_data(); if (r) setData(JSON.parse(r)); } catch (e) { } }, []);
             useEffect(() => {
-                const setup = () => { if (typeof QWebChannel !== 'undefined' && typeof qt !== 'undefined') { new QWebChannel(qt.webChannelTransport, (c) => { ref.current = c.objects.pyBridge; setReady(true); refresh(); ref.current.data_updated.connect(refresh); }); } else setTimeout(setup, 200); };
+                const setup = () => {
+                    if (typeof QWebChannel !== 'undefined' && typeof qt !== 'undefined') {
+                        new QWebChannel(qt.webChannelTransport, (c) => {
+                            ref.current = c.objects.pyBridge;
+                            setReady(true);
+                            refresh();
+                            ref.current.data_updated.connect(refresh);
+                            ref.current.ai_response.connect((reqId, text) => {
+                                aiListeners.forEach(fn => fn(reqId, text));
+                            });
+                        });
+                    } else setTimeout(setup, 200);
+                };
                 setup();
             }, []);
             const call = useCallback(async (m, ...a) => { if (ready && ref.current) { try { return await ref.current[m](...a); } catch (e) { } } }, [ready]);
@@ -251,10 +874,10 @@
         // ─── DAILY FOCUS WIDGET ──────────────────────────────────────────────────
         const DailyFocusWidget = ({ tasks, safeCall }) => {
             const today = useMemo(() => {
-                const now = new Date(); now.setHours(0,0,0,0);
+                const now = new Date(); now.setHours(0, 0, 0, 0);
                 return tasks.filter(t => {
                     if (!t.due_date || t.status === 'Completed') return false;
-                    const d = new Date(t.due_date); d.setHours(0,0,0,0);
+                    const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
                     return d.getTime() <= now.getTime();
                 });
             }, [tasks]);
@@ -311,7 +934,7 @@
             return (
                 <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
                     <motion.div initial={{ y: 20, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 10, opacity: 0, scale: 0.98 }}
-                        transition={{ duration: 0.22, ease: [0.4,0,0.2,1] }}
+                        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                         className="card w-full max-w-lg p-6 space-y-5" style={{ boxShadow: 'var(--shadow-lg)' }}>
                         <div className="flex items-center justify-between">
                             <h3 className="font-bold text-base" style={{ color: 'var(--text-primary)' }}>{parentId ? 'Add Subtask' : 'New Task'}</h3>
@@ -522,7 +1145,7 @@
                         { icon: isDone ? '↩' : '✓', label: isDone ? 'Mark pending' : 'Mark complete', action: () => safeCall('update_task_status', task.id, isDone ? 'Pending' : 'Completed') },
                         'sep',
                         { icon: task.is_achievement ? '★' : '☆', label: task.is_achievement ? 'Remove achievement' : 'Mark as achievement', action: () => safeCall('update_task_achievement', task.id, !task.is_achievement) },
-                        { icon: '⌖', label: isFocused ? 'Exit focus' : 'Focus mode', action: onFocus || (() => {}) },
+                        { icon: '⌖', label: isFocused ? 'Exit focus' : 'Focus mode', action: onFocus || (() => { }) },
                         { icon: '⏱', label: timerOn ? 'Stop timer' : 'Start timer', action: () => setTimerOn(!timerOn) },
                         'sep',
                         { icon: '✕', label: 'Delete task', danger: true, action: () => safeCall('delete_task', task.id) },
@@ -547,8 +1170,8 @@
                 if (dM) {
                     const dv = dM[1].toLowerCase();
                     const d = new Date();
-                    if (dv === 'today') due = d.toISOString().slice(0,10);
-                    else if (dv === 'tomorrow') { d.setDate(d.getDate() + 1); due = d.toISOString().slice(0,10); }
+                    if (dv === 'today') due = d.toISOString().slice(0, 10);
+                    else if (dv === 'tomorrow') { d.setDate(d.getDate() + 1); due = d.toISOString().slice(0, 10); }
                     else if (dv.match(/\d{4}-\d{2}-\d{2}/)) due = dv;
                     content = content.replace(dM[0], '');
                 }
@@ -629,7 +1252,7 @@
                     });
                     t = t.filter(task => matchIds.has(task.id));
                 }
-                const now = new Date(); now.setHours(0,0,0,0);
+                const now = new Date(); now.setHours(0, 0, 0, 0);
                 if (filter === 'today') t = t.filter(t => t.parent_id !== 0 || (t.due_date && new Date(t.due_date) <= now));
                 if (filter === 'high') t = t.filter(t => t.parent_id !== 0 || t.priority === 'High');
                 if (filter === 'nodate') t = t.filter(t => t.parent_id !== 0 || !t.due_date);
@@ -807,7 +1430,7 @@
                     <AnimatePresence>
                         {showSidebar && (
                             <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 280, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
-                                transition={{ duration: 0.25, ease: [0.4,0,0.2,1] }}
+                                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                                 className="flex-shrink-0 overflow-y-auto overflow-x-hidden"
                                 style={{ borderLeft: '1px solid var(--border)', background: 'var(--bg-base)' }}>
                                 <div className="p-4 space-y-4 w-[280px]">
@@ -1010,7 +1633,21 @@
 
             const scan = async () => { setLoading(true); const r = await safeCall('generate_summary', `-${timeVal} ${timeUnit}`); setRecap(r || 'No data in this range.'); setLoading(false); };
             const scanPreset = async (p) => { setLoading(true); const r = await safeCall('generate_summary', p); setRecap(r || 'No data in this range.'); setLoading(false); };
-            const aiSynth = async () => { setAiLoading(true); const r = await safeCall('get_ai_recap', `Analyze this productivity data and give concise actionable insights:\n${recap}`); setRecap(r || recap); setAiLoading(false); };
+            const aiSynth = () => {
+                setAiLoading(true);
+                const reqId = 'insights_' + Date.now();
+                const handler = (id, text) => {
+                    if (id !== reqId) return;
+                    aiListeners.delete(handler);
+                    setRecap(text || recap);
+                    setAiLoading(false);
+                };
+                aiListeners.add(handler);
+                safeCall('send_ai_chat', JSON.stringify([
+                    { role: 'system', content: 'You are a productivity coach. Analyze the data and give concise, actionable insights. Use markdown formatting with clear numbered points. Focus on patterns, bottlenecks, and concrete next steps.' },
+                    { role: 'user', content: `Analyze this productivity data:\n${recap}` }
+                ]), reqId);
+            };
 
             const totalTime = useMemo(() => data.tasks.reduce((s, t) => s + (t.time_spent || 0), 0), [data.tasks]);
 
@@ -1105,7 +1742,7 @@
 
         // ─── WORLD CLOCK PAGE ────────────────────────────────────────────────────
         const ALL_TIMEZONES = (() => {
-            try { return Intl.supportedValuesOf('timeZone'); } catch(e) { return ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Australia/Sydney']; }
+            try { return Intl.supportedValuesOf('timeZone'); } catch (e) { return ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Australia/Sydney']; }
         })();
 
         const WorldClockPage = ({ data, safeCall }) => {
@@ -1140,10 +1777,12 @@
 
             const getTimeInTz = (tz) => {
                 try {
-                    return { time: now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
-                             date: now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' }),
-                             hour: parseInt(now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', hour12: false })) };
-                } catch(e) { return { time: '--:--', date: '', hour: 0 }; }
+                    return {
+                        time: now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
+                        date: now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' }),
+                        hour: parseInt(now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', hour12: false }))
+                    };
+                } catch (e) { return { time: '--:--', date: '', hour: 0 }; }
             };
 
             const localHour = now.getHours();
@@ -1199,8 +1838,8 @@
 
                             {/* Hour markers */}
                             <div className="flex items-center" style={{ paddingLeft: 120 }}>
-                                {[0,3,6,9,12,15,18,21].map(h => (
-                                    <div key={h} className="mono text-xs" style={{ color: 'var(--text-disabled)', position: 'absolute', left: `calc(120px + ${(h/24)*100}% * (100% - 120px) / 100%)` }}>
+                                {[0, 3, 6, 9, 12, 15, 18, 21].map(h => (
+                                    <div key={h} className="mono text-xs" style={{ color: 'var(--text-disabled)', position: 'absolute', left: `calc(120px + ${(h / 24) * 100}% * (100% - 120px) / 100%)` }}>
                                     </div>
                                 ))}
                                 <div className="flex-1 flex justify-between mono" style={{ fontSize: 9, color: 'var(--text-disabled)' }}>
@@ -1210,13 +1849,13 @@
 
                             {clocks.map((clock, idx) => {
                                 const info = getTimeInTz(clock.tz);
-                                const workStart = 9/24 * 100;
-                                const workEnd = 17/24 * 100;
+                                const workStart = 9 / 24 * 100;
+                                const workEnd = 17 / 24 * 100;
                                 // Calculate offset: difference in current hour between this tz and local
                                 const hourDiff = info.hour - localHour;
                                 const adjustedWorkStart = ((9 - hourDiff + 24) % 24) / 24 * 100;
                                 const adjustedWorkEnd = ((17 - hourDiff + 24) % 24) / 24 * 100;
-                                const nowPct = (info.hour + now.getMinutes()/60) / 24 * 100;
+                                const nowPct = (info.hour + now.getMinutes() / 60) / 24 * 100;
 
                                 return (
                                     <div key={idx} className="tz-row group">
@@ -1269,7 +1908,7 @@
 
             const fetchModels = async () => {
                 const r = await safeCall('get_ai_models');
-                if (r) { try { setModels(JSON.parse(r)); } catch(e) {} }
+                if (r) { try { setModels(JSON.parse(r)); } catch (e) { } }
             };
 
             const doExport = async () => {
@@ -1278,7 +1917,7 @@
                     const blob = new Blob([d], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
-                    a.href = url; a.download = `chronos_export_${new Date().toISOString().slice(0,10)}.json`; a.click();
+                    a.href = url; a.download = `chronos_export_${new Date().toISOString().slice(0, 10)}.json`; a.click();
                     URL.revokeObjectURL(url);
                 }
             };
@@ -1359,6 +1998,12 @@
                                     {s.ai_cert_path && <button onClick={() => setS({ ...s, ai_cert_path: '' })} className="btn btn-ghost" style={{ fontSize: 11 }}>Clear</button>}
                                 </div>
                             </div>}
+                            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>System Prompt</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-disabled)' }}>Custom instructions for the AI (used in chat &amp; insights)</div></div>
+                                <textarea value={s.ai_system_prompt || ''} onChange={e => setS({ ...s, ai_system_prompt: e.target.value })}
+                                    className="input-field text-sm resize-none" rows={3} style={{ width: '100%' }}
+                                    placeholder="e.g. You are a strict productivity coach. Be brief and direct..." />
+                            </div>
                         </div>
 
                         {/* Data */}
@@ -1374,7 +2019,10 @@
                             </div>
                         </div>
 
-                        <button onClick={() => safeCall('save_settings', JSON.stringify(s))}
+                        <button onClick={async () => {
+                                await safeCall('save_settings', JSON.stringify(s));
+                                showToast('Settings saved' + (s.ai_model ? ` — model: ${s.ai_model}` : ''));
+                            }}
                             className="btn btn-gold w-full" style={{ fontSize: 13, padding: '12px' }}>
                             Save Settings
                         </button>
@@ -1415,12 +2063,122 @@
             );
         };
 
+        // ─── AI CHAT PAGE ────────────────────────────────────────────────────────
+        const AIChatPage = ({ data, safeCall }) => {
+            const [messages, setMessages] = useState([]);
+            const [input, setInput] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [contextLoaded, setContextLoaded] = useState(false);
+            const scrollRef = useRef(null);
+            const inputRef = useRef(null);
+
+            // Auto-scroll to bottom
+            useEffect(() => {
+                if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }, [messages]);
+
+            // Listen for AI responses
+            useEffect(() => {
+                const handler = (reqId, text) => {
+                    if (!reqId.startsWith('chat_')) return;
+                    setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+                    setLoading(false);
+                };
+                aiListeners.add(handler);
+                return () => aiListeners.delete(handler);
+            }, []);
+
+            const loadContext = async () => {
+                const ctx = await safeCall('get_task_context');
+                if (ctx) {
+                    setMessages(prev => [...prev,
+                        { role: 'system', content: `Here is the user's current task data from Chronos:\n\n${ctx}\n\nUse this context to help the user. Be concise and actionable.` },
+                        { role: 'assistant', content: 'I\'ve loaded your current tasks. How can I help? I can:\n\n- **Break down a task** — tell me which one\n- **Help you plan** — describe what you\'re working on\n- **Give tips** — ask about any challenge\n- **Prioritize** — help you decide what to tackle first' }
+                    ]);
+                    setContextLoaded(true);
+                }
+            };
+
+            const send = () => {
+                const text = input.trim();
+                if (!text || loading) return;
+                const updated = [...messages, { role: 'user', content: text }];
+                setMessages(updated);
+                setInput('');
+                setLoading(true);
+                const reqId = 'chat_' + Date.now();
+                // Build the messages to send (filter out system messages for display but include for API)
+                const apiMsgs = updated.map(m => ({ role: m.role, content: m.content }));
+                safeCall('send_ai_chat', JSON.stringify(apiMsgs), reqId);
+            };
+
+            const clearChat = () => { setMessages([]); setContextLoaded(false); };
+
+            return (
+                <div className="flex-1 flex flex-col overflow-hidden" style={{ maxWidth: '100%' }}>
+                    <header className="flex items-center justify-between px-7 pt-7 pb-4">
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>AI Chat</h2>
+                            <p className="text-sm mt-0.5" style={{ color: 'var(--text-disabled)' }}>
+                                {data.settings?.ai_model ? `Model: ${data.settings.ai_model}` : 'Configure AI in Settings'}
+                            </p>
+                        </div>
+                        <div className="flex gap-2">
+                            {!contextLoaded && <button onClick={loadContext} className="btn" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: 11, padding: '6px 14px' }}>Load Tasks</button>}
+                            {messages.length > 0 && <button onClick={clearChat} className="btn btn-ghost" style={{ fontSize: 11 }}>Clear</button>}
+                        </div>
+                    </header>
+
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto px-7 pb-4 space-y-3">
+                        {messages.length === 0 && (
+                            <div className="empty" style={{ opacity: 0.5 }}>
+                                <div style={{ fontSize: 36 }}>◇</div>
+                                <div className="text-sm font-bold" style={{ color: 'var(--text-disabled)' }}>Start a conversation</div>
+                                <div className="text-xs" style={{ color: 'var(--text-disabled)', maxWidth: 260, textAlign: 'center', lineHeight: 1.5 }}>
+                                    Click "Load Tasks" to give AI your task context, or just start typing.
+                                </div>
+                            </div>
+                        )}
+                        {messages.filter(m => m.role !== 'system').map((m, i) => (
+                            <div key={i} className={`chat-msg ${m.role === 'user' ? 'user' : 'ai'}`}>
+                                {m.role === 'assistant' ? <div className="md" dangerouslySetInnerHTML={{ __html: md(m.content) }} /> : m.content}
+                            </div>
+                        ))}
+                        {loading && (
+                            <div className="chat-msg ai">
+                                <div className="shimmer rounded" style={{ height: 14, width: 120 }} />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="px-7 pb-6 pt-2">
+                        <div className="flex gap-2 items-end">
+                            <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                                className="input-field flex-1 text-sm resize-none"
+                                style={{ minHeight: 42, maxHeight: 120, padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 14 }}
+                                placeholder="Ask about a task, get planning help..." rows={1} />
+                            <button onClick={send} disabled={loading || !input.trim()}
+                                className="btn" style={{
+                                    background: input.trim() ? 'var(--accent)' : 'var(--bg-overlay)',
+                                    color: input.trim() ? 'var(--text-on-accent)' : 'var(--text-disabled)',
+                                    padding: '10px 18px', borderRadius: 14, fontSize: 12, fontWeight: 700, transition: 'all 0.15s'
+                                }}>
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // ─── SIDEBAR ─────────────────────────────────────────────────────────────
         const Sidebar = ({ tab, setTab, badges = {} }) => {
             const NAV = [
                 { id: 'missions', l: 'Tasks', ic: '☐', c: 'var(--warning)' },
                 { id: 'log', l: 'Logbook', ic: '◈', c: 'var(--accent-pressed)' },
-                { id: 'analytics', l: 'Intelligence', ic: '◉', c: 'var(--accent-hover)' },
+                { id: 'analytics', l: 'Recap', ic: '◉', c: 'var(--accent-hover)' },
+                { id: 'aichat', l: 'AI Chat', ic: '◇', c: 'var(--accent)' },
                 { id: 'worldclock', l: 'World Clock', ic: '◷', c: 'var(--accent-pressed)' },
                 { id: 'settings', l: 'Settings', ic: '◎', c: 'var(--text-disabled)' },
             ];
@@ -1464,6 +2222,9 @@
             const [focusId, setFocusId] = useState(null);
             const [timers, setTimers] = useState({});
             const [showShortcuts, setShowShortcuts] = useState(false);
+            const [aiTaskId, setAiTaskId] = useState(null);
+
+            const askAI = (taskId) => { setAiTaskId(taskId); setTab('aichat'); };
 
             useEffect(() => { document.body.classList.toggle('focus-mode', !!focusId); }, [focusId]);
             useEffect(() => {
@@ -1515,6 +2276,11 @@
                             {tab === 'analytics' && (
                                 <motion.div key="a" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                                     <AnalyticsPage data={data} safeCall={safeCall} />
+                                </motion.div>
+                            )}
+                            {tab === 'aichat' && (
+                                <motion.div key="ai" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    <AIChatPage data={data} safeCall={safeCall} />
                                 </motion.div>
                             )}
                             {tab === 'worldclock' && (
