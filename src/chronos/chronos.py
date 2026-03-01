@@ -10,7 +10,7 @@ import urllib.request
 from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEngineSettings
+from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow
 
@@ -799,7 +799,18 @@ class ChronosApp(QMainWindow):
             pass
         self.resize(1200, 900)
 
+        # Persistent profile so localStorage survives app restarts
+        profile_path = os.path.join(CHRONOS_DIR, "webprofile")
+        os.makedirs(profile_path, exist_ok=True)
+        self._profile = QWebEngineProfile("chronos", self)
+        self._profile.setPersistentStoragePath(profile_path)
+        self._profile.setPersistentCookiesPolicy(
+            QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies
+        )
+        from PyQt6.QtWebEngineCore import QWebEnginePage
+        page = QWebEnginePage(self._profile, self)
         self.view = QWebEngineView()
+        self.view.setPage(page)
         attrs = self.view.settings()
         dev_attr = getattr(
             QWebEngineSettings.WebAttribute, "DeveloperExtrasEnabled", None

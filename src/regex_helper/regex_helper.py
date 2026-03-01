@@ -5,7 +5,7 @@ import sqlite3
 import sys
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PyQt6.QtGui import QColor, QFont, QIcon, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.common.config import ASSETS_DIR
 from src.common.theme import ThemeManager
 
 # --- CONFIGURATION & DATABASE ---
@@ -219,6 +220,9 @@ class RegexSandbox(QMainWindow):
         init_db()
         seed_defaults()
         self.setWindowTitle("Regex Sandbox & Library | Offline Pattern Tester")
+        icon_path = os.path.join(ASSETS_DIR, "regex_sandbox.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         self.resize(1100, 750)
 
         self.base_font = QFont("Segoe UI", 10)
