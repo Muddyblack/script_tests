@@ -82,6 +82,9 @@ class ClipboardWatcher(QObject):
                 return
             self._last_hash = h
             self._save(text, h)
+        except KeyboardInterrupt:
+            # Allow Ctrl+C shutdown without noisy traceback from timer callback.
+            return
         except Exception:
             pass
 

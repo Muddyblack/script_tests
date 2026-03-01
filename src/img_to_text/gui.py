@@ -50,7 +50,7 @@ from PyQt6.QtWidgets import (
 
 from src.common.theme import ThemeManager
 
-from .extractor import ocr_qimage
+from .extractor import ocr_qimage_with_meta
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Theme / Colors
@@ -133,15 +133,17 @@ _OCR_SETTINGS_FILE = Path(os.getenv("APPDATA", Path.home())) / "nexus_ocr_settin
 _ocr_langs: list[str] = ["en", "de"]
 _ocr_code_mode: bool = False
 _ocr_symbol_priority: bool = False
+_ocr_code_fix: bool = False
 
 
 def _load_ocr_settings() -> None:
-    global _ocr_langs, _ocr_code_mode, _ocr_symbol_priority
+    global _ocr_langs, _ocr_code_mode, _ocr_symbol_priority, _ocr_code_fix
     try:
         data = json.loads(_OCR_SETTINGS_FILE.read_text(encoding="utf-8"))
         _ocr_langs = data.get("languages", ["en", "de"])
         _ocr_code_mode = bool(data.get("code_mode", False))
         _ocr_symbol_priority = bool(data.get("symbol_priority", False))
+        _ocr_code_fix = bool(data.get("code_fix", False))
     except Exception:
         pass
 
@@ -154,6 +156,7 @@ def _save_ocr_settings() -> None:
                     "languages": _ocr_langs,
                     "code_mode": _ocr_code_mode,
                     "symbol_priority": _ocr_symbol_priority,
+                    "code_fix": _ocr_code_fix,
                 }
             ),
             encoding="utf-8",
@@ -360,6 +363,13 @@ class _LangBar(QWidget):
         self._sym_btn.clicked.connect(self._toggle_symbol_priority)
         lay.addWidget(self._sym_btn)
 
+        self._fix_btn = QPushButton("Fix", self)
+        self._fix_btn.setFixedSize(36, 24)
+        self._fix_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._fix_btn.setToolTip("Apply code-focused OCR fixes (l/1, O/0, symbol spacing)")
+        self._fix_btn.clicked.connect(self._toggle_code_fix)
+        lay.addWidget(self._fix_btn)
+
         self.adjustSize()
         self._refresh_styles()
 
@@ -389,6 +399,12 @@ class _LangBar(QWidget):
     def _toggle_symbol_priority(self) -> None:
         global _ocr_symbol_priority
         _ocr_symbol_priority = not _ocr_symbol_priority
+        self._refresh_styles()
+        _save_ocr_settings()
+
+    def _toggle_code_fix(self) -> None:
+        global _ocr_code_fix
+        _ocr_code_fix = not _ocr_code_fix
         self._refresh_styles()
         _save_ocr_settings()
 
@@ -425,6 +441,15 @@ class _LangBar(QWidget):
                 fg="#ffffff" if sa else "rgba(255,255,255,0.50)",
                 bd="#f59e0b" if sa else "rgba(255,255,255,0.10)",
                 hv="#fbbf24" if sa else "rgba(255,255,255,0.15)",
+            )
+        )
+        fa = _ocr_code_fix
+        self._fix_btn.setStyleSheet(
+            _LANG_BTN_BASE.format(
+                bg="#10b981" if fa else "rgba(255,255,255,0.08)",
+                fg="#ffffff" if fa else "rgba(255,255,255,0.50)",
+                bd="#10b981" if fa else "rgba(255,255,255,0.10)",
+                hv="#34d399" if fa else "rgba(255,255,255,0.15)",
             )
         )
 
@@ -464,10 +489,11 @@ class SnipOverlay(QWidget):
     _TOOLBAR = [
         ("📋", "1: OCR", "text", "#6366f1"),
         ("🧾", "2: OCR Raw", "text_raw", "#7c3aed"),
-        ("🖼️", "3: Image", "image", "#8b5cf6"),
-        ("💾", "4: Save", "save", "#3b82f6"),
-        ("📤", "5: Share", "share", "#06b6d4"),
-        ("❌", "6: Cancel", "cancel", "#ef4444"),
+        ("🧷", "3: OCR 1L", "text_one_line", "#7c3aed"),
+        ("🖼️", "4: Image", "image", "#8b5cf6"),
+        ("💾", "5: Save", "save", "#3b82f6"),
+        ("📤", "6: Share", "share", "#06b6d4"),
+        ("❌", "7: Cancel", "cancel", "#ef4444"),
     ]
 
     def __init__(self, desktop: QPixmap, virtual_geo: QRect):
@@ -750,7 +776,7 @@ class SnipOverlay(QWidget):
         p.fillRect(0, 0, self.width(), 36, QColor(0, 0, 0, 180))
         p.setPen(QColor(255, 255, 255, 220))
         p.setFont(QFont("Segoe UI", 9))
-        p.drawText(20, 23, "Drag to select region  ·  1-6: Shortcuts  ·  Esc: Cancel")
+        p.drawText(20, 23, "Drag to select region  ·  1-7: Shortcuts  ·  Esc: Cancel")
 
     def crop_selection(self, rect: QRect) -> QImage:
         return self._desktop.copy(rect).toImage()
@@ -875,7 +901,8 @@ class OcrPreviewTooltip(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         self._lbl = QLabel("⏳  Recognizing text…")
         self._lbl.setWordWrap(True)
-        self._lbl.setMaximumWidth(340)
+        # Keep a stable width to avoid aggressive reflow/geometry warnings on Win32.
+        self._lbl.setFixedWidth(320)
         self._lbl.setStyleSheet(
             "color: rgba(255,255,255,0.9); font: 9pt 'Consolas', 'Courier New';"
         )
@@ -884,23 +911,39 @@ class OcrPreviewTooltip(QWidget):
             f"OcrPreviewTooltip {{ background: rgba(12,12,22,0.95); border-radius: 8px; border: 1px solid {C.ACCENT.name()}; }}"
         )
         screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
-        sg = screen.geometry()
+        self._screen_geo = screen.geometry()
         self.adjustSize()
-        x = min(anchor.x(), sg.right() - self.width() - 8)
-        y = max(anchor.y() - self.height() - 10, sg.top() + 8)
+        x = min(anchor.x(), self._screen_geo.right() - self.width() - 8)
+        x = max(self._screen_geo.left() + 8, x)
+        y = max(anchor.y() - self.height() - 10, self._screen_geo.top() + 8)
+        y = min(self._screen_geo.bottom() - self.height() - 8, y)
         self.move(x, y)
 
-    def set_text(self, text: str) -> None:
+    def set_text(self, text: str, confidence: float | None = None) -> None:
         preview = text[:120].replace("\n", " ↵ ")
         if len(text) > 120:
             preview += " …"
-        self._lbl.setText(preview or "⚠️  No text detected")
+        if confidence is None:
+            badge = ""
+        elif confidence >= 0.85:
+            badge = f"[HIGH {int(confidence * 100)}%] "
+        elif confidence >= 0.70:
+            badge = f"[MED {int(confidence * 100)}%] "
+        else:
+            badge = f"[LOW {int(confidence * 100)}%] "
+        self._lbl.setText((badge + preview) if preview else "⚠️  No text detected")
         self.adjustSize()
+        # Re-clamp in case updated text changed tooltip height.
+        x = min(self.x(), self._screen_geo.right() - self.width() - 8)
+        x = max(self._screen_geo.left() + 8, x)
+        y = min(self.y(), self._screen_geo.bottom() - self.height() - 8)
+        y = max(self._screen_geo.top() + 8, y)
+        self.move(x, y)
         QTimer.singleShot(4000, self.close)
 
 
 class _Signals(QObject):
-    success = pyqtSignal(str)
+    success = pyqtSignal(object)
     error = pyqtSignal(str)
 
 
@@ -911,22 +954,28 @@ class _OcrWorker(QRunnable):
         raw_output: bool = False,
         languages: list[str] | None = None,
         symbol_priority: bool = False,
+        one_line_output: bool = False,
+        code_fix: bool = False,
     ):
         super().__init__()
         self.image = image
         self.raw_output = raw_output
         self.languages = languages or list(_ocr_langs)
         self.symbol_priority = symbol_priority
+        self.one_line_output = one_line_output
+        self.code_fix = code_fix
         self.signals = _Signals()
 
     def run(self):
         try:
             self.signals.success.emit(
-                ocr_qimage(
+                ocr_qimage_with_meta(
                     self.image,
                     languages=self.languages,
                     raw_output=self.raw_output,
                     symbol_priority=self.symbol_priority,
+                    one_line_output=self.one_line_output,
+                    code_fix=self.code_fix,
                 )
             )
         except Exception as e:
@@ -974,12 +1023,16 @@ def start_snip_to_text(
             return
 
         raw_mode = action == "text_raw"
+        one_line_mode = action == "text_one_line"
         # Snapshot language selection at the moment of capture
         langs = ["en"] if _ocr_code_mode else list(_ocr_langs)
         symbol_mode = _ocr_symbol_priority
+        code_fix_mode = _ocr_code_fix
         mode_label = "(code)" if _ocr_code_mode else f"({'+'.join(langs)})"
         if symbol_mode:
             mode_label = f"{mode_label}+sym"
+        if code_fix_mode:
+            mode_label = f"{mode_label}+fix"
         _status(f"⏳ Recognising {mode_label}…")
         tip = OcrPreviewTooltip(anchor)
         tip.show()
@@ -988,17 +1041,29 @@ def start_snip_to_text(
             raw_output=raw_mode,
             languages=langs,
             symbol_priority=symbol_mode,
+            one_line_output=one_line_mode,
+            code_fix=code_fix_mode,
         )
 
-        def _ok(text: str):
-            tip.set_text(text)
+        def _ok(payload: object):
+            if isinstance(payload, dict):
+                text = str(payload.get("text", ""))
+                confidence = float(payload.get("confidence", 0.0))
+            else:
+                text = str(payload or "")
+                confidence = 0.0
+
+            tip.set_text(text, confidence)
             if not text:
                 _status("⚠️ No text")
                 Toast.show_toast("No text", "⚠️", C.ERROR)
                 return
             _recent_snips.appendleft(_SnipRecord(datetime.now(), text, image))
             _copy_text(text)
-            _status("✓ Text copied")
+            if confidence > 0:
+                _status(f"✓ Text copied ({int(confidence * 100)}%)")
+            else:
+                _status("✓ Text copied")
             Toast.show_toast("Text copied", "📋")
 
         w.signals.success.connect(_ok)

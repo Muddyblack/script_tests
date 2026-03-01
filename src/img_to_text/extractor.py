@@ -6,6 +6,7 @@ import atexit
 import contextlib
 import json
 import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -109,6 +110,51 @@ def _results_to_raw_text(results: list[dict]) -> str:
     )
 
 
+def _average_confidence(results: list[dict]) -> float:
+    if not results:
+        return 0.0
+    total = 0.0
+    count = 0
+    for item in results:
+        try:
+            total += float(item.get("confidence", 0.0))
+            count += 1
+        except (TypeError, ValueError):
+            continue
+    if count == 0:
+        return 0.0
+    return total / count
+
+
+def _apply_code_confusion_fixes(text: str) -> str:
+    if not text:
+        return text
+
+    fixed = text
+    fixed = re.sub(r"\s*([/:._\\=@-])\s*", r"\1", fixed)
+    fixed = re.sub(r"(?<=\d)[lI](?=\d)", "1", fixed)
+    fixed = re.sub(r"(?<=\d)O(?=\d)", "0", fixed)
+    fixed = fixed.replace("—", "-").replace("–", "-")
+    fixed = re.sub(r"[ \t]+", " ", fixed)
+    fixed = re.sub(r" *\n *", "\n", fixed)
+    return fixed.strip()
+
+
+def _format_results_text(
+    results: list[dict],
+    *,
+    raw_output: bool,
+    one_line_output: bool,
+    code_fix: bool,
+) -> str:
+    text = _results_to_raw_text(results) if raw_output else _results_to_text(results)
+    if code_fix:
+        text = _apply_code_confusion_fixes(text)
+    if one_line_output:
+        text = " ".join(part for part in text.replace("\n", " ").split(" ") if part)
+    return text.strip()
+
+
 def _get_proc(languages: list[str]) -> subprocess.Popen:
     global _proc, _proc_languages
 
@@ -195,6 +241,8 @@ def ocr_qimage(
     languages: list[str] | None = None,
     *,
     raw_output: bool = False,
+    one_line_output: bool = False,
+    code_fix: bool = False,
     symbol_priority: bool = False,
 ) -> str:
     results = _run_ocr(
@@ -202,9 +250,37 @@ def ocr_qimage(
         languages or ["en", "de"],
         symbol_priority=symbol_priority,
     )
-    if raw_output:
-        return _results_to_raw_text(results)
-    return _results_to_text(results)
+    return _format_results_text(
+        results,
+        raw_output=raw_output,
+        one_line_output=one_line_output,
+        code_fix=code_fix,
+    )
+
+
+def ocr_qimage_with_meta(
+    image: QImage,
+    languages: list[str] | None = None,
+    *,
+    raw_output: bool = False,
+    one_line_output: bool = False,
+    code_fix: bool = False,
+    symbol_priority: bool = False,
+) -> dict[str, float | str]:
+    results = _run_ocr(
+        image,
+        languages or ["en", "de"],
+        symbol_priority=symbol_priority,
+    )
+    return {
+        "text": _format_results_text(
+            results,
+            raw_output=raw_output,
+            one_line_output=one_line_output,
+            code_fix=code_fix,
+        ),
+        "confidence": round(_average_confidence(results), 4),
+    }
 
 
 def ocr_qimage_detailed(
