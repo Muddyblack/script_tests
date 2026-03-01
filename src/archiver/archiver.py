@@ -1,17 +1,14 @@
-"""Nexus Archiver — zip / unzip / tar / 7z with a clean UI.
+"""Nexus Archiver — backend + standalone window.
 
-Supports:
-  - .zip  (Python built-in zipfile)
-  - .tar / .tar.gz / .tar.bz2 / .tar.xz  (Python built-in tarfile)
-  - .7z   (via 7z CLI if installed, auto-detected)
-  - .gz   (single-file gzip)
-
-Drag-drop or browse to compress / extract.
+Formats supported:
+  Python (always):  .zip  .tar  .tar.gz  .tar.bz2  .tar.xz  .gz
+  7-Zip (if found): .7z   .zip(pw)  .rar  .iso  .cab  .wim  .arj  .lzh  .xz  .zst
 """
 
 import gzip
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +34,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -59,18 +57,71 @@ from src.common.theme_template import TOOL_SHEET
 
 ICON_PATH = os.path.join(ASSETS_DIR, "nexus_icon.png")
 
+# All extensions we can at least extract
 ARCHIVE_EXTENSIONS = {
-    ".zip",
-    ".tar",
-    ".tar.gz",
-    ".tgz",
-    ".tar.bz2",
-    ".tbz2",
-    ".tar.xz",
-    ".txz",
-    ".gz",
-    ".7z",
+    ".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2",
+    ".tar.xz", ".txz", ".gz", ".7z",
+    ".rar", ".iso", ".cab", ".wim", ".arj", ".lzh", ".xz", ".zst",
 }
+
+# (can_extract_python, can_create_python, can_extract_7z, can_create_7z, supports_password_7z)
+# fmt: off
+FORMAT_CAPS: dict[str, tuple[bool, bool, bool, bool, bool]] = {
+    "zip":     (True,  True,  True,  True,  True ),
+    "7z":      (False, False, True,  True,  True ),
+    "tar":     (True,  True,  False, False, False),
+    "tar.gz":  (True,  True,  False, False, False),
+    "tar.bz2": (True,  True,  False, False, False),
+    "tar.xz":  (True,  True,  False, False, False),
+    "gz":      (True,  True,  False, False, False),
+    "rar":     (False, False, True,  False, False),
+    "iso":     (False, False, True,  False, False),
+    "cab":     (False, False, True,  False, False),
+    "wim":     (False, False, True,  False, False),
+    "arj":     (False, False, True,  False, False),
+    "lzh":     (False, False, True,  False, False),
+    "xz":      (False, False, True,  False, False),
+    "zst":     (False, False, True,  False, False),
+}
+# fmt: on
+
+# Formats that can be created (shown in the format combo)
+CREATABLE_FORMATS = ["zip", "7z", "tar.gz", "tar.bz2", "tar.xz", "tar", "gz"]
+
+# Compression level → 7z -mx flag
+MX_MAP = {
+    "Store":   "-mx0",
+    "Fastest": "-mx1",
+    "Fast":    "-mx3",
+    "Normal":  "-mx5",
+    "Maximum": "-mx7",
+    "Ultra":   "-mx9",
+}
+
+# Dictionary size → 7z -md flag
+MD_MAP = {
+    "256 KB": "-md256k",
+    "1 MB":   "-md1m",
+    "4 MB":   "-md4m",
+    "16 MB":  "-md16m",
+    "32 MB":  "-md32m",
+    "64 MB":  "-md64m",
+    "128 MB": "-md128m",
+    "256 MB": "-md256m",
+    "512 MB": "-md512m",
+    "1 GB":   "-md1024m",
+}
+
+# Thread count → 7z -mmt flag
+MT_MAP = {
+    "Auto": "-mmt",
+    "1":    "-mmt1",
+    "2":    "-mmt2",
+    "4":    "-mmt4",
+    "8":    "-mmt8",
+    "16":   "-mmt16",
+}
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Backend
@@ -78,7 +129,7 @@ ARCHIVE_EXTENSIONS = {
 
 
 def find_7z() -> str | None:
-    """Try to locate 7z binary on the system (Windows and Linux)."""
+    """Try to locate 7z binary on the system."""
     candidates = [
         r"C:\Program Files\7-Zip\7z.exe",
         r"C:\Program Files (x86)\7-Zip\7z.exe",
@@ -97,75 +148,130 @@ _7Z_PATH = find_7z()
 
 
 def is_archive(path: str) -> bool:
-    """Check if a path looks like an archive we can handle."""
+    """Return True if path is a file format we can handle as an archive."""
     low = path.lower()
     return any(low.endswith(ext) for ext in ARCHIVE_EXTENSIONS)
 
 
-def _detect_format(path: str) -> str:
+def detect_format(path: str) -> str:
+    """Detect archive format string from filename."""
     low = path.lower()
-    if low.endswith(".7z"):
-        return "7z"
-    if low.endswith((".tar.gz", ".tgz")):
-        return "tar.gz"
-    if low.endswith((".tar.bz2", ".tbz2")):
-        return "tar.bz2"
-    if low.endswith((".tar.xz", ".txz")):
-        return "tar.xz"
-    if low.endswith(".tar"):
-        return "tar"
-    if low.endswith(".gz"):
-        return "gz"
-    if low.endswith(".zip"):
-        return "zip"
+    for ext in (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz"):
+        if low.endswith(ext):
+            # normalise to canonical form
+            return {"tgz": "tar.gz", "tbz2": "tar.bz2", "txz": "tar.xz"}.get(
+                ext.lstrip("."), ext.lstrip(".")
+            )
+    for ext in (".7z", ".rar", ".iso", ".cab", ".wim", ".arj", ".lzh", ".zst", ".xz",
+                ".zip", ".tar", ".gz"):
+        if low.endswith(ext):
+            return ext.lstrip(".")
     return "zip"
 
 
+def get_capabilities(path: str) -> dict:
+    """Return a dict describing what can be done with this file.
+
+    Keys: can_extract, can_create, needs_7z, supports_password, fmt
+    """
+    fmt = detect_format(path)
+    caps = FORMAT_CAPS.get(fmt, (False, False, False, False, False))
+    ep, cp, e7, c7, pw = caps
+    has_7z = _7Z_PATH is not None
+    return {
+        "fmt": fmt,
+        "can_extract": ep or (e7 and has_7z),
+        "can_create": cp or (c7 and has_7z),
+        "needs_7z": not ep and e7,
+        "supports_password": pw and has_7z,
+        "has_7z": has_7z,
+    }
+
+
+def list_archive_contents(archive_path: str) -> list[str]:
+    """Return a list of member names inside an archive (best-effort)."""
+    fmt = detect_format(archive_path)
+    try:
+        if fmt == "zip":
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                return zf.namelist()
+        elif fmt.startswith("tar"):
+            mode_map = {"tar": "r:", "tar.gz": "r:gz", "tar.bz2": "r:bz2", "tar.xz": "r:xz"}
+            with tarfile.open(archive_path, mode_map.get(fmt, "r:*")) as tf:
+                return tf.getnames()
+        elif _7Z_PATH:
+            result = subprocess.run(
+                [_7Z_PATH, "l", "-slt", archive_path],
+                capture_output=True, text=True, timeout=15,
+            )
+            return re.findall(r"^Path = (.+)$", result.stdout, re.MULTILINE)[1:]
+    except Exception:
+        pass
+    return []
+
+
+def _run_7z_with_progress(cmd: list[str], on_progress) -> str:
+    """Run 7z command, parse `XX%` lines for progress. Returns stderr on failure."""
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    last_err = []
+    for line in proc.stdout:
+        last_err.append(line)
+        m = re.search(r"\b(\d{1,3})%", line)
+        if m and on_progress:
+            on_progress(int(m.group(1)), 100)
+    proc.wait()
+    if proc.returncode != 0:
+        return "".join(last_err[-10:]).strip() or "7z operation failed"
+    return ""
+
+
 def extract_archive(
-    archive_path: str, dest_dir: str, password: str = "", on_progress=None
+    archive_path: str,
+    dest_dir: str,
+    password: str = "",
+    on_progress=None,
 ) -> list[str]:
     """Extract an archive. Returns list of errors (empty = success)."""
     errors = []
-    fmt = _detect_format(archive_path)
+    fmt = detect_format(archive_path)
+    caps = get_capabilities(archive_path)
     try:
-        if fmt == "7z":
+        os.makedirs(dest_dir, exist_ok=True)
+        use_7z = (not FORMAT_CAPS.get(fmt, (False,))[0]) or (fmt == "7z")
+        if use_7z:
             if not _7Z_PATH:
-                return [
-                    "7-Zip is not installed. Please install it to extract .7z files."
-                ]
+                return [f"7-Zip not found — cannot extract .{fmt} files. Install 7-Zip."]
             cmd = [_7Z_PATH, "x", archive_path, f"-o{dest_dir}", "-y"]
             if password:
                 cmd.append(f"-p{password}")
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                errors.append(result.stderr or "7z extraction failed")
+            err = _run_7z_with_progress(cmd, on_progress)
+            if err:
+                errors.append(err)
         elif fmt.startswith("tar"):
-            mode = {
-                "tar": "r:",
-                "tar.gz": "r:gz",
-                "tar.bz2": "r:bz2",
-                "tar.xz": "r:xz",
-            }[fmt]
-            with tarfile.open(archive_path, mode) as tf:
+            mode_map = {"tar": "r:", "tar.gz": "r:gz", "tar.bz2": "r:bz2", "tar.xz": "r:xz"}
+            with tarfile.open(archive_path, mode_map.get(fmt, "r:*")) as tf:
                 members = tf.getmembers()
                 total = len(members)
                 for i, member in enumerate(members):
-                    tf.extract(member, dest_dir)
+                    tf.extract(member, dest_dir, filter="data")
                     if on_progress:
                         on_progress(i + 1, total)
         elif fmt == "gz":
-            # Single file gzip
             base = os.path.basename(archive_path)
             out_name = base[:-3] if base.endswith(".gz") else base + ".out"
             out_path = os.path.join(dest_dir, out_name)
             with gzip.open(archive_path, "rb") as fin, open(out_path, "wb") as fout:
                 shutil.copyfileobj(fin, fout)
-        else:  # zip
-            pwd_bytes = password.encode("utf-8") if password else None
+            if on_progress:
+                on_progress(1, 1)
+        else:  # zip (python)
+            pwd_bytes = password.encode() if password else None
             with zipfile.ZipFile(archive_path, "r") as zf:
                 members = zf.infolist()
                 total = len(members)
@@ -173,7 +279,7 @@ def extract_archive(
                     try:
                         zf.extract(member, dest_dir, pwd=pwd_bytes)
                     except RuntimeError as e:
-                        if "Bad password" in str(e) or "password required" in str(e):
+                        if "password" in str(e).lower():
                             errors.append("Invalid or missing password")
                             break
                         raise
@@ -189,6 +295,10 @@ def create_archive(
     output_path: str,
     fmt: str = "zip",
     password: str = "",
+    level: str = "Normal",
+    dict_size: str = "16 MB",
+    threads: str = "Auto",
+    solid: bool = True,
     on_progress=None,
 ) -> list[str]:
     """Create an archive from source files/dirs. Returns errors."""
@@ -197,57 +307,39 @@ def create_archive(
         use_7z = fmt == "7z" or (fmt == "zip" and password)
         if use_7z:
             if not _7Z_PATH:
-                return [
-                    "7-Zip is not installed. Install it to create .7z or encrypted .zip archives."
-                ]
+                return ["7-Zip not found — install it to create .7z or encrypted .zip."]
             cmd = [_7Z_PATH, "a", output_path] + sources
-
-            # Dictionary Size and Compression Level (only if fmt is 7z, not fallback zip)
+            cmd.append(MX_MAP.get(level, "-mx5"))
             if fmt == "7z":
-                level = getattr(sys, "_7z_level", "Normal")
-                dict_size = getattr(sys, "_7z_dict", "16 MB")
-
-                # Compression level mappings
-                mx_map = {
-                    "Store": "-mx0",
-                    "Fastest": "-mx1",
-                    "Fast": "-mx3",
-                    "Normal": "-mx5",
-                    "Maximum": "-mx7",
-                    "Ultra": "-mx9",
-                }
-                cmd.append(mx_map.get(level, "-mx5"))
-
-                # Dictionary size mappings (only if not Store)
                 if level != "Store":
-                    md_map = {
-                        "1 MB": "-md1m",
-                        "16 MB": "-md16m",
-                        "32 MB": "-md32m",
-                        "64 MB": "-md64m",
-                        "128 MB": "-md128m",
-                        "256 MB": "-md256m",
-                    }
-                    cmd.append(md_map.get(dict_size, "-md16m"))
-
+                    cmd.append(MD_MAP.get(dict_size, "-md16m"))
+                cmd.append(MT_MAP.get(threads, "-mmt"))
+                if solid:
+                    cmd.append("-ms=on")
+                else:
+                    cmd.append("-ms=off")
             if password:
                 cmd.append(f"-p{password}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                errors.append(result.stderr or "Archive creation failed")
+                if fmt == "7z":
+                    cmd.append("-mhe=on")  # encrypt headers too
+            err = _run_7z_with_progress(cmd, on_progress)
+            if err:
+                errors.append(err)
         elif fmt.startswith("tar"):
-            mode = {
-                "tar": "w:",
-                "tar.gz": "w:gz",
-                "tar.bz2": "w:bz2",
-                "tar.xz": "w:xz",
-            }[fmt]
-            with tarfile.open(output_path, mode) as tf:
+            mode_map = {"tar": "w:", "tar.gz": "w:gz", "tar.bz2": "w:bz2", "tar.xz": "w:xz"}
+            with tarfile.open(output_path, mode_map.get(fmt, "w:")) as tf:
                 for i, src in enumerate(sources):
                     tf.add(src, arcname=os.path.basename(src))
                     if on_progress:
                         on_progress(i + 1, len(sources))
-        else:  # zip
+        elif fmt == "gz":
+            if len(sources) != 1 or os.path.isdir(sources[0]):
+                return ["gzip only supports single files — use tar.gz for multiple files."]
+            with open(sources[0], "rb") as fin, gzip.open(output_path, "wb") as fout:
+                shutil.copyfileobj(fin, fout)
+            if on_progress:
+                on_progress(1, 1)
+        else:  # zip (python, no password)
             with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 all_files = []
                 for src in sources:
@@ -551,12 +643,29 @@ class ArchiverWindow(QMainWindow):
         dict_lbl.setObjectName("section_label")
         dict_box.addWidget(dict_lbl)
         self.combo_dict = QComboBox()
-        self.combo_dict.addItems(
-            ["1 MB", "16 MB", "32 MB", "64 MB", "128 MB", "256 MB"]
-        )
+        self.combo_dict.addItems(list(MD_MAP.keys()))
         self.combo_dict.setCurrentText("16 MB")
         dict_box.addWidget(self.combo_dict)
         opts_layout.addLayout(dict_box)
+
+        mt_box = QVBoxLayout()
+        mt_lbl = QLabel("THREADS")
+        mt_lbl.setObjectName("section_label")
+        mt_box.addWidget(mt_lbl)
+        self.combo_mt = QComboBox()
+        self.combo_mt.addItems(list(MT_MAP.keys()))
+        self.combo_mt.setCurrentText("Auto")
+        mt_box.addWidget(self.combo_mt)
+        opts_layout.addLayout(mt_box)
+
+        solid_box = QVBoxLayout()
+        solid_lbl = QLabel("SOLID")
+        solid_lbl.setObjectName("section_label")
+        solid_box.addWidget(solid_lbl)
+        self.chk_solid = QCheckBox("Solid archive")
+        self.chk_solid.setChecked(True)
+        solid_box.addWidget(self.chk_solid)
+        opts_layout.addLayout(solid_box)
 
         lay.addWidget(self.opts_frame)
 
@@ -564,10 +673,7 @@ class ArchiverWindow(QMainWindow):
         ops_row = QHBoxLayout()
         ops_row.setSpacing(8)
 
-        formats = ["zip"]
-        if _7Z_PATH:
-            formats.append("7z")
-        formats.extend(["tar.gz", "tar.bz2", "tar.xz", "tar"])
+        formats = [f for f in CREATABLE_FORMATS if f not in ("7z",) or _7Z_PATH]
 
         self.fmt_combo = QComboBox()
         for f in formats:
@@ -653,7 +759,8 @@ class ArchiverWindow(QMainWindow):
         for p in self.source_paths:
             is_arc = is_archive(p)
             is_dir = os.path.isdir(p)
-            icon = "📦" if is_arc else ("📁" if is_dir else "📄")
+            arc_fmt = detect_format(p).upper() if is_arc else ""
+            icon = f"📦 {arc_fmt}" if is_arc else ("📁" if is_dir else "📄")
 
             size_str = ""
             if os.path.isfile(p):
@@ -683,12 +790,32 @@ class ArchiverWindow(QMainWindow):
 
         count = len(self.source_paths)
         if has:
-            if all(is_archive(p) for p in self.source_paths):
+            all_arc = all(is_archive(p) for p in self.source_paths)
+            any_arc = any(is_archive(p) for p in self.source_paths)
+            # Auto-hint based on content
+            if all_arc:
+                # Check if all can be extracted (some may need 7z)
+                missing_7z = [
+                    p for p in self.source_paths
+                    if not get_capabilities(p)["can_extract"]
+                ]
+                if missing_7z:
+                    self._set_status(
+                        f"NEED 7-ZIP FOR {os.path.splitext(missing_7z[0])[1].upper()}",
+                        self.mgr["danger"]
+                    )
+                else:
+                    self._set_status(
+                        f"↓  {count} ARCHIVE(S) — HIT EXTRACT",
+                        self.mgr["success"]
+                    )
+            elif any_arc:
                 self._set_status(
-                    f"{count} ARCHIVE(S) READY TO EXTRACT", self.mgr["success"]
+                    f"{count} ITEM(S) MIXED — CHOOSE ACTION",
+                    self.mgr["text_secondary"]
                 )
             else:
-                self._set_status(f"{count} ITEM(S) QUEUED", self.mgr["text_secondary"])
+                self._set_status(f"↑  {count} FILE(S) — HIT COMPRESS", self.mgr["accent"])
         else:
             self._set_status("READY", self.mgr["text_secondary"])
 
@@ -701,22 +828,27 @@ class ArchiverWindow(QMainWindow):
             dst = os.path.dirname(self.source_paths[0])
 
         fmt = self.fmt_combo.currentText()
-        ext = "." + fmt if not fmt.startswith(".") else fmt
-        if fmt.startswith("tar"):
-            ext = ".tar." + fmt.split(".")[-1] if "." in fmt else ".tar"
-
+        # Build the proper extension
+        ext_map = {
+            "zip": ".zip", "7z": ".7z", "tar": ".tar",
+            "tar.gz": ".tar.gz", "tar.bz2": ".tar.bz2",
+            "tar.xz": ".tar.xz", "gz": ".gz",
+        }
+        ext = ext_map.get(fmt, f".{fmt}")
         name = os.path.splitext(os.path.basename(self.source_paths[0]))[0]
+        # strip any double extension like .tar
+        if name.endswith(".tar"):
+            name = name[:-4]
         if len(self.source_paths) > 1:
             name = "archive"
         out_path = os.path.join(dst, name + ext)
 
         self._set_busy(True)
         pwd = self.pwd_input.text().strip()
-
-        # Hacky way to pass options to the backend without changing signature drastically
-        if hasattr(self, "combo_lvl"):
-            sys._7z_level = self.combo_lvl.currentText()
-            sys._7z_dict = self.combo_dict.currentText()
+        level = self.combo_lvl.currentText() if hasattr(self, "combo_lvl") else "Normal"
+        dict_sz = self.combo_dict.currentText() if hasattr(self, "combo_dict") else "16 MB"
+        threads = self.combo_mt.currentText() if hasattr(self, "combo_mt") else "Auto"
+        solid = self.chk_solid.isChecked() if hasattr(self, "chk_solid") else True
 
         def worker():
             errors = create_archive(
@@ -724,6 +856,10 @@ class ArchiverWindow(QMainWindow):
                 out_path,
                 fmt,
                 password=pwd,
+                level=level,
+                dict_size=dict_sz,
+                threads=threads,
+                solid=solid,
                 on_progress=lambda done, total: self.progress_signal.emit(done, total),
             )
             self.done_signal.emit(errors, f"Created: {os.path.basename(out_path)}")

@@ -272,15 +272,15 @@ def launch_regex_helper(nexus) -> None:
 
 
 def launch_file_ops(nexus) -> None:
-    """Launch the Nexus File Ops tool."""
-    nexus.status_lbl.setText("📂 Launching File Ops...")
-    subprocess.Popen([sys.executable, "-m", "src.file_ops.file_ops"])
+    """Launch the Nexus File Tools on the FILE OPS tab."""
+    nexus.status_lbl.setText("📂 Launching File Tools...")
+    subprocess.Popen([sys.executable, "-m", "src.file_ops.file_ops", "--tab", "fileops"])
 
 
 def launch_archiver(nexus) -> None:
-    """Launch the Nexus Archiver tool."""
+    """Launch the Nexus File Tools on the ARCHIVER tab."""
     nexus.status_lbl.setText("📦 Launching Archiver...")
-    subprocess.Popen([sys.executable, "-m", "src.archiver.archiver"])
+    subprocess.Popen([sys.executable, "-m", "src.file_ops.file_ops", "--tab", "archiver"])
 
 
 def launch_color_picker(nexus) -> None:

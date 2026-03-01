@@ -52,7 +52,7 @@ from src.common.config import ASSETS_DIR
 from src.common.config import X_EXPLORER_DB as DB_PATH
 from src.common.search_engine import SearchEngine
 from src.common.theme import ThemeManager
-from src.file_ops.file_ops import FileOpsWindow
+from src.file_ops.file_ops import FileToolsWindow
 from src.xexplorer.database import init_db
 from src.xexplorer.delegates import DetailsDelegate
 from src.xexplorer.icons import Icons
@@ -1432,7 +1432,7 @@ class XExplorer(QMainWindow):
         elif action == copy_a:
             QApplication.clipboard().setText("\n".join(paths))
         elif action == ops_a:
-            self.file_ops_win = FileOpsWindow()
+            self.file_ops_win = FileToolsWindow()
             self.file_ops_win.source_paths = list(paths)
             self.file_ops_win._refresh_list()
             self.file_ops_win.show()

@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.archiver.archiver import ArchiverWindow, is_archive
+from src.archiver.archiver import is_archive
 from src.common.config import (
     APPDATA,
     APPS_CACHE_FILE,
@@ -62,7 +62,7 @@ from src.common.config import (
 # Import SearchEngine
 from src.common.search_engine import SearchEngine
 from src.common.theme import ThemeManager
-from src.file_ops.file_ops import FileOpsWindow
+from src.file_ops.file_ops import FileToolsWindow
 from src.img_to_text import start_snip_to_text
 
 from .system_commands import (
@@ -1179,9 +1179,10 @@ class NexusSearch(QWidget):
                 )
                 self.save_settings()
             elif action == file_ops_action:
-                self.file_ops_win = FileOpsWindow()
-                self.file_ops_win.source_paths = list(paths)
-                self.file_ops_win._refresh_list()
+                self.file_ops_win = FileToolsWindow()
+                self.file_ops_win.fo_sources = list(paths)
+                self.file_ops_win._fo_refresh()
+                self.file_ops_win._switch_tab("fileops")
                 self.file_ops_win.show()
             elif (
                 archive_action
@@ -1189,9 +1190,10 @@ class NexusSearch(QWidget):
                 or extract_action
                 and action == extract_action
             ):
-                self.archiver_win = ArchiverWindow()
-                self.archiver_win.source_paths = list(paths)
-                self.archiver_win._refresh_list()
+                self.archiver_win = FileToolsWindow()
+                self.archiver_win.arc_sources = list(paths)
+                self.archiver_win._arc_refresh()
+                self.archiver_win._switch_tab("archiver")
                 self.archiver_win.show()
 
     # ------------------------------------------------------------------
@@ -1688,7 +1690,7 @@ class NexusSearch(QWidget):
                 for f in os.listdir(spath):
                     if f.endswith(".py") and f not in [
                         "nexus_launcher.py",
-                        "nexus_search.py",
+                        "nexus_app.py",
                         "__init__.py",
                         "__main__.py",
                     ]:
