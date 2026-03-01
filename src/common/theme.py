@@ -5,6 +5,11 @@ Usage everywhere:
     mgr = ThemeManager()          # always returns the same singleton
     mgr.theme_changed.connect(...)
     mgr.apply_to_widget(widget, QSS_TEMPLATE)
+
+For WebEngine-based tools:
+    from src.common.theme import ThemeManager, WebThemeBridge
+    bridge = WebThemeBridge(mgr, web_view)
+    # That's it — theme is injected before first paint and kept in sync.
 """
 
 import json
@@ -190,6 +195,60 @@ class _ThemeManager(QObject):
             qss = qss.replace(f"var(--{key.replace('_', '-')})", value)
         widget.setStyleSheet(qss)
 
+    def build_web_css(self, alpha_variants: dict | None = None) -> str:
+        """Build a CSS variable string suitable for injection into a WebEngine page.
+
+        Converts all theme.json color keys to CSS vars (underscore → hyphen),
+        appends computed rgba alpha variants, and adds shadow/grain vars.
+
+        ``alpha_variants`` maps CSS-var-name → (theme_key, alpha_float).
+        If omitted the standard set used by Chronos is applied.
+        """
+        _DEFAULT_ALPHAS = {
+            "warning-dim": ("warning", 0.1),
+            "warning-glow": ("warning", 0.2),
+            "danger-dim": ("danger", 0.15),
+            "danger-glow": ("danger", 0.06),
+            "success-dim": ("success", 0.15),
+            "success-glow": ("success", 0.06),
+            "accent-dim": ("accent", 0.15),
+            "accent-glow-bg": ("accent", 0.06),
+            "accent-hover-dim": ("accent_hover", 0.15),
+            "accent-pressed-dim": ("accent_pressed", 0.15),
+        }
+        alphas = alpha_variants if alpha_variants is not None else _DEFAULT_ALPHAS
+        colors = self.theme_data.get("colors", {})
+        parts: list[str] = []
+
+        for name, color in colors.items():
+            parts.append(f"--{name.replace('_', '-')}: {color}")
+
+        for css_var, (theme_key, alpha) in alphas.items():
+            val = colors.get(theme_key, "")
+            rgb = _hex_to_rgb(val)
+            if rgb:
+                r, g, b = rgb
+                parts.append(f"--{css_var}: rgba({r},{g},{b},{alpha})")
+
+        if self.is_dark:
+            parts += [
+                "--shadow-sm: 0 2px 8px rgba(0,0,0,0.6)",
+                "--shadow-md: 0 8px 32px rgba(0,0,0,0.7)",
+                "--shadow-lg: 0 24px 64px rgba(0,0,0,0.8)",
+                "--grain-opacity: 0.025",
+            ]
+        else:
+            parts += [
+                "--shadow-sm: 0 2px 8px rgba(0,0,0,0.08)",
+                "--shadow-md: 0 8px 32px rgba(0,0,0,0.12)",
+                "--shadow-lg: 0 24px 64px rgba(0,0,0,0.18)",
+                "--grain-opacity: 0.01",
+            ]
+
+        scheme = "dark" if self.is_dark else "light"
+        parts.append(f"color-scheme: {scheme}")
+        return "; ".join(parts)
+
     def get_palette(self) -> QPalette:
         """Build a QPalette from the current theme colors."""
         pal = QApplication.palette()
@@ -209,3 +268,146 @@ class _ThemeManager(QObject):
         _set(R.Highlight, "accent")
         _set(R.HighlightedText, "text_on_accent")
         return pal
+
+
+# ---------------------------------------------------------------------------
+# Win32 titlebar theming
+# ---------------------------------------------------------------------------
+def apply_win32_titlebar(win_id: int, bg_hex: str, is_dark: bool) -> None:
+    """Set the Win32 titlebar color and dark-mode flag for a window.
+
+    Works on Windows 11 (build 22000+) for caption color;
+    dark-mode flag works from Windows 10 20H1 onward.
+    No-ops silently on non-Windows or if ctypes fails.
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        import ctypes.wintypes
+
+        dwmapi = ctypes.windll.dwmapi
+        hwnd = ctypes.wintypes.HWND(win_id)
+
+        # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        dark = ctypes.c_int(1 if is_dark else 0)
+        dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
+
+        # DWMWA_CAPTION_COLOR = 35  (Windows 11+)
+        rgb = _hex_to_rgb(bg_hex)
+        if rgb:
+            r, g, b = rgb
+            # COLORREF is 0x00BBGGRR
+            colorref = ctypes.c_int(r | (g << 8) | (b << 16))
+            dwmapi.DwmSetWindowAttribute(
+                hwnd, 35, ctypes.byref(colorref), ctypes.sizeof(colorref)
+            )
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Private helper (used by build_web_css)
+# ---------------------------------------------------------------------------
+def _hex_to_rgb(h: str) -> tuple[int, int, int] | None:
+    """Convert '#RRGGBB' string to (r, g, b). Returns None on failure."""
+    if not h or not isinstance(h, str):
+        return None
+    h = h.strip()
+    if h.startswith(("rgb", "rgba", "hsl")):
+        return None
+    h = h.lstrip("#")
+    if len(h) < 6:
+        return None
+    try:
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except ValueError:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# WebThemeBridge — plug-and-play theme injection for QWebEngineView tools
+# ---------------------------------------------------------------------------
+class WebThemeBridge:
+    """Connects a ThemeManager to a QWebEngineView.
+
+    On construction:
+    - Registers a QWebEngineScript that runs at DocumentCreation (zero flash).
+    - Connects theme_changed so live theme switches re-inject immediately.
+    - Calls view.loadFinished to re-apply after each page load.
+
+    Usage::
+
+        from src.common.theme import ThemeManager, WebThemeBridge
+        self.mgr = ThemeManager()
+        self.web = QWebEngineView()
+        self._theme_bridge = WebThemeBridge(self.mgr, self.web)
+        # done — theme is managed automatically
+    """
+
+    _SCRIPT_NAME = "nexus_web_theme"
+
+    def __init__(self, mgr: "_ThemeManager", view, alpha_variants: dict | None = None):
+        from PyQt6.QtGui import QColor
+        from PyQt6.QtWebEngineCore import QWebEngineScript
+
+        self._mgr = mgr
+        self._view = view
+        self._alpha_variants = alpha_variants
+        self._QColor = QColor
+        self._QWebEngineScript = QWebEngineScript
+
+        # Set Qt background color to match theme (prevents white flash)
+        view.page().setBackgroundColor(QColor(mgr["bg_base"]))
+
+        # Inject script before first paint
+        self._inject_script()
+
+        # Re-apply on every page load and on theme change
+        view.loadFinished.connect(lambda ok: self._on_load(ok))
+        mgr.theme_changed.connect(self._on_theme_changed)
+
+        # Apply titlebar after the event loop starts (winId needs a shown window)
+        from PyQt6.QtCore import QTimer
+
+        QTimer.singleShot(0, self._apply_titlebar)
+
+    def _build_js(self) -> str:
+        css = self._mgr.build_web_css(self._alpha_variants)
+        return f"document.documentElement.style.cssText = `{css}`;"
+
+    def _inject_script(self):
+        QWebEngineScript = self._QWebEngineScript
+        js = self._build_js()
+        script = QWebEngineScript()
+        script.setName(self._SCRIPT_NAME)
+        script.setSourceCode(js)
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        page_scripts = self._view.page().scripts()
+        # Remove any existing script with the same name (PyQt6 has no findScript)
+        for existing in page_scripts.toList():
+            if existing.name() == self._SCRIPT_NAME:
+                page_scripts.remove(existing)
+                break
+        page_scripts.insert(script)
+
+    def _on_load(self, ok: bool):
+        if not ok:
+            return
+        self._view.page().runJavaScript(self._build_js())
+        self._view.page().setBackgroundColor(self._QColor(self._mgr["bg_base"]))
+        self._apply_titlebar()
+
+    def _apply_titlebar(self):
+        win = self._view.window()
+        if win and win.isVisible():
+            apply_win32_titlebar(int(win.winId()), self._mgr["bg_base"], self._mgr.is_dark)
+
+    def _on_theme_changed(self):
+        self._inject_script()
+        self._view.page().runJavaScript(self._build_js())
+        self._view.page().setBackgroundColor(self._QColor(self._mgr["bg_base"]))
+        self._apply_titlebar()

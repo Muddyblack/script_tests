@@ -8,78 +8,16 @@ import urllib.error
 import urllib.request
 
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QIcon, QKeySequence, QShortcut
+from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow
 
 from src.common.config import CHRONOS_DB, CHRONOS_DIR, CHRONOS_SETTINGS
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WebThemeBridge
 
 os.makedirs(CHRONOS_DIR, exist_ok=True)
-
-# ---------------------------------------------------------------------------
-# Theme JSON → Web CSS variable mapping
-# Only uses keys universal across all themes in src/themes/
-# ---------------------------------------------------------------------------
-WEB_CSS_MAP = {
-    # Background layers
-    "bg": "bg_base",
-    "bg-1": "bg_base",
-    "bg-2": "bg_elevated",
-    "bg-3": "bg_overlay",
-    "bg-4": "bg_control",
-    "bg-selection": "bg_control_hov",
-    # Accent
-    "accent": "accent",
-    "accent-bright": "accent_hover",
-    "accent-primary": "accent",
-    # Semantic hues mapped from theme semantics
-    "gold": "warning",
-    "gold-bright": "warning",
-    "teal": "accent_pressed",
-    "cyan": "accent_pressed",
-    "rose": "danger",
-    "error": "danger",
-    "sage": "success",
-    "mint": "success",
-    "lavender": "accent_hover",
-    "sky": "accent",
-    # Text
-    "text": "text_primary",
-    "text-2": "text_secondary",
-    "text-3": "text_disabled",
-    "text-4": "text_disabled",
-    # Borders
-    "border": "border",
-    "border-h": "border_light",
-    "border-hh": "border_focus",
-}
-
-# Alpha variants computed from base hex colors
-WEB_ALPHA_MAP = {
-    "gold-dim": ("warning", 0.1),
-    "gold-glow": ("warning", 0.2),
-    "teal-dim": ("accent_pressed", 0.15),
-    "rose-dim": ("danger", 0.15),
-    "error-dim": ("danger", 0.15),
-    "sage-dim": ("success", 0.15),
-    "lav-dim": ("accent_hover", 0.15),
-    "lavender-dim": ("accent_hover", 0.15),
-    "sky-dim": ("accent", 0.15),
-}
-
-
-def _hex_to_rgb(h):
-    """Convert '#RRGGBB' to (r, g, b). Returns None on failure."""
-    h = h.lstrip("#")
-    if len(h) < 6:
-        return None
-    try:
-        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    except ValueError:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +71,7 @@ def init_db():
             ("completed_at", "DATETIME"),
             ("is_achievement", "INTEGER DEFAULT 0"),
             ("position", "INTEGER DEFAULT 0"),
+            ("time_spent", "INTEGER DEFAULT 0"),
         ]
         for col, spec in migrations:
             if col not in cols:
@@ -207,7 +146,7 @@ class ChronosBridge(QObject):
             cursor.execute(
                 "SELECT id, parent_id, content, notes, links, timestamp, status, "
                 "is_expanded, priority, due_date, tags, completed_at, "
-                "is_achievement, position "
+                "is_achievement, position, time_spent "
                 "FROM tasks ORDER BY position ASC, parent_id ASC, timestamp DESC"
             )
             tasks = [
@@ -226,6 +165,7 @@ class ChronosBridge(QObject):
                     "completed_at": r[11],
                     "is_achievement": bool(r[12]),
                     "position": r[13] or 0,
+                    "time_spent": r[14] or 0,
                 }
                 for r in cursor.fetchall()
             ]
@@ -277,6 +217,12 @@ class ChronosBridge(QObject):
             conn.execute(
                 "UPDATE tasks SET is_achievement=? WHERE id=?", (int(is_ach), tid)
             )
+        self.data_updated.emit()
+
+    @pyqtSlot(int, int)
+    def update_task_time(self, tid, seconds):
+        with sqlite3.connect(CHRONOS_DB) as conn:
+            conn.execute("UPDATE tasks SET time_spent=? WHERE id=?", (seconds, tid))
         self.data_updated.emit()
 
     @pyqtSlot(int)
@@ -626,9 +572,6 @@ class ChronosApp(QMainWindow):
         self.resize(1200, 900)
 
         self.view = QWebEngineView()
-        self.view.page().setBackgroundColor(QColor(self.mgr["bg_base"]))
-        self.mgr.theme_changed.connect(self._apply_theme)
-
         attrs = self.view.settings()
         dev_attr = getattr(
             QWebEngineSettings.WebAttribute, "DeveloperExtrasEnabled", None
@@ -646,6 +589,9 @@ class ChronosApp(QMainWindow):
         self.shortcut = QShortcut(QKeySequence("F12"), self)
         self.shortcut.activated.connect(self._open_devtools)
 
+        # WebThemeBridge handles all theme injection (DocumentCreation + live updates)
+        self._theme_bridge = WebThemeBridge(self.mgr, self.view)
+
         script_dir = os.path.dirname(os.path.abspath(__file__))
         html_path = os.path.join(script_dir, "chronos_v4.html")
         self.view.setUrl(QUrl.fromLocalFile(html_path))
@@ -654,51 +600,6 @@ class ChronosApp(QMainWindow):
         self.rem_timer.timeout.connect(self._check_reminders)
         self.rem_timer.start(60000)
         self.last_hour = -1
-        self._apply_theme()
-
-    def _apply_theme(self):
-        colors = self.mgr.theme_data.get("colors", {})
-        parts = []
-
-        # 1) All raw theme colors as CSS vars
-        for name, color in colors.items():
-            parts.append(f"--{name.replace('_', '-')}: {color}")
-
-        # 2) Mapped web vars
-        for css_var, theme_key in WEB_CSS_MAP.items():
-            val = colors.get(theme_key)
-            if val:
-                parts.append(f"--{css_var}: {val}")
-
-        # 3) Alpha variants
-        for css_var, (theme_key, alpha) in WEB_ALPHA_MAP.items():
-            val = colors.get(theme_key)
-            if val:
-                rgb = _hex_to_rgb(val)
-                if rgb:
-                    r, g, b = rgb
-                    parts.append(f"--{css_var}: rgba({r},{g},{b},{alpha})")
-
-        # 4) Shadows based on dark/light
-        if self.mgr.is_dark:
-            parts.append("--shadow-sm: 0 2px 8px rgba(0,0,0,0.6)")
-            parts.append("--shadow-md: 0 8px 32px rgba(0,0,0,0.7)")
-            parts.append("--shadow-lg: 0 24px 64px rgba(0,0,0,0.8)")
-            parts.append("--grain-opacity: 0.025")
-        else:
-            parts.append("--shadow-sm: 0 2px 8px rgba(0,0,0,0.08)")
-            parts.append("--shadow-md: 0 8px 32px rgba(0,0,0,0.12)")
-            parts.append("--shadow-lg: 0 24px 64px rgba(0,0,0,0.18)")
-            parts.append("--grain-opacity: 0.01")
-
-        # 5) Color scheme for native inputs
-        scheme = "dark" if self.mgr.is_dark else "light"
-        parts.append(f"color-scheme: {scheme}")
-
-        css_text = "; ".join(parts)
-        script = f"document.documentElement.style.cssText = `{css_text}`;"
-        self.view.page().runJavaScript(script)
-        self.view.page().setBackgroundColor(QColor(self.mgr["bg_base"]))
 
     def _open_devtools(self):
         self.devtools_view = QWebEngineView()

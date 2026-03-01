@@ -4,7 +4,9 @@
       "Bash(python:*)",
       "Bash(\"$VENV_PYTHON\":*)",
       "Bash(ls:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(ruff check src/chronos/)",
+      "Bash(ruff format --check src/chronos/)"
     ]
   }
 }
