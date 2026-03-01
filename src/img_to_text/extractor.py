@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
+import math
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
@@ -16,6 +19,94 @@ _WORKER = Path(__file__).parent / "ocr_worker.py"
 
 _proc: subprocess.Popen | None = None
 _proc_languages: list[str] = []
+
+
+def _bbox_stats(bbox: list[list[int]]) -> tuple[float, float, float, float]:
+    xs = [pt[0] for pt in bbox]
+    ys = [pt[1] for pt in bbox]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    width = max(1.0, float(max_x - min_x))
+    height = max(1.0, float(max_y - min_y))
+    center_y = (float(min_y) + float(max_y)) / 2.0
+    return float(min_x), center_y, width, height
+
+
+def _results_to_text(results: list[dict]) -> str:
+    if not results:
+        return ""
+
+    words: list[dict[str, float | str]] = []
+    heights: list[float] = []
+
+    for item in results:
+        text = str(item.get("text", "")).strip()
+        bbox = item.get("bbox")
+        if not text or not isinstance(bbox, list) or len(bbox) < 4:
+            continue
+        min_x, center_y, width, height = _bbox_stats(bbox)
+        heights.append(height)
+        words.append(
+            {
+                "text": text,
+                "x": min_x,
+                "cy": center_y,
+                "w": width,
+                "h": height,
+            }
+        )
+
+    if not words:
+        return ""
+
+    median_height = sorted(heights)[len(heights) // 2]
+    line_tol = max(6.0, median_height * 0.55)
+
+    words.sort(key=lambda item: (float(item["cy"]), float(item["x"])))
+    lines: list[list[dict[str, float | str]]] = []
+
+    for word in words:
+        if not lines:
+            lines.append([word])
+            continue
+
+        last_line = lines[-1]
+        last_cy = sum(float(w["cy"]) for w in last_line) / len(last_line)
+        if math.fabs(float(word["cy"]) - last_cy) <= line_tol:
+            last_line.append(word)
+        else:
+            lines.append([word])
+
+    text_lines: list[str] = []
+    for line in lines:
+        line.sort(key=lambda item: float(item["x"]))
+        tokens = [str(item["text"]) for item in line if str(item["text"]).strip()]
+        if not tokens:
+            continue
+
+        no_space_before = ".,;:!?%)]}»/"
+        no_space_after = "([{«/"
+
+        assembled = tokens[0]
+        for token in tokens[1:]:
+            prev = assembled[-1] if assembled else ""
+            first = token[0]
+            if first in no_space_before or prev in no_space_after:
+                assembled += token
+            else:
+                assembled += f" {token}"
+
+        text_lines.append(assembled.strip())
+
+    return "\n".join(line for line in text_lines if line)
+
+
+def _results_to_raw_text(results: list[dict]) -> str:
+    return "\n".join(
+        str(item.get("text", "")).strip()
+        for item in results
+        if str(item.get("text", "")).strip()
+    )
 
 
 def _get_proc(languages: list[str]) -> subprocess.Popen:
@@ -52,7 +143,12 @@ def _shutdown():
         _proc.wait()
 
 
-def _run_ocr(image: QImage, languages: list[str]) -> list[dict]:
+def _run_ocr(
+    image: QImage,
+    languages: list[str],
+    *,
+    symbol_priority: bool = False,
+) -> list[dict]:
     if image.isNull():
         return []
 
@@ -71,7 +167,15 @@ def _run_ocr(image: QImage, languages: list[str]) -> list[dict]:
 
     try:
         proc = _get_proc(languages)
-        proc.stdin.write(tmp_path + "\n")
+        proc.stdin.write(
+            json.dumps(
+                {
+                    "path": tmp_path,
+                    "symbol_priority": symbol_priority,
+                }
+            )
+            + "\n"
+        )
         proc.stdin.flush()
         line = proc.stdout.readline()
     finally:
@@ -86,18 +190,47 @@ def _run_ocr(image: QImage, languages: list[str]) -> list[dict]:
     return data.get("results", [])
 
 
-def ocr_qimage(image: QImage, languages: list[str] | None = None) -> str:
-    results = _run_ocr(image, languages or ["en", "de", "fr"])
-    return "\n".join(r["text"] for r in results)
+def ocr_qimage(
+    image: QImage,
+    languages: list[str] | None = None,
+    *,
+    raw_output: bool = False,
+    symbol_priority: bool = False,
+) -> str:
+    results = _run_ocr(
+        image,
+        languages or ["en", "de"],
+        symbol_priority=symbol_priority,
+    )
+    if raw_output:
+        return _results_to_raw_text(results)
+    return _results_to_text(results)
 
 
 def ocr_qimage_detailed(
-    image: QImage, languages: list[str] | None = None
+    image: QImage,
+    languages: list[str] | None = None,
+    *,
+    symbol_priority: bool = False,
 ) -> list[dict]:
-    return _run_ocr(image, languages or ["en", "de", "fr"])
+    return _run_ocr(
+        image,
+        languages or ["en", "de"],
+        symbol_priority=symbol_priority,
+    )
 
 
 def set_languages(languages: list[str]) -> None:
     """Restart the worker with new languages on next call."""
     global _proc_languages
     _proc_languages = []
+
+
+def pre_warm(languages: list[str] | None = None) -> None:
+    """Start the OCR worker process in the background so the model is ready before first use."""
+
+    def _warm():
+        with contextlib.suppress(Exception):
+            _get_proc(languages or ["en", "de"])
+
+    threading.Thread(target=_warm, daemon=True, name="ocr-prewarm").start()

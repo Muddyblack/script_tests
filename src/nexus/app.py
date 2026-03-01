@@ -43,6 +43,11 @@ def main():
     hw.ocr_signal.connect(bridge.snip_to_text_signal)
     hw.start(SUMMON_HOTKEY, IMG_TO_TEXT_HOTKEY)
 
+    # Pre-warm OCR worker in background so model is ready before first use
+    from src.img_to_text.extractor import pre_warm as _ocr_prewarm
+
+    _ocr_prewarm()
+
     # Global input redirect (Best effort, usually requires sudo/root on Linux)
     if sys.platform == "win32":
         try:

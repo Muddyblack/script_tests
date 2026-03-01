@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import tempfile
 import time
@@ -121,6 +122,47 @@ class _SnipRecord:
 
 
 _recent_snips: deque[_SnipRecord] = deque(maxlen=10)
+
+# ---------------------------------------------------------------------------
+# OCR language settings (persisted)
+# ---------------------------------------------------------------------------
+
+_OCR_SETTINGS_FILE = Path(os.getenv("APPDATA", Path.home())) / "nexus_ocr_settings.json"
+
+# Mutable globals — modified by _LangBar at runtime
+_ocr_langs: list[str] = ["en", "de"]
+_ocr_code_mode: bool = False
+_ocr_symbol_priority: bool = False
+
+
+def _load_ocr_settings() -> None:
+    global _ocr_langs, _ocr_code_mode, _ocr_symbol_priority
+    try:
+        data = json.loads(_OCR_SETTINGS_FILE.read_text(encoding="utf-8"))
+        _ocr_langs = data.get("languages", ["en", "de"])
+        _ocr_code_mode = bool(data.get("code_mode", False))
+        _ocr_symbol_priority = bool(data.get("symbol_priority", False))
+    except Exception:
+        pass
+
+
+def _save_ocr_settings() -> None:
+    try:
+        _OCR_SETTINGS_FILE.write_text(
+            json.dumps(
+                {
+                    "languages": _ocr_langs,
+                    "code_mode": _ocr_code_mode,
+                    "symbol_priority": _ocr_symbol_priority,
+                }
+            ),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+_load_ocr_settings()
 
 # ---------------------------------------------------------------------------
 # Screenshot capture
@@ -254,6 +296,139 @@ _LOUPE_PX = 200
 _LOUPE_ZOOM = 6
 _HANDLE_SIZE = 10
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  Language selector bar (always-on, top-right of overlay)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_LANG_BTN_BASE = (
+    "QPushButton {{ background: {bg}; color: {fg}; "
+    "border: 1px solid {bd}; border-radius: 4px; "
+    "font: bold 8pt 'Segoe UI'; }}"
+    "QPushButton:hover {{ background: {hv}; }}"
+)
+
+_AVAILABLE_LANGS = [("EN", "en"), ("DE", "de"), ("FR", "fr"), ("ES", "es")]
+
+
+class _LangBar(QWidget):
+    """Persistent language toggle strip shown in the overlay top-right corner."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(
+            "background: rgba(12,12,22,0.92); border-radius: 7px;"
+            " border: 1px solid rgba(255,255,255,0.12);"
+        )
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 5, 8, 5)
+        lay.setSpacing(4)
+
+        lbl = QLabel("Lang:")
+        lbl.setStyleSheet(
+            "color: rgba(255,255,255,0.45); font: 8pt 'Segoe UI';"
+            " border: none; background: transparent;"
+        )
+        lay.addWidget(lbl)
+
+        self._btns: dict[str, QPushButton] = {}
+        for display, code in _AVAILABLE_LANGS:
+            btn = QPushButton(display, self)
+            btn.setFixedSize(34, 24)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _, c=code: self._toggle_lang(c))
+            lay.addWidget(btn)
+            self._btns[code] = btn
+
+        sep = QLabel("|", self)
+        sep.setStyleSheet(
+            "color: rgba(255,255,255,0.2); border: none; background: transparent;"
+        )
+        lay.addWidget(sep)
+
+        self._code_btn = QPushButton("Code", self)
+        self._code_btn.setFixedSize(44, 24)
+        self._code_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._code_btn.setToolTip("English-only mode optimised for programming symbols")
+        self._code_btn.clicked.connect(self._toggle_code)
+        lay.addWidget(self._code_btn)
+
+        self._sym_btn = QPushButton("Sym", self)
+        self._sym_btn.setFixedSize(40, 24)
+        self._sym_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sym_btn.setToolTip("Boost punctuation/symbol detection (. : / \\ _ @)")
+        self._sym_btn.clicked.connect(self._toggle_symbol_priority)
+        lay.addWidget(self._sym_btn)
+
+        self.adjustSize()
+        self._refresh_styles()
+
+    # ------------------------------------------------------------------
+    def _toggle_lang(self, code: str) -> None:
+        global _ocr_langs, _ocr_code_mode
+        if _ocr_code_mode:
+            _ocr_code_mode = False
+        if code in _ocr_langs:
+            if len(_ocr_langs) > 1:
+                _ocr_langs = [c for c in _ocr_langs if c != code]
+        else:
+            _ocr_langs = [*_ocr_langs, code]
+        self._refresh_styles()
+        _save_ocr_settings()
+        self._prewarm()
+
+    def _toggle_code(self) -> None:
+        global _ocr_langs, _ocr_code_mode
+        _ocr_code_mode = not _ocr_code_mode
+        if _ocr_code_mode:
+            _ocr_langs = ["en"]
+        self._refresh_styles()
+        _save_ocr_settings()
+        self._prewarm()
+
+    def _toggle_symbol_priority(self) -> None:
+        global _ocr_symbol_priority
+        _ocr_symbol_priority = not _ocr_symbol_priority
+        self._refresh_styles()
+        _save_ocr_settings()
+
+    @staticmethod
+    def _prewarm() -> None:
+        from .extractor import pre_warm
+        pre_warm(["en"] if _ocr_code_mode else _ocr_langs)
+
+    # ------------------------------------------------------------------
+    def _refresh_styles(self) -> None:
+        for code, btn in self._btns.items():
+            active = code in _ocr_langs and not _ocr_code_mode
+            btn.setStyleSheet(
+                _LANG_BTN_BASE.format(
+                    bg="#6366f1" if active else "rgba(255,255,255,0.08)",
+                    fg="#ffffff" if active else "rgba(255,255,255,0.50)",
+                    bd="#6366f1" if active else "rgba(255,255,255,0.10)",
+                    hv="#7c7ff1" if active else "rgba(255,255,255,0.15)",
+                )
+            )
+        ca = _ocr_code_mode
+        self._code_btn.setStyleSheet(
+            _LANG_BTN_BASE.format(
+                bg="#06b6d4" if ca else "rgba(255,255,255,0.08)",
+                fg="#ffffff" if ca else "rgba(255,255,255,0.50)",
+                bd="#06b6d4" if ca else "rgba(255,255,255,0.10)",
+                hv="#22d3ee" if ca else "rgba(255,255,255,0.15)",
+            )
+        )
+        sa = _ocr_symbol_priority
+        self._sym_btn.setStyleSheet(
+            _LANG_BTN_BASE.format(
+                bg="#f59e0b" if sa else "rgba(255,255,255,0.08)",
+                fg="#ffffff" if sa else "rgba(255,255,255,0.50)",
+                bd="#f59e0b" if sa else "rgba(255,255,255,0.10)",
+                hv="#fbbf24" if sa else "rgba(255,255,255,0.15)",
+            )
+        )
+
+
 _TOOLBAR_BTN_STYLE = """
 QPushButton {{
     background: rgba(15, 15, 25, 0.96);
@@ -288,10 +463,11 @@ class SnipOverlay(QWidget):
 
     _TOOLBAR = [
         ("📋", "1: OCR", "text", "#6366f1"),
-        ("🖼️", "2: Image", "image", "#8b5cf6"),
-        ("💾", "3: Save", "save", "#3b82f6"),
-        ("📤", "4: Share", "share", "#06b6d4"),
-        ("❌", "5: Cancel", "cancel", "#ef4444"),
+        ("🧾", "2: OCR Raw", "text_raw", "#7c3aed"),
+        ("🖼️", "3: Image", "image", "#8b5cf6"),
+        ("💾", "4: Save", "save", "#3b82f6"),
+        ("📤", "5: Share", "share", "#06b6d4"),
+        ("❌", "6: Cancel", "cancel", "#ef4444"),
     ]
 
     def __init__(self, desktop: QPixmap, virtual_geo: QRect):
@@ -315,6 +491,13 @@ class SnipOverlay(QWidget):
         self._active_handle: str | None = None
         self._toolbar_btns: list[QPushButton] = []
 
+        # Language bar — always visible in top-right corner
+        self._lang_bar = _LangBar(self)
+        self._lang_bar.adjustSize()
+        self._lang_bar.move(virtual_geo.width() - self._lang_bar.width() - 12, 12)
+        self._lang_bar.raise_()
+        self._lang_bar.show()
+
     def keyPressEvent(self, ev):
         key = ev.key()
         # Shortcuts
@@ -331,7 +514,7 @@ class SnipOverlay(QWidget):
         elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if not self._rect.isNull():
                 self._on_action("text")
-        elif Qt.Key.Key_1 <= key <= Qt.Key.Key_5:
+        elif Qt.Key.Key_1 <= key <= Qt.Key.Key_9:
             idx = key - Qt.Key.Key_1
             if idx < len(self._TOOLBAR):
                 self._on_action(self._TOOLBAR[idx][2])
@@ -567,7 +750,7 @@ class SnipOverlay(QWidget):
         p.fillRect(0, 0, self.width(), 36, QColor(0, 0, 0, 180))
         p.setPen(QColor(255, 255, 255, 220))
         p.setFont(QFont("Segoe UI", 9))
-        p.drawText(20, 23, "Drag to select region  ·  1-4: Shortcuts  ·  Esc: Cancel")
+        p.drawText(20, 23, "Drag to select region  ·  1-6: Shortcuts  ·  Esc: Cancel")
 
     def crop_selection(self, rect: QRect) -> QImage:
         return self._desktop.copy(rect).toImage()
@@ -722,14 +905,30 @@ class _Signals(QObject):
 
 
 class _OcrWorker(QRunnable):
-    def __init__(self, image: QImage):
+    def __init__(
+        self,
+        image: QImage,
+        raw_output: bool = False,
+        languages: list[str] | None = None,
+        symbol_priority: bool = False,
+    ):
         super().__init__()
         self.image = image
+        self.raw_output = raw_output
+        self.languages = languages or list(_ocr_langs)
+        self.symbol_priority = symbol_priority
         self.signals = _Signals()
 
     def run(self):
         try:
-            self.signals.success.emit(ocr_qimage(self.image))
+            self.signals.success.emit(
+                ocr_qimage(
+                    self.image,
+                    languages=self.languages,
+                    raw_output=self.raw_output,
+                    symbol_priority=self.symbol_priority,
+                )
+            )
         except Exception as e:
             self.signals.error.emit(str(e).strip() or e.__class__.__name__)
 
@@ -774,10 +973,22 @@ def start_snip_to_text(
             Toast.show_toast("Image Shared", "📤")
             return
 
-        _status("⏳ Recognising…")
+        raw_mode = action == "text_raw"
+        # Snapshot language selection at the moment of capture
+        langs = ["en"] if _ocr_code_mode else list(_ocr_langs)
+        symbol_mode = _ocr_symbol_priority
+        mode_label = "(code)" if _ocr_code_mode else f"({'+'.join(langs)})"
+        if symbol_mode:
+            mode_label = f"{mode_label}+sym"
+        _status(f"⏳ Recognising {mode_label}…")
         tip = OcrPreviewTooltip(anchor)
         tip.show()
-        w = _OcrWorker(image)
+        w = _OcrWorker(
+            image,
+            raw_output=raw_mode,
+            languages=langs,
+            symbol_priority=symbol_mode,
+        )
 
         def _ok(text: str):
             tip.set_text(text)
