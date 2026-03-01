@@ -563,10 +563,12 @@ class ChronosApp(QMainWindow):
         init_db()
         self.setWindowTitle("Chronos")
         try:
-            from src.common.config import ICON_PATH
+            from src.common.config import ASSETS_DIR
 
-            if os.path.exists(ICON_PATH):
-                self.setWindowIcon(QIcon(ICON_PATH))
+            icon_path = os.path.join(ASSETS_DIR, "chronos.png")
+
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
         except ImportError:
             pass
         self.resize(1200, 900)
