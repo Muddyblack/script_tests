@@ -147,8 +147,10 @@ def _capture_wayland() -> tuple[QPixmap, QRect] | None:
     virtual_geo = QRect(
         min(s.geometry().left() for s in screens),
         min(s.geometry().top() for s in screens),
-        max(s.geometry().right() for s in screens) - min(s.geometry().left() for s in screens),
-        max(s.geometry().bottom() for s in screens) - min(s.geometry().top() for s in screens),
+        max(s.geometry().right() for s in screens)
+        - min(s.geometry().left() for s in screens),
+        max(s.geometry().bottom() for s in screens)
+        - min(s.geometry().top() for s in screens),
     )
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
@@ -166,7 +168,14 @@ def _capture_wayland() -> tuple[QPixmap, QRect] | None:
         # spectacle (KDE) — background fullscreen capture
         if shutil.which("spectacle"):
             ret = subprocess.run(
-                ["spectacle", "--background", "--nonotify", "--fullscreen", "--output", tmp],
+                [
+                    "spectacle",
+                    "--background",
+                    "--nonotify",
+                    "--fullscreen",
+                    "--output",
+                    tmp,
+                ],
                 timeout=8,
             )
             if ret.returncode == 0:
@@ -468,18 +477,19 @@ class SnipOverlay(QWidget):
         p.drawPixmap(0, 0, self._desktop)
 
         if not self._rect.isNull():
+            sel_rect = self._rect.normalized()
             path = QPainterPath()
             # USE QRectF explicitly to avoid TypeError in PyQt6
             path.addRect(QRectF(self.rect()))
-            path.addRect(QRectF(self._rect))
+            path.addRect(QRectF(sel_rect))
             p.fillPath(path, C.OVERLAY_DIM)
 
-            p.drawPixmap(self._rect, self._desktop, self._rect)
+            p.drawPixmap(sel_rect, self._desktop, sel_rect)
             p.setPen(QPen(C.ACCENT_LITE, 2))
-            p.drawRect(self._rect)
+            p.drawRect(sel_rect)
 
             if self._state != OverlayState.DRAWING:
-                self._draw_handles(p, self._rect)
+                self._draw_handles(p, sel_rect)
         else:
             p.fillRect(self.rect(), C.OVERLAY_DIM)
 

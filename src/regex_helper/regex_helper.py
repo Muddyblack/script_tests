@@ -225,15 +225,15 @@ class RegexSandbox(QMainWindow):
         self.code_font = QFont("Consolas", 11)
         self.current_pattern_id = None
 
-        self.setup_ui()
-        self.mgr.theme_changed.connect(self.apply_theme)
-        self.apply_theme()
-        self.load_patterns()
-
         # Debounce timer to prevent lag when typing huge strings
         self.eval_timer = QTimer()
         self.eval_timer.setSingleShot(True)
         self.eval_timer.timeout.connect(self.evaluate_regex)
+
+        self.setup_ui()
+        self.mgr.theme_changed.connect(self.apply_theme)
+        self.apply_theme()
+        self.load_patterns()
 
         # File search worker
         self.search_thread = None
@@ -657,8 +657,8 @@ class RegexSandbox(QMainWindow):
         clear_cursor.select(QTextCursor.SelectionType.Document)
         default_format = QTextCharFormat()
 
-        text_color = "#e2e8f0" if self.dark_mode else "#1e293b"
-        muted_color = "#94a3b8" if self.dark_mode else "#64748b"
+        text_color = "#e2e8f0" if self.mgr.is_dark else "#1e293b"
+        muted_color = "#94a3b8" if self.mgr.is_dark else "#64748b"
         success_color = "#22c55e"
         danger_color = "#ef4444"
 
