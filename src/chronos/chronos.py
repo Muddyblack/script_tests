@@ -249,6 +249,24 @@ class ChronosBridge(QObject):
             conn.execute("UPDATE tasks SET time_spent=? WHERE id=?", (seconds, tid))
         self.data_updated.emit()
 
+    @pyqtSlot(int, int)
+    def complete_task_with_time(self, tid, seconds):
+        """Mark task complete and optionally record actual time spent."""
+        now = datetime.datetime.now().isoformat()
+        with sqlite3.connect(CHRONOS_DB) as conn:
+            if seconds > 0:
+                conn.execute(
+                    "UPDATE tasks SET status='Completed', completed_at=?, time_spent=? WHERE id=?",
+                    (now, seconds, tid),
+                )
+            else:
+                conn.execute(
+                    "UPDATE tasks SET status='Completed', completed_at=? WHERE id=?",
+                    (now, tid),
+                )
+        self.data_updated.emit()
+        self._trigger_sync()
+
     @pyqtSlot(int)
     def delete_task(self, tid):
         with sqlite3.connect(CHRONOS_DB) as conn:
@@ -647,11 +665,11 @@ class ChronosBridge(QObject):
             if completion_times:
                 avg_h = sum(completion_times) / len(completion_times)
                 if avg_h < 1:
-                    s += f"**Avg completion time:** {int(avg_h * 60)} min\n\n"
+                    s += f"**Avg time open:** {int(avg_h * 60)} min\n\n"
                 elif avg_h < 24:
-                    s += f"**Avg completion time:** {avg_h:.1f} hours\n\n"
+                    s += f"**Avg time open:** {avg_h:.1f} hours\n\n"
                 else:
-                    s += f"**Avg completion time:** {avg_h / 24:.1f} days\n\n"
+                    s += f"**Avg time open:** {avg_h / 24:.1f} days\n\n"
 
             if completed:
                 s += "#### Completed\n"
