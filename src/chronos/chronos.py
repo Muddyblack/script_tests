@@ -120,6 +120,7 @@ class ChronosBridge(QObject):
             "ai_key": "",
             "ai_model": "",
             "ai_cert_path": "",
+            "ai_provider": "openai_compat",
             "world_clocks": [],
         }
 
@@ -284,76 +285,161 @@ class ChronosBridge(QObject):
         )
         return file_path
 
+    def _make_ssl_context(self):
+        cert_path = self.settings.get("ai_cert_path", "")
+        context = ssl.create_default_context()
+        if cert_path and os.path.exists(cert_path):
+            context.load_verify_locations(cert_path)
+        elif cert_path:
+            raise FileNotFoundError(f"Certificate not found: {cert_path}")
+        return context
+
+    def _fetch_json(self, url, headers, payload=None):
+        """GET if payload is None, POST otherwise. Returns parsed dict/list."""
+        context = self._make_ssl_context()
+        if payload is not None:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode(),
+                headers=headers,
+                method="POST",
+            )
+        else:
+            req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, context=context) as resp:
+            return json.loads(resp.read().decode())
+
     @pyqtSlot(result=str)
     def get_ai_models(self):
+        provider = self.settings.get("ai_provider", "openai_compat")
         base_url = self.settings.get("ai_url", "").rstrip("/")
         api_key = self.settings.get("ai_key", "")
-        cert_path = self.settings.get("ai_cert_path", "")
-        if not base_url:
+        if not base_url and provider != "google_gemini":
             return json.dumps([])
-        url = f"{base_url}/api/models"
-        headers = {"Authorization": f"Bearer {api_key}"}
         try:
-            context = ssl.create_default_context()
-            if cert_path and os.path.exists(cert_path):
-                context.load_verify_locations(cert_path)
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, context=context) as response:
-                data = json.loads(response.read().decode())
-                if isinstance(data, list):
-                    return json.dumps(data)
-                if "data" in data:
-                    return json.dumps(
-                        [m["id"] if isinstance(m, dict) else m for m in data["data"]]
-                    )
-                if "models" in data:
-                    return json.dumps(
-                        [
-                            m["name"] if isinstance(m, dict) else m
-                            for m in data["models"]
-                        ]
-                    )
-                return json.dumps([str(data)])
+            if provider == "google_gemini":
+                # Gemini lists models via its own endpoint; base_url may be empty
+                host = base_url or "https://generativelanguage.googleapis.com"
+                url = f"{host}/v1beta/models?key={api_key}"
+                data = self._fetch_json(url, {})
+                models = data.get("models", [])
+                return json.dumps(
+                    [
+                        m["name"].replace("models/", "")
+                        for m in models
+                        if "generateContent" in m.get("supportedGenerationMethods", [])
+                    ]
+                )
+            elif provider == "anthropic":
+                # Anthropic doesn't expose a public list-models endpoint;
+                # return well-known model IDs so the user can pick one.
+                return json.dumps(
+                    [
+                        "claude-opus-4-6",
+                        "claude-sonnet-4-6",
+                        "claude-haiku-4-5-20251001",
+                    ]
+                )
+            else:
+                # openai_compat: works for OpenAI, OpenWebUI, Ollama, llama.cpp, etc.
+                # Try /v1/models first (OpenAI standard), fall back to /api/models (OpenWebUI).
+                for path in ("/v1/models", "/api/models"):
+                    try:
+                        data = self._fetch_json(
+                            f"{base_url}{path}",
+                            {"Authorization": f"Bearer {api_key}"},
+                        )
+                        if isinstance(data, list):
+                            return json.dumps(data)
+                        if "data" in data:
+                            return json.dumps(
+                                [
+                                    m["id"] if isinstance(m, dict) else m
+                                    for m in data["data"]
+                                ]
+                            )
+                        if "models" in data:
+                            return json.dumps(
+                                [
+                                    m.get("name", m.get("id", m))
+                                    if isinstance(m, dict)
+                                    else m
+                                    for m in data["models"]
+                                ]
+                            )
+                    except Exception:
+                        continue
+                return json.dumps([])
         except Exception:
             return json.dumps([])
 
     @pyqtSlot(str, result=str)
     def get_ai_recap(self, prompt):
+        provider = self.settings.get("ai_provider", "openai_compat")
         base_url = self.settings.get("ai_url", "").rstrip("/")
         api_key = self.settings.get("ai_key", "")
         model = self.settings.get("ai_model", "")
-        cert_path = self.settings.get("ai_cert_path", "")
-        if not base_url:
-            return "Error: No AI API URL configured in settings."
-        url = f"{base_url}/api/chat/completions"
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-            "temperature": 0.7,
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        }
+        if not api_key and provider in ("google_gemini", "anthropic"):
+            return "Error: No API key configured in settings."
         try:
-            context = ssl.create_default_context()
-            if cert_path and os.path.exists(cert_path):
-                context.load_verify_locations(cert_path)
-            elif cert_path:
-                return f"Error: Certificate not found: {cert_path}"
-            req = urllib.request.Request(
-                url, data=json.dumps(payload).encode(), headers=headers, method="POST"
-            )
-            with urllib.request.urlopen(req, context=context) as response:
-                result = json.loads(response.read().decode())
-                if "choices" in result:
-                    return result["choices"][0]["message"]["content"]
-                if "message" in result:
-                    return result["message"]["content"]
-                return json.dumps(result)
+            if provider == "google_gemini":
+                host = base_url or "https://generativelanguage.googleapis.com"
+                model_id = model or "gemini-2.0-flash"
+                url = f"{host}/v1beta/models/{model_id}:generateContent?key={api_key}"
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                data = self._fetch_json(url, {"Content-Type": "application/json"}, payload)
+                return (
+                    data["candidates"][0]["content"]["parts"][0]["text"]
+                )
+            elif provider == "anthropic":
+                host = base_url or "https://api.anthropic.com"
+                url = f"{host}/v1/messages"
+                payload = {
+                    "model": model or "claude-sonnet-4-6",
+                    "max_tokens": 1024,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                }
+                data = self._fetch_json(url, headers, payload)
+                return data["content"][0]["text"]
+            else:
+                # openai_compat
+                if not base_url:
+                    return "Error: No AI API URL configured in settings."
+                # Try /v1/chat/completions first (OpenAI standard), then /api/chat/completions (OpenWebUI)
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "temperature": 0.7,
+                }
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                }
+                last_err = None
+                for path in ("/v1/chat/completions", "/api/chat/completions"):
+                    try:
+                        data = self._fetch_json(f"{base_url}{path}", headers, payload)
+                        if "choices" in data:
+                            return data["choices"][0]["message"]["content"]
+                        if "message" in data:
+                            return data["message"]["content"]
+                        return json.dumps(data)
+                    except Exception as e:
+                        last_err = e
+                        continue
+                return f"Error: {last_err}"
+        except FileNotFoundError as e:
+            return f"Error: {e}"
         except urllib.error.URLError as e:
             return f"Connection Error: {e}"
+        except (KeyError, IndexError) as e:
+            return f"Error parsing response: {e}"
         except Exception as e:
             return f"Error: {e}"
 

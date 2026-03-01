@@ -1263,7 +1263,9 @@
             const [s, setS] = useState({});
             const [models, setModels] = useState([]);
 
-            useEffect(() => { if (data.settings) setS(data.settings); }, [data.settings]);
+            useEffect(() => {
+                if (data.settings) setS({ ai_provider: 'openai_compat', ...data.settings });
+            }, [data.settings]);
 
             const fetchModels = async () => {
                 const r = await safeCall('get_ai_models');
@@ -1317,7 +1319,16 @@
                         <div className="card p-5">
                             <div className="section-label mb-4">AI Configuration</div>
                             <div className="settings-row">
-                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>API URL</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-disabled)' }}>OpenAI-compatible endpoint</div></div>
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Provider</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-disabled)' }}>API format to use</div></div>
+                                <select value={s.ai_provider} onChange={e => setS({ ...s, ai_provider: e.target.value, ai_model: '' })}
+                                    className="input-field py-2 text-sm" style={{ width: 220 }}>
+                                    <option value="openai_compat">OpenAI-compatible (OpenWebUI, Ollama, llama.cpp…)</option>
+                                    <option value="google_gemini">Google Gemini</option>
+                                    <option value="anthropic">Anthropic (Claude)</option>
+                                </select>
+                            </div>
+                            <div className="settings-row">
+                                <div><div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>API URL</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-disabled)' }}>{(s.ai_provider === 'google_gemini') ? 'Leave blank for default' : (s.ai_provider === 'anthropic') ? 'Leave blank for default' : 'Base URL of your server'}</div></div>
                                 <input value={s.ai_url || ''} onChange={e => setS({ ...s, ai_url: e.target.value })}
                                     className="input-field py-2 text-sm" style={{ width: 220 }} placeholder="https://..." />
                             </div>
@@ -1337,7 +1348,7 @@
                                     <button onClick={fetchModels} className="btn btn-ghost" style={{ fontSize: 11 }}>Refresh</button>
                                 </div>
                             </div>
-                            <div className="settings-row">
+                            {(s.ai_provider === 'openai_compat') && <div className="settings-row">
                                 <div>
                                     <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>CA Certificate</div>
                                     <div className="text-xs mt-0.5" style={{ color: 'var(--text-disabled)' }}>{s.ai_cert_path || 'System default'}</div>
@@ -1347,7 +1358,7 @@
                                         className="btn btn-ghost" style={{ fontSize: 11 }}>Browse</button>
                                     {s.ai_cert_path && <button onClick={() => setS({ ...s, ai_cert_path: '' })} className="btn btn-ghost" style={{ fontSize: 11 }}>Clear</button>}
                                 </div>
-                            </div>
+                            </div>}
                         </div>
 
                         {/* Data */}
