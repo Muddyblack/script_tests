@@ -273,7 +273,6 @@ class XExplorer(QMainWindow):
             ("All", "all"),
             ("Files", "files"),
             ("Folders", "folders"),
-            ("Content Search", "content"),
         ]:
             btn = ChipBtn(label, T)
             if ftype == "all":
@@ -1194,6 +1193,8 @@ class XExplorer(QMainWindow):
     def change_filter(self, ftype):
         self.filter_type = ftype
         self.perform_search()
+
+
 
     def set_view(self, mode):
         self.view_mode = mode

@@ -336,7 +336,6 @@ class NexusSearch(QWidget):
             "files_only": False,
             "folders_only": False,
             "target_folders": [],
-            "content": False,
             "side_panel_visible": True,
         }
         self.view_mode = "list"
@@ -1400,7 +1399,6 @@ class NexusSearch(QWidget):
             ":t": "toggles",
             ":ssh": "ssh",
             ":a": "apps",
-            ":c": "content",
         }
         active_modes = self.modes.copy()
         search_term = search
@@ -1800,24 +1798,6 @@ class NexusSearch(QWidget):
                         "path": f_path,
                         "file_path": f_path,
                         "icon": icon,
-                        "data": {"type": "file", "path": f_path},
-                    }
-                )
-
-        # 6.5. Content Search
-        if active_modes.get("content") and terms:
-            target_folders = active_modes.get("target_folders", [])
-            results = self.search_engine.search_content(
-                query_terms=terms, target_folders=target_folders, limit=50
-            )
-            for f_path, _is_dir, f_name in results:
-                candidates.append(
-                    {
-                        "score": 150,
-                        "title": f"{f_name}",
-                        "path": f"Found in content • {f_path}",
-                        "file_path": f_path,
-                        "icon": "file.svg",
                         "data": {"type": "file", "path": f_path},
                     }
                 )
