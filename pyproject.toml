@@ -1,7 +1,7 @@
 [project]
 name = "fast-explorer"
 version = "2.0.0"
-description = "A blazing-fast universal launcher and file indexer for Windows."
+description = "A fast launcher and file indexer intended for god damn slow Windows explorer devices on which python pip packages is only runabel option. Else it would be written in rust"
 authors = [
     { name = "Muddyblack" }
 ]
