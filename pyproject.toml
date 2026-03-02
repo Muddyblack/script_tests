@@ -11,6 +11,7 @@ dependencies = [
     "keyboard",
     "watchdog",
     "easyocr",
+    "pynput; sys_platform != \"win32\"",
 ]
 readme = "README.md"
 requires-python = ">=3.9"
