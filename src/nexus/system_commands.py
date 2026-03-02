@@ -22,32 +22,18 @@ def execute_system_toggle(nexus, cmd: str) -> None:
     """
     try:
         if cmd == "toggle_dark_mode":
-            import winreg
-
-            path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                path,
-                0,
-                winreg.KEY_READ | winreg.KEY_WRITE,
-            )
-            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            new_state = 0 if value == 1 else 1
-            winreg.SetValueEx(key, "AppsUseLightTheme", 0, winreg.REG_DWORD, new_state)
-            winreg.SetValueEx(
-                key, "SystemUsesLightTheme", 0, winreg.REG_DWORD, new_state
-            )
-            winreg.CloseKey(key)
+            # No registry — open Windows personalization settings for the user to toggle
+            webbrowser.open("ms-settings:personalization-colors")
+            # Also toggle the Nexus app theme to match intent
             from src.common.theme import ThemeManager
 
-            state_name = "Dark" if new_state == 0 else "Light"
-            nexus.status_lbl.setText(f"🌓 System Theme set to {state_name}")
             _mgr = ThemeManager()
-            if new_state == 1:  # light
+            if _mgr.is_dark:
                 _mgr.load_theme("light")
             else:
                 _mgr.load_theme("midnight-marina")
             _mgr.theme_changed.emit()
+            nexus.status_lbl.setText("🌓 Opened Color Settings — toggle system theme there")
 
         elif cmd == "toggle_nexus_theme":
             from src.common.theme import ThemeManager
@@ -63,48 +49,19 @@ def execute_system_toggle(nexus, cmd: str) -> None:
             nexus.status_lbl.setText(f"🌓 Nexus Theme set to {state_name}")
 
         elif cmd == "toggle_hidden_files":
-            import winreg
-
-            path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                path,
-                0,
-                winreg.KEY_READ | winreg.KEY_WRITE,
-            )
-            value, _ = winreg.QueryValueEx(key, "Hidden")
-            new_state = 1 if value == 2 else 2
-            winreg.SetValueEx(key, "Hidden", 0, winreg.REG_DWORD, new_state)
-            winreg.CloseKey(key)
-            subprocess.run(["taskkill", "/f", "/im", "explorer.exe"], shell=True)
-            subprocess.Popen(["explorer.exe"])
-            state_name = "VISIBLE" if new_state == 1 else "HIDDEN"
-            nexus.status_lbl.setText(f"👁️ Hidden Files: {state_name}")
+            # No registry — open Folder Options dialog where the user can toggle
+            subprocess.Popen(["control", "folders"])
+            nexus.status_lbl.setText("👁️ Opened Folder Options — toggle hidden files there")
 
         elif cmd == "toggle_desktop_icons":
-            import winreg
+            # Use the shell's built-in toggle command — no registry needed
+            import ctypes
 
-            path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                path,
-                0,
-                winreg.KEY_READ | winreg.KEY_WRITE,
-            )
-            value, _ = winreg.QueryValueEx(key, "HideIcons")
-            new_state = 1 if value == 0 else 0
-            winreg.SetValueEx(key, "HideIcons", 0, winreg.REG_DWORD, new_state)
-            winreg.CloseKey(key)
-            subprocess.run(
-                [
-                    "powershell",
-                    "-Command",
-                    '(New-Object -ComObject Shell.Application).Namespace(0).Self.InvokeVerb("Refresh")',
-                ],
-                shell=True,
-            )
-            state_name = "HIDDEN" if new_state == 1 else "VISIBLE"
-            nexus.status_lbl.setText(f"🔳 Desktop Icons: {state_name}")
+            WM_COMMAND = 0x0111
+            TOGGLE_DESKTOP_ICONS = 0x7402
+            progman = ctypes.windll.user32.FindWindowW("Progman", None)
+            ctypes.windll.user32.SendMessageW(progman, WM_COMMAND, TOGGLE_DESKTOP_ICONS, 0)
+            nexus.status_lbl.setText("🔳 Desktop Icons Toggled")
 
         elif cmd == "toggle_mute":
             subprocess.run(
