@@ -48,7 +48,7 @@ try:
 except ImportError:
     ICON_PATH = ""
 
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WindowThemeBridge
 from src.common.theme_template import TOOL_SHEET
 
 CHUNK = 8 * 1024 * 1024  # 8 MB read chunks
@@ -324,6 +324,7 @@ class HashTool(QMainWindow):
         self._build_ui()
         self._apply_theme()
         self._mgr.theme_changed.connect(self._apply_theme)
+        self._theme_bridge = WindowThemeBridge(self._mgr, self)  # Win32 titlebar + palette
         _fade_in(self)
 
     def _build_ui(self):

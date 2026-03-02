@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.common.config import APPDATA, ASSETS_DIR
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WindowThemeBridge
 
 # --- CONFIGURATION & DATABASE ---
 DB_PATH = os.path.join(APPDATA, "regex_sandbox.db")
@@ -241,6 +241,7 @@ class RegexSandbox(QMainWindow):
 
         # File search worker
         self.search_thread = None
+        self._theme_bridge = WindowThemeBridge(self.mgr, self)  # Win32 titlebar + palette
 
     def setup_ui(self):
         central_widget = QWidget()

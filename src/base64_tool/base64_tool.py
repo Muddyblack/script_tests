@@ -24,7 +24,7 @@ except ImportError:
     ICON_PATH = ""
 
 
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WindowThemeBridge
 from src.common.theme_template import TOOL_SHEET
 
 STYLESHEET_BASE64 = """
@@ -107,6 +107,7 @@ class Base64App(QWidget):
         self.mgr.theme_changed.connect(self._apply_theme)
         self._build_ui()
         self._apply_theme()
+        self._theme_bridge = WindowThemeBridge(self.mgr, self)  # Win32 titlebar + palette
 
     def _apply_theme(self):
         self.mgr.apply_to_widget(self, TOOL_SHEET + STYLESHEET_BASE64)

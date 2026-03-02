@@ -62,7 +62,6 @@ from src.xexplorer.widgets import (
     DriveWidget,
     EmptyStateWidget,
     IgnoreItemWidget,
-    NavBtn,
     RibbonBtn,
     SearchBar,
     SidebarList,
@@ -141,6 +140,7 @@ class XExplorer(QMainWindow):
             ThemeManager(), self, titlebar_color_key="bg_elevated"
         )
         self._theme_bridge.apply()  # Initial apply
+        self._apply_theme()  # Apply QSS
         ThemeManager().theme_changed.connect(self._on_theme_changed)
 
         icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
@@ -183,41 +183,6 @@ class XExplorer(QMainWindow):
         rbl.setSpacing(4)
 
         T = self.T
-
-        # App logo + title
-        logo_lbl = QLabel()
-        logo_lbl.setObjectName("app_logo_lbl")
-        logo_lbl.setFixedSize(30, 30)
-        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
-        if os.path.exists(icon_path):
-            logo_lbl.setPixmap(QIcon(icon_path).pixmap(24, 24))
-        else:
-            logo_lbl.setStyleSheet(
-                f"background: {T['accent']}; border-radius: 6px; color: {T['text_on_accent']};"
-                f" font-size: 15px; font-weight: 700;"
-            )
-            logo_lbl.setText("X")
-        rbl.addWidget(logo_lbl)
-
-        title_lbl = QLabel("X-Explorer")
-        title_lbl.setObjectName("app_title_lbl")
-        title_lbl.setStyleSheet(
-            f"color: {T['text_primary']}; font-size: 14px; font-weight: 600; padding: 0 6px;"
-        )
-        rbl.addWidget(title_lbl)
-
-        # Nav buttons
-        self._nav_back = NavBtn(Icons.arrow_left(T["text_secondary"]), T, "Back")
-        self._nav_fwd = NavBtn(Icons.arrow_right(T["text_secondary"]), T, "Forward")
-        self._nav_up = NavBtn(Icons.arrow_up(T["text_secondary"]), T, "Up")
-        self._nav_refresh = NavBtn(Icons.refresh(T["text_secondary"]), T, "Refresh")
-        self._nav_refresh.clicked.connect(self.update_stats)
-
-        for btn in [self._nav_back, self._nav_fwd, self._nav_up, self._nav_refresh]:
-            rbl.addWidget(btn)
-
-        rbl.addSpacing(6)
 
         # Search bar (center, expanding)
         self._search_bar = SearchBar(T)
@@ -520,18 +485,30 @@ class XExplorer(QMainWindow):
     #  THEMING
     # ──────────────────────────────────────────────────────────────────────────
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Re-apply Win32 caption color after the window is actually visible so
+        # the DWM attribute sticks (calling it before show() can be ignored by Windows).
+        if sys.platform == "win32":
+            from src.common.theme import apply_win32_titlebar
+
+            apply_win32_titlebar(
+                int(self.winId()), ThemeManager()["bg_elevated"], ThemeManager().is_dark
+            )
+
     def _on_theme_changed(self):
         self._icon_cache.clear()
         self._apply_theme()
+        # Ensure Win32 titlebar tracks the new theme
+        if sys.platform == "win32":
+            from src.common.theme import apply_win32_titlebar
+
+            apply_win32_titlebar(
+                int(self.winId()), ThemeManager()["bg_elevated"], ThemeManager().is_dark
+            )
 
     def _apply_theme(self):
         T = self.T
-
-        # Nav buttons
-        self._nav_back.setPixmap(Icons.arrow_left(T["text_secondary"]))
-        self._nav_fwd.setPixmap(Icons.arrow_right(T["text_secondary"]))
-        self._nav_up.setPixmap(Icons.arrow_up(T["text_secondary"]))
-        self._nav_refresh.setPixmap(Icons.refresh(T["text_secondary"]))
 
         # View mode RibbonBtns
         self._rb_detail.setPixmap(Icons.view_details(T["text_secondary"], 20))
@@ -590,6 +567,7 @@ class XExplorer(QMainWindow):
         /* ── Ribbon ── */
         QToolBar#ribbon_bar {{
             background: {T["bg_elevated"]};
+            border: none;
             border-bottom: 1px solid {T["border"]};
             padding: 0;
             spacing: 0;
@@ -688,12 +666,14 @@ class XExplorer(QMainWindow):
             border-right: 1px solid {T["border"]};
         }}
         QLabel#section_lbl {{
+            background: transparent;
             color: {T["text_secondary"]};
             font-size: 10px;
             font-weight: 700;
             letter-spacing: 0.8px;
         }}
         QFrame#sidebar_sep {{
+            background: transparent;
             color: {T["border"]};
             margin: 4px 10px;
         }}

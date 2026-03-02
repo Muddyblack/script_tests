@@ -446,6 +446,8 @@ class IgnoreItemWidget(QWidget):
         hl.addWidget(self._lbl, 1)
 
         self.setFixedHeight(32)
+        # Transparent so the sidebar_frame background shows through correctly
+        self.setStyleSheet("background: transparent;")
 
     def set_hovered(self, val: bool):
         if self._hovered != val:
@@ -485,7 +487,9 @@ class IgnoreItemWidget(QWidget):
         self._toggle._theme = theme
         self._toggle.update()
         if theme:
-            self._lbl.setStyleSheet(f"color: {theme['text_primary']}; font-size: 12px;")
+            self._lbl.setStyleSheet(
+                f"background: transparent; color: {theme['text_primary']}; font-size: 12px;"
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -624,10 +628,12 @@ class DriveWidget(QWidget):
         T = self._theme
         if T is None:
             return
+        # Transparent so the sidebar_frame background shows through correctly
+        self.setStyleSheet("background: transparent;")
         self._name_lbl.setStyleSheet(
-            f"color: {T['text_primary']}; font-size: 13px; font-weight: 600;"
+            f"background: transparent; color: {T['text_primary']}; font-size: 13px; font-weight: 600;"
         )
-        self._size_lbl.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px;")
+        self._size_lbl.setStyleSheet(f"background: transparent; color: {T['text_secondary']}; font-size: 11px;")
 
     def update_theme(self, theme):
         self._theme = theme

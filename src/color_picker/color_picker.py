@@ -25,7 +25,7 @@ from src.color_picker.ui_components import (
     make_channel_field,
     make_stylesheet,
 )
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WindowThemeBridge
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "color_config.json")
 try:
@@ -52,6 +52,7 @@ class ColorPickerApp(QWidget):
         self.mgr.theme_changed.connect(self.apply_theme)
         self.apply_theme()
         self.sync_ui()
+        self._theme_bridge = WindowThemeBridge(self.mgr, self)  # Win32 titlebar + palette
 
     def _build_ui(self):
         root = QVBoxLayout(self)

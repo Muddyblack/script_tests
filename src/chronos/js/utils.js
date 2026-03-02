@@ -4,6 +4,17 @@
 
 const { useState, useEffect, useCallback, useRef } = React;
 
+const parseLocal = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (iso.length === 10) {
+        const [y, m, day] = iso.split('-').map(Number);
+        d.setFullYear(y, m - 1, day);
+    }
+    d.setHours(0, 0, 0, 0, 0);
+    return d;
+};
+
 tailwind.config = {
     theme: {
         extend: {
@@ -35,8 +46,9 @@ const fmtDate = (iso) => {
 };
 const fmtRelDate = (iso) => {
     if (!iso) return null;
-    const d = new Date(iso), now = new Date();
-    const diff = Math.floor((d - now) / 86400000);
+    const d = parseLocal(iso);
+    const now = parseLocal(new Date());
+    const diff = Math.round((d - now) / 86400000);
     if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, cls: 'overdue' };
     if (diff === 0) return { label: 'Today', cls: 'due-soon' };
     if (diff === 1) return { label: 'Tomorrow', cls: 'due-soon' };
@@ -46,18 +58,18 @@ const fmtRelDate = (iso) => {
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const PC = {
-    High:   { color: 'var(--danger)',        bg: 'var(--danger-dim)',  label: 'High', stripe: 'var(--danger)' },
-    Medium: { color: 'var(--warning)',        bg: 'var(--warning-dim)', label: 'Med',  stripe: 'var(--warning)' },
-    Low:    { color: 'var(--text-disabled)',  bg: 'var(--bg-overlay)',  label: 'Low',  stripe: 'var(--border-light)' },
+    High: { color: 'var(--danger)', bg: 'var(--danger-dim)', label: 'High', stripe: 'var(--danger)' },
+    Medium: { color: 'var(--warning)', bg: 'var(--warning-dim)', label: 'Med', stripe: 'var(--warning)' },
+    Low: { color: 'var(--text-disabled)', bg: 'var(--bg-overlay)', label: 'Low', stripe: 'var(--border-light)' },
 };
 
 const groupByDate = (tasks) => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const now = parseLocal(new Date());
     const G = { Overdue: [], Today: [], Tomorrow: [], 'This Week': [], Later: [], 'No Date': [] };
     tasks.forEach(t => {
         if (!t.due_date) { G['No Date'].push(t); return; }
-        const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
-        const diff = Math.floor((d - now) / 86400000);
+        const d = parseLocal(t.due_date);
+        const diff = Math.round((d - now) / 86400000);
         if (diff < 0) G.Overdue.push(t);
         else if (diff === 0) G.Today.push(t);
         else if (diff === 1) G.Tomorrow.push(t);
@@ -147,6 +159,7 @@ const useBridge = () => {
 
 // ─── EXPORTS ─────────────────────────────────────────────────────────────────
 Object.assign(window, {
+    parseLocal,
     fmt, fmtHuman, fmtDate, fmtRelDate,
     PC, groupByDate, md, greet,
     showToast, aiListeners, useBridge,

@@ -61,7 +61,7 @@ from src.archiver.archiver import (
     is_archive,
 )
 from src.common.config import ARCHIVER_SETTINGS, FILE_OPS_SETTINGS, ICON_PATH
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WindowThemeBridge
 from src.common.theme_template import TOOL_SHEET
 
 COPY_BUFFER = 8 * 1024 * 1024
@@ -228,6 +228,7 @@ class FileToolsWindow(QMainWindow):
         self._tab = "fileops"  # "fileops" | "archiver"
         self.fo_sources: list[str] = []
         self.arc_sources: list[str] = []
+        self.source_paths: list[str] = []
         self._worker = None
 
         # Wire signals
@@ -241,6 +242,9 @@ class FileToolsWindow(QMainWindow):
         self._apply_theme()
         self._load_settings()
         self._switch_tab("fileops")
+        self._theme_bridge = WindowThemeBridge(
+            self.mgr, self
+        )  # Win32 titlebar + palette
 
     # ── Settings ──────────────────────────────────────────────────────
 
@@ -744,6 +748,14 @@ class FileToolsWindow(QMainWindow):
             f"{n} ITEM{'S' if n != 1 else ''} QUEUED" if has else "READY",
             self.mgr["text_secondary"],
         )
+
+    def _refresh_list(self):
+        """Compat for external callers expecting source_paths + _refresh_list."""
+        if self.source_paths:
+            self.fo_sources = list(self.source_paths)
+            self.arc_sources = list(self.source_paths)
+        self._fo_refresh()
+        self._arc_refresh()
 
     def _fo_run(self, op: str):
         if not self.fo_sources:

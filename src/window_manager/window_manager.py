@@ -54,7 +54,7 @@ except ImportError:
     APPDATA = os.getenv("APPDATA", ".")
     ICON_PATH = ""
 
-from src.common.theme import ThemeManager
+from src.common.theme import ThemeManager, WindowThemeBridge
 from src.common.theme_template import TOOL_SHEET
 
 LAYOUTS_FILE = os.path.join(APPDATA, "nexus_window_layouts.json")
@@ -327,6 +327,7 @@ class WindowManager(QMainWindow):
         self._build_ui()
         self._apply_theme()
         self._mgr.theme_changed.connect(self._apply_theme)
+        self._theme_bridge = WindowThemeBridge(self._mgr, self)  # Win32 titlebar + palette
 
         self._refresh()
         self._timer = QTimer(self)

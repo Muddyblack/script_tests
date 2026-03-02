@@ -130,12 +130,12 @@ class ChronosBridge(QObject):
         self.data_updated.emit()
         self._trigger_sync()
 
-    @pyqtSlot(int, str, str, str)
-    def update_task(self, tid, content, notes, links):
+    @pyqtSlot(int, str, str, str, str, str, str, bool)
+    def update_task(self, tid, content, notes, links, tags, priority, due_date, is_ach):
         with sqlite3.connect(CHRONOS_DB) as conn:
             conn.execute(
-                "UPDATE tasks SET content=?, notes=?, links=? WHERE id=?",
-                (content, notes, links, tid),
+                "UPDATE tasks SET content=?, notes=?, links=?, tags=?, priority=?, due_date=?, is_achievement=? WHERE id=?",
+                (content, notes, links, tags, priority, due_date, int(is_ach), tid),
             )
         self.data_updated.emit()
         self._trigger_sync()
@@ -499,7 +499,7 @@ class ChronosBridge(QObject):
         try:
             now = datetime.datetime.now()
             if modifier == "daily":
-                date_filter = "date(timestamp) = date('now')"
+                date_filter = "date(timestamp, 'localtime') = date('now', 'localtime')"
                 title = f"Daily Report — {now.strftime('%b %d, %Y')}"
                 period_days = 1
             elif modifier == "weekly":
@@ -647,13 +647,13 @@ class ChronosBridge(QObject):
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT status, content, notes, priority, tags, is_achievement "
-                "FROM tasks WHERE date(timestamp) = date('now') OR status='Pending'"
+                "FROM tasks WHERE date(timestamp, 'localtime') = date('now', 'localtime') OR status='Pending'"
             )
             tasks = cursor.fetchall()
             cursor.execute(
                 "SELECT content, priority FROM tasks "
                 "WHERE is_achievement=1 AND status='Completed' "
-                "AND date(coalesce(completed_at, timestamp)) = date('now')"
+                "AND date(coalesce(completed_at, timestamp), 'localtime') = date('now', 'localtime')"
             )
             today_achs = cursor.fetchall()
             cursor.execute(

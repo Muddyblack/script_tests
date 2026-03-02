@@ -3,7 +3,7 @@
 
 const { useState, useEffect, useCallback, useRef, useMemo, memo } = React;
 const { motion, AnimatePresence } = window.Motion;
-const { fmt, fmtHuman, fmtRelDate, fmtDate, PC, groupByDate, md, greet } = window;
+const { fmt, fmtHuman, fmtRelDate, fmtDate, PC, groupByDate, md, greet, parseLocal } = window;
 const { CtxMenu, CompleteTaskModal } = window;
 
 const PAGE_SIZE = 25;
@@ -11,16 +11,18 @@ const PAGE_SIZE = 25;
 // ─── DAILY FOCUS WIDGET ──────────────────────────────────────────────────────
 const DailyFocusWidget = ({ tasks, safeCall }) => {
     const today = useMemo(() => {
-        const now = new Date(); now.setHours(0, 0, 0, 0);
+        const now = parseLocal(new Date());
         return tasks.filter(t => {
             if (!t.due_date || t.status === 'Completed') return false;
-            const d = new Date(t.due_date); d.setHours(0, 0, 0, 0);
+            const d = parseLocal(t.due_date);
             return d.getTime() <= now.getTime();
         });
     }, [tasks]);
     const overdue = useMemo(() => tasks.filter(t => {
         if (!t.due_date || t.status === 'Completed') return false;
-        return new Date(t.due_date) < new Date(new Date().toDateString());
+        const d = parseLocal(t.due_date);
+        const now = parseLocal(new Date());
+        return d.getTime() < now.getTime();
     }), [tasks]);
 
     return (
@@ -58,32 +60,42 @@ const DailyFocusWidget = ({ tasks, safeCall }) => {
     );
 };
 
-// ─── ADD TASK MODAL ──────────────────────────────────────────────────────────
-const AddTaskModal = ({ onAdd, onClose, parentId = 0 }) => {
-    const [content, setContent] = useState('');
-    const [priority, setPriority] = useState('Medium');
-    const [dueDate, setDueDate] = useState('');
-    const [notes, setNotes] = useState('');
-    const [tags, setTags] = useState('');
-    const [isAch, setIsAch] = useState(false);
+// ─── TASK MODAL (ADD / EDIT) ─────────────────────────────────────────────────
+const TaskModal = ({ onSave, onClose, initialTask = null, parentId = 0 }) => {
+    const [content, setContent] = useState(initialTask?.content || '');
+    const [priority, setPriority] = useState(initialTask?.priority || 'Medium');
+    const [dueDate, setDueDate] = useState(initialTask?.due_date || '');
+    const [notes, setNotes] = useState(initialTask?.notes || '');
+    const [tags, setTags] = useState(initialTask && initialTask.tags ? initialTask.tags.join(', ') : '');
+    const [isAch, setIsAch] = useState(initialTask?.is_achievement || false);
     const ref = useRef(null);
+
     useEffect(() => { ref.current?.focus(); }, []);
+
     const submit = () => {
         if (!content.trim()) return;
-        onAdd({
-            content: content.trim(), priority, due_date: dueDate, notes,
+        onSave({
+            id: initialTask?.id,
+            content: content.trim(),
+            priority,
+            due_date: dueDate,
+            notes,
             tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-            parent_id: parentId, is_achievement: isAch,
+            parent_id: initialTask ? initialTask.parent_id : parentId,
+            is_achievement: isAch,
         });
         onClose();
     };
+
     return (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
             <motion.div initial={{ y: 20, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 10, opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                 className="card w-full max-w-lg p-6 space-y-5" style={{ boxShadow: 'var(--shadow-lg)' }}>
                 <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-base" style={{ color: 'var(--text-primary)' }}>{parentId ? 'Add Subtask' : 'New Task'}</h3>
+                    <h3 className="font-bold text-base" style={{ color: 'var(--text-primary)' }}>
+                        {initialTask ? 'Edit Task' : (parentId ? 'Add Subtask' : 'New Task')}
+                    </h3>
                     <button onClick={onClose} className="action-btn">✕</button>
                 </div>
                 <input ref={ref} value={content} onChange={e => setContent(e.target.value)}
@@ -121,7 +133,7 @@ const AddTaskModal = ({ onAdd, onClose, parentId = 0 }) => {
                     </div>
                     <textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-field text-sm resize-none" rows={3} placeholder="Context, links, details..." />
                 </div>
-                {!parentId && (
+                {(!parentId && (!initialTask || initialTask.parent_id === 0)) && (
                     <label className="flex items-center gap-3 cursor-pointer px-1">
                         <div className="check" onClick={(e) => { e.preventDefault(); setIsAch(!isAch); }}
                             style={isAch ? { background: 'var(--warning)', borderColor: 'var(--warning)' } : {}}>
@@ -132,7 +144,9 @@ const AddTaskModal = ({ onAdd, onClose, parentId = 0 }) => {
                 )}
                 <div className="flex gap-2.5">
                     <button onClick={onClose} className="btn btn-ghost flex-1">Cancel</button>
-                    <button onClick={submit} className="btn btn-gold flex-1" style={{ fontSize: 13 }}>Create</button>
+                    <button onClick={submit} className="btn btn-gold flex-1" style={{ fontSize: 13 }}>
+                        {initialTask ? 'Save Changes' : 'Create'}
+                    </button>
                 </div>
             </motion.div>
         </div>
@@ -143,8 +157,7 @@ const AddTaskModal = ({ onAdd, onClose, parentId = 0 }) => {
 const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode, isSelected, onSelect, timers, setTimers, onAddSub, onAskAI }) => {
     const [expanded, setExpanded] = useState(false);
     const [localNotes, setLocalNotes] = useState(task.notes || '');
-    const [editing, setEditing] = useState(false);
-    const [editVal, setEditVal] = useState(task.content || '');
+    const [showEdit, setShowEdit] = useState(false);
     const [timerOn, setTimerOn] = useState(false);
     const [ctx, setCtx] = useState(null);
     const [checking, setChecking] = useState(false);
@@ -191,9 +204,8 @@ const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode,
         else safeCall('update_task_status', task.id, 'Completed');
         setTimeout(() => setChecking(false), 350);
     };
-    const saveEdit = () => {
-        if (editVal.trim() !== task.content) safeCall('update_task', task.id, editVal, localNotes, task.links || '');
-        setEditing(false);
+    const handleSave = (td) => {
+        safeCall('update_task', td.id, td.content, td.notes, task.links || '', td.tags?.join(',') || '', td.priority, td.due_date || '', td.is_achievement);
     };
     const handleCtx = (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -222,21 +234,13 @@ const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode,
                 </button>
                 <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-start gap-3">
-                        {editing ? (
-                            <input value={editVal} onChange={e => setEditVal(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(false); }}
-                                onBlur={saveEdit} autoFocus
-                                className="flex-1 bg-transparent text-sm font-medium border-b"
-                                style={{ color: 'var(--text-primary)', borderColor: 'var(--warning)' }} />
-                        ) : (
-                            <span className="task-title text-sm font-medium leading-snug cursor-default flex-1"
-                                style={{ color: 'var(--text-primary)' }}
-                                onClick={() => setExpanded(!expanded)}
-                                onDoubleClick={() => { setEditing(true); setExpanded(false); }}>
-                                {task.is_achievement && <span style={{ color: 'var(--warning)', marginRight: 4 }}>★</span>}
-                                {task.content}
-                            </span>
-                        )}
+                        <span className="task-title text-sm font-medium leading-snug cursor-default flex-1"
+                            style={{ color: 'var(--text-primary)' }}
+                            onClick={() => setExpanded(!expanded)}
+                            onDoubleClick={() => setShowEdit(true)}>
+                            {task.is_achievement && <span style={{ color: 'var(--warning)', marginRight: 4 }}>★</span>}
+                            {task.content}
+                        </span>
                         <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
                             {(timers[task.id] > 0 || task.time_spent > 0) && (
                                 <span className={`mono text-xs font-semibold px-2 py-0.5 rounded-lg ${timerOn ? 'breathe' : ''}`}
@@ -287,13 +291,13 @@ const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode,
                                 <div className="pt-3 space-y-3">
                                     {task.notes && <div className="md" dangerouslySetInnerHTML={{ __html: md(task.notes) }} />}
                                     <textarea value={localNotes} onChange={e => setLocalNotes(e.target.value)}
-                                        onBlur={() => safeCall('update_task', task.id, task.content, localNotes, task.links || '')}
+                                        onBlur={() => safeCall('update_task', task.id, task.content, localNotes, task.links || '', task.tags?.join(',') || '', task.priority, task.due_date || '', task.is_achievement)}
                                         className="w-full resize-none rounded-xl p-3 text-xs mono"
                                         style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 70, lineHeight: 1.8 }}
                                         placeholder="Add notes... (Markdown supported)" />
                                     <div className="flex items-center gap-2">
                                         <button onClick={() => onAddSub(task.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>+ Subtask</button>
-                                        <button onClick={() => { setEditing(true); setExpanded(false); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>Edit</button>
+                                        <button onClick={() => setShowEdit(true)} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>Edit</button>
                                         <button onClick={() => safeCall('delete_task', task.id)} className="btn btn-danger ml-auto" style={{ fontSize: 11, padding: '6px 12px' }}>Delete</button>
                                     </div>
                                 </div>
@@ -312,7 +316,7 @@ const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode,
             </div>
             {ctx && <CtxMenu pos={ctx} onClose={() => setCtx(null)} items={[
                 { heading: 'Actions' },
-                { icon: '✏', label: 'Edit title', action: () => { setEditing(true); setExpanded(false); } },
+                { icon: '✏', label: 'Edit task', action: () => setShowEdit(true) },
                 { icon: '↳', label: 'Add subtask', action: () => onAddSub(task.id) },
                 { icon: isDone ? '↩' : '✓', label: isDone ? 'Mark pending' : 'Mark complete', action: () => isDone ? safeCall('update_task_status', task.id, 'Pending') : setShowCompleteModal(true) },
                 'sep',
@@ -324,6 +328,9 @@ const TaskNode = memo(({ task, depth = 0, safeCall, isFocused, onFocus, selMode,
                 { icon: '✕', label: 'Delete task', danger: true, action: () => safeCall('delete_task', task.id) },
             ]} />}
             {showCompleteModal && <CompleteTaskModal task={task} onConfirm={confirmComplete} onClose={() => setShowCompleteModal(false)} />}
+            <AnimatePresence>
+                {showEdit && <TaskModal initialTask={task} onClose={() => setShowEdit(false)} onSave={handleSave} />}
+            </AnimatePresence>
         </div>
     );
 });
@@ -423,9 +430,14 @@ const MissionsPage = ({ data, safeCall, focusId, setFocusId, timers, setTimers, 
             });
             t = t.filter(task => matchIds.has(task.id));
         }
-        const now = new Date(); now.setHours(0, 0, 0, 0);
-        if (filter === 'today') t = t.filter(t => t.parent_id !== 0 || (t.due_date && new Date(t.due_date) <= now));
-        if (filter === 'high')  t = t.filter(t => t.parent_id !== 0 || t.priority === 'High');
+        const now = parseLocal(new Date());
+        if (filter === 'today') t = t.filter(t => {
+            if (t.parent_id !== 0) return true;
+            if (!t.due_date) return false;
+            const d = parseLocal(t.due_date);
+            return d.getTime() <= now.getTime();
+        });
+        if (filter === 'high') t = t.filter(t => t.parent_id !== 0 || t.priority === 'High');
         if (filter === 'nodate') t = t.filter(t => t.parent_id !== 0 || !t.due_date);
         return t;
     }, [data.tasks, filter, search]);
@@ -438,7 +450,12 @@ const MissionsPage = ({ data, safeCall, focusId, setFocusId, timers, setTimers, 
 
     const stats = useMemo(() => {
         const total = data.tasks.length, comp = data.tasks.filter(t => t.status === 'Completed').length;
-        const overdue = data.tasks.filter(t => { if (!t.due_date || t.status === 'Completed') return false; return new Date(t.due_date) < new Date(); }).length;
+        const now = parseLocal(new Date());
+        const overdue = data.tasks.filter(t => {
+            if (!t.due_date || t.status === 'Completed') return false;
+            const d = parseLocal(t.due_date);
+            return d.getTime() < now.getTime();
+        }).length;
         return { total, comp, active: total - comp, overdue, momentum: total > 0 ? Math.round((comp / total) * 100) : 0 };
     }, [data.tasks]);
 
@@ -616,7 +633,7 @@ const MissionsPage = ({ data, safeCall, focusId, setFocusId, timers, setTimers, 
             </AnimatePresence>
 
             <AnimatePresence>
-                {showAdd && <AddTaskModal onClose={() => setShowAdd(false)} parentId={addParentId} onAdd={handleAdd} />}
+                {showAdd && <TaskModal onClose={() => setShowAdd(false)} parentId={addParentId} onSave={handleAdd} />}
             </AnimatePresence>
             <AnimatePresence>
                 {showQuick && <QuickCapture onClose={() => setShowQuick(false)} onAdd={handleAdd} />}
@@ -639,4 +656,4 @@ const MissionsPage = ({ data, safeCall, focusId, setFocusId, timers, setTimers, 
 };
 
 // ─── EXPORTS ─────────────────────────────────────────────────────────────────
-Object.assign(window, { DailyFocusWidget, AddTaskModal, TaskNode, QuickCapture, MissionsPage, PAGE_SIZE });
+Object.assign(window, { DailyFocusWidget, TaskModal, TaskNode, QuickCapture, MissionsPage, PAGE_SIZE });

@@ -14,31 +14,30 @@ const HistoryPage = ({ data, safeCall }) => {
     const [editingItem, setEditingItem] = useState(null);
     const [page, setPage] = useState(1);
 
-    const handleSaveLog = () => {
-        if (!editingItem) return;
-        safeCall('update_task', editingItem.id, editingItem.content, editingItem.notes, editingItem.links || '');
+    const handleSaveLog = (updated) => {
+        safeCall('update_task', updated.id, updated.content, updated.notes, updated.links || '', updated.tags?.join(',') || '', updated.priority, updated.due_date || '', updated.is_achievement);
         setEditingItem(null);
     };
 
     const IC = {
-        High:   { dot: 'var(--danger)',  ring: true },
+        High: { dot: 'var(--danger)', ring: true },
         Medium: { dot: 'var(--warning)', ring: false },
-        Low:    { dot: 'var(--success)', ring: false },
+        Low: { dot: 'var(--success)', ring: false },
     };
 
     const completedItems = useMemo(() => {
         let items = data.tasks.filter(t => t.status === 'Completed').map(t => ({
             ...t, dateStr: t.completed_at || t.timestamp, impact: t.priority,
         }));
-        if (filter === 'tasks')        items = items.filter(i => !i.is_achievement);
+        if (filter === 'tasks') items = items.filter(i => !i.is_achievement);
         if (filter === 'achievements') items = items.filter(i => i.is_achievement);
         if (search.trim()) {
             const q = search.toLowerCase();
             items = items.filter(i => i.content.toLowerCase().includes(q) || (i.notes && i.notes.toLowerCase().includes(q)));
         }
         items.sort((a, b) => {
-            if (sortBy === 'date_asc')  return new Date(a.dateStr || 0) - new Date(b.dateStr || 0);
-            if (sortBy === 'name_asc')  return a.content.localeCompare(b.content);
+            if (sortBy === 'date_asc') return new Date(a.dateStr || 0) - new Date(b.dateStr || 0);
+            if (sortBy === 'name_asc') return a.content.localeCompare(b.content);
             if (sortBy === 'name_desc') return b.content.localeCompare(a.content);
             return new Date(b.dateStr || 0) - new Date(a.dateStr || 0);
         });
@@ -134,23 +133,7 @@ const HistoryPage = ({ data, safeCall }) => {
             )}
 
             {editingItem && (
-                <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingItem(null); }}>
-                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="card p-6 space-y-4 shadow-lg w-full max-w-lg" style={{ background: 'var(--bg-base)' }}>
-                        <div className="flex justify-between items-center">
-                            <h3 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Edit Details</h3>
-                            <button onClick={() => setEditingItem(null)} style={{ color: 'var(--text-disabled)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
-                        </div>
-                        <input value={editingItem.content} onChange={e => setEditingItem({ ...editingItem, content: e.target.value })}
-                            className="input-field w-full font-bold" placeholder="Title..." />
-                        <textarea value={editingItem.notes || ''} onChange={e => setEditingItem({ ...editingItem, notes: e.target.value })}
-                            className="input-field w-full resize-none text-xs mono" style={{ height: 120, lineHeight: 1.6 }}
-                            placeholder="Notes, context, markdown..." />
-                        <div className="flex gap-2.5 pt-2">
-                            <button onClick={() => setEditingItem(null)} className="btn btn-ghost flex-1">Cancel</button>
-                            <button onClick={handleSaveLog} className="btn btn-gold flex-1">Save</button>
-                        </div>
-                    </motion.div>
-                </div>
+                <window.TaskModal initialTask={editingItem} onClose={() => setEditingItem(null)} onSave={handleSaveLog} />
             )}
         </div>
     );

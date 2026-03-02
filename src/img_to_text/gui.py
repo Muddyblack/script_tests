@@ -1441,6 +1441,13 @@ class ImageOcrDialog(QWidget):
         ThemeManager().theme_changed.connect(self._apply_theme)
 
     # ------------------------------------------------------------------
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Re-apply Win32 caption color once the window is actually visible
+        mgr = ThemeManager()
+        apply_win32_titlebar(int(self.winId()), mgr["bg_base"], mgr.is_dark)
+
+    # ------------------------------------------------------------------
     def _apply_theme(self) -> None:
         mgr = ThemeManager()
         bg = mgr["bg_base"]
