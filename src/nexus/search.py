@@ -64,6 +64,7 @@ from src.common.search_engine import SearchEngine
 from src.common.theme import ThemeManager
 from src.file_ops.file_ops import FileToolsWindow
 from src.img_to_text import start_snip_to_text
+from src.img_to_text.gui import start_file_to_text
 
 from .system_commands import (
     add_task_to_chronos as _add_task_chronos,
@@ -91,9 +92,6 @@ from .system_commands import (
 )
 from .system_commands import (
     launch_color_picker as _launch_color_picker,
-)
-from .system_commands import (
-    launch_env_var_explorer as _launch_env_var,
 )
 from .system_commands import (
     launch_file_ops as _launch_file_ops,
@@ -773,9 +771,11 @@ class NexusSearch(QWidget):
             ("processes", "Processes", "zap.svg"),
             ("toggles", "System", "settings.svg"),
         ]
+        mgr = ThemeManager()
+        text_sec = mgr.theme_data.get("colors", {}).get("text_secondary", "#78849e")
         for key, label, icon_name in modes_metadata:
             btn = QPushButton(f"  {label}")
-            btn.setIcon(self._create_svg_icon(icon_name, color="#78849e"))
+            btn.setIcon(self._create_svg_icon(icon_name, color=text_sec))
             btn.setCheckable(True)
             btn.setChecked(self.modes[key])
             btn.setObjectName("mode_btn")
@@ -1272,6 +1272,20 @@ class NexusSearch(QWidget):
         """Snip a region on screen and OCR it into clipboard."""
         start_snip_to_text(nexus=self)
 
+    def start_img_to_text_gui(self) -> None:
+        """Open the full Image OCR dialog (file / drag-drop / paste)."""
+        if not hasattr(self, "_ocr_dlg") or self._ocr_dlg is None:
+            self._ocr_dlg = start_file_to_text(nexus=self)
+            self._ocr_dlg.destroyed.connect(lambda: setattr(self, "_ocr_dlg", None))
+        else:
+            self._ocr_dlg.show()
+            self._ocr_dlg.raise_()
+            self._ocr_dlg.activateWindow()
+
+    def start_chronos(self) -> None:
+        """Launch the Chronos app."""
+        _launch_chronos(self)
+
     # ------------------------------------------------------------------
     # Search engine
     # ------------------------------------------------------------------
@@ -1524,6 +1538,13 @@ class NexusSearch(QWidget):
                     "#22c55e",
                 ),
                 (
+                    "Image → Text (OCR)",
+                    "Open file / drag-drop / paste image and extract text",
+                    "img_to_text_gui",
+                    "image.svg",
+                    "#34d399",
+                ),
+                (
                     "Clipboard Manager",
                     "Persistent multi-history clipboard with search & pin",
                     "clipboard_manager",
@@ -1550,13 +1571,6 @@ class NexusSearch(QWidget):
                     "window_manager",
                     "menu.svg",
                     "#fb923c",
-                ),
-                (
-                    "Env Var Explorer",
-                    "Browse · edit · add system & user env vars",
-                    "env_var_explorer",
-                    "settings.svg",
-                    "#e879f9",
                 ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
@@ -1981,24 +1995,42 @@ class NexusSearch(QWidget):
             if file_path and self._is_unc_path(file_path):
                 icon_name = "globe.svg"
 
-            # Render SVG with color
-            color_hex = c.get("color", "#9ca3af")
-            svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", icon_name)
-            if not os.path.exists(svg_path):
-                svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", "file.svg")
+            # -- Attempt to use cached native icon before falling back to SVG --
+            cached_pixmap = None
+            if file_path:
+                ext = os.path.splitext(file_path)[1].lower()
+                is_dir = (
+                    os.path.isdir(file_path) if os.path.exists(file_path) else False
+                )
+                cache_key = (
+                    "__dir__"
+                    if is_dir
+                    else (file_path if ext in (".exe", ".lnk", ".url") else ext)
+                )
+                cached_pixmap = self.icon_cache.get(cache_key)
 
-            try:
-                from PyQt6.QtCore import QByteArray
-                from PyQt6.QtGui import QPixmap
+            if cached_pixmap:
+                icon_label.setPixmap(cached_pixmap)
+                icon_label.setProperty("native_loaded", True)
+            else:
+                # Render SVG with color
+                color_hex = c.get("color", "#9ca3af")
+                svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", icon_name)
+                if not os.path.exists(svg_path):
+                    svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", "file.svg")
 
-                with open(svg_path, encoding="utf-8") as fs:
-                    svg_data = fs.read()
-                svg_data = svg_data.replace("currentColor", color_hex)
-                pix = QPixmap()
-                pix.loadFromData(QByteArray(svg_data.encode("utf-8")), "SVG")
-                icon_label.setPixmap(pix)
-            except Exception:
-                pass
+                try:
+                    from PyQt6.QtCore import QByteArray
+                    from PyQt6.QtGui import QPixmap
+
+                    with open(svg_path, encoding="utf-8") as fs:
+                        svg_data = fs.read()
+                    svg_data = svg_data.replace("currentColor", color_hex)
+                    pix = QPixmap()
+                    pix.loadFromData(QByteArray(svg_data.encode("utf-8")), "SVG")
+                    icon_label.setPixmap(pix)
+                except Exception:
+                    pass
 
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -2033,8 +2065,16 @@ class NexusSearch(QWidget):
                 pri = parsed.get("priority", "Medium")
                 if pri != "Medium":
                     pri_lbl = QLabel(pri)
-                    pri_bg = "#450a0a" if pri == "High" else "#064e3b"
-                    pri_fg = "#f87171" if pri == "High" else "#34d399"
+                    # Use theme-aware colors if possible, else fall back to darker versions for light themes
+                    mgr = ThemeManager()
+                    is_dark = mgr.is_dark
+                    if pri == "High":
+                        pri_bg = "#450a0a" if is_dark else "#fee2e2"
+                        pri_fg = "#f87171" if is_dark else "#991b1b"
+                    else:  # Low
+                        pri_bg = "#064e3b" if is_dark else "#d1fae5"
+                        pri_fg = "#34d399" if is_dark else "#065f46"
+
                     pri_lbl.setStyleSheet(
                         f"background: {pri_bg}; color: {pri_fg}; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
                     )
@@ -2044,16 +2084,24 @@ class NexusSearch(QWidget):
                 due = parsed.get("due_date")
                 if due:
                     due_lbl = QLabel(f"📅 {due}")
+                    mgr = ThemeManager()
+                    is_dark = mgr.is_dark
+                    due_bg = "#1e293b" if is_dark else "#f1f5f9"
+                    due_fg = "#94a3b8" if is_dark else "#475569"
                     due_lbl.setStyleSheet(
-                        "background: #1e293b; color: #94a3b8; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
+                        f"background: {due_bg}; color: {due_fg}; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
                     )
                     badge_layout.addWidget(due_lbl)
 
                 # Tags
                 for tag in parsed.get("tags", []):
                     tag_lbl = QLabel(f"#{tag}")
+                    mgr = ThemeManager()
+                    is_dark = mgr.is_dark
+                    tag_bg = "#1e1b4b" if is_dark else "#e0e7ff"
+                    tag_fg = "#818cf8" if is_dark else "#3730a3"
                     tag_lbl.setStyleSheet(
-                        "background: #1e1b4b; color: #818cf8; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
+                        f"background: {tag_bg}; color: {tag_fg}; font-size: 9px; font-weight: bold; border-radius: 4px; padding: 2px 6px;"
                     )
                     badge_layout.addWidget(tag_lbl)
 
@@ -2353,6 +2401,8 @@ class NexusSearch(QWidget):
                     _launch_chronos(self)
                 elif data["cmd"] == "img_to_text":
                     self.start_img_to_text()
+                elif data["cmd"] == "img_to_text_gui":
+                    self.start_img_to_text_gui()
                 elif data["cmd"] == "clipboard_manager":
                     _launch_clipboard(self)
                 elif data["cmd"] == "port_inspector":
@@ -2361,8 +2411,6 @@ class NexusSearch(QWidget):
                     _launch_hash_tool(self)
                 elif data["cmd"] == "window_manager":
                     _launch_window_manager(self)
-                elif data["cmd"] == "env_var_explorer":
-                    _launch_env_var(self)
                 elif (
                     data["cmd"].startswith("toggle_")
                     or data["cmd"].startswith("cmd_")
@@ -2445,6 +2493,16 @@ class NexusSearch(QWidget):
             self._theme_btn.setText(
                 f"◑ {mgr.theme_data.get('name', mgr.current_theme_name)}"
             )
+
+        # Apply Win32 titlebar theme
+        from src.common.theme import apply_win32_titlebar
+
+        apply_win32_titlebar(int(self.winId()), mgr["bg_base"], mgr.is_dark)
+
+        # Refresh current results to update inline styles (badge colors, etc.)
+        if hasattr(self, "current_candidates") and self.current_candidates:
+            self.results_list.clear()  # Clear before re-populating
+            self.populate_list_results(self.current_candidates)
 
     def _open_theme_picker(self):
         """Open the VS Code-style floating theme picker."""

@@ -13,10 +13,8 @@ import time
 
 from PyQt6.QtCore import QFileInfo, QSize, Qt, QTimer
 from PyQt6.QtGui import (
-    QColor,
     QCursor,
     QIcon,
-    QPalette,
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -79,6 +77,47 @@ except ImportError:
     WATCHDOG_AVAILABLE = False
 
 
+def _resolve_unc(path: str) -> str:
+    """Return the UNC path for a mapped network drive, or the original path.
+
+    E.g.  "D:\\subfolder"  ->  "\\\\server.example.com\\share\\subfolder"
+    Falls back to *path* silently if the drive is not a network drive or if
+    the Win32 call is unavailable.
+    """
+    if sys.platform != "win32" or not path:
+        return path
+    norm = path.replace("/", "\\")
+    # Already a UNC path — nothing to do
+    if norm.startswith("\\\\"):
+        return norm
+    # Only drive-letter roots can be mapped network drives
+    if len(norm) < 2 or norm[1] != ":":
+        return path
+    drive_letter = norm[0].upper()
+    drive_root = f"{drive_letter}:\\"
+    try:
+        DRIVE_REMOTE = 4
+        drive_type = ctypes.windll.kernel32.GetDriveTypeW(drive_root)
+        if drive_type != DRIVE_REMOTE:
+            return path
+        mpr = ctypes.WinDLL("mpr")
+        buf_size = ctypes.c_ulong(1024)
+        buf = ctypes.create_unicode_buffer(1024)
+        # WNetGetUniversalNameW(localPath, UNIVERSAL_NAME_INFO_LEVEL=1, buffer, &bufSize)
+        ret = mpr.WNetGetUniversalNameW(
+            f"{drive_letter}:", ctypes.c_ulong(1), buf, ctypes.byref(buf_size)
+        )
+        if ret == 0:  # NO_ERROR
+            # UNIVERSAL_NAME_INFO: first field is LPWSTR pointing into the same buffer
+            unc_ptr = ctypes.cast(buf, ctypes.POINTER(ctypes.c_wchar_p))[0]
+            if unc_ptr:
+                rest = norm[2:]  # everything after the "D:" prefix
+                return unc_ptr + rest
+    except Exception:
+        pass
+    return path
+
+
 class XExplorer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -96,7 +135,12 @@ class XExplorer(QMainWindow):
 
         self._build_all()
         self.load_settings()
-        self._apply_theme()
+        from src.common.theme import WindowThemeBridge
+
+        self._theme_bridge = WindowThemeBridge(
+            ThemeManager(), self, titlebar_color_key="bg_elevated"
+        )
+        self._theme_bridge.apply()  # Initial apply
         ThemeManager().theme_changed.connect(self._on_theme_changed)
 
         icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
@@ -793,51 +837,6 @@ class XExplorer(QMainWindow):
         """
         self.setStyleSheet(qss)
 
-        # ── Windows Title Bar & Palette Sync ──
-        if sys.platform == "win32":
-            try:
-                hwnd = int(self.winId())
-                # DWMWA_USE_IMMERSIVE_DARK_MODE constants
-                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-                DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19
-
-                value = ctypes.c_int(1 if T.dark else 0)
-                # Try setting both for maximum compatibility across Windows 10/11 versions
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd,
-                    DWMWA_USE_IMMERSIVE_DARK_MODE,
-                    ctypes.byref(value),
-                    ctypes.sizeof(value),
-                )
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd,
-                    DWMWA_USE_IMMERSIVE_DARK_MODE_OLD,
-                    ctypes.byref(value),
-                    ctypes.sizeof(value),
-                )
-            except Exception:
-                pass
-
-        app_inst = QApplication.instance()
-        if app_inst:
-            pal = app_inst.palette()
-            bg = QColor(T["bg_elevated"])
-            fg = QColor(T["text_primary"])
-            base = QColor(T["bg_base"])
-
-            pal.setColor(QPalette.ColorRole.Window, bg)
-            pal.setColor(QPalette.ColorRole.WindowText, fg)
-            pal.setColor(QPalette.ColorRole.Base, base)
-            pal.setColor(QPalette.ColorRole.AlternateBase, QColor(T["row_alt"]))
-            pal.setColor(QPalette.ColorRole.Text, fg)
-            pal.setColor(QPalette.ColorRole.Button, bg)
-            pal.setColor(QPalette.ColorRole.ButtonText, fg)
-            pal.setColor(QPalette.ColorRole.Highlight, QColor(T["accent"]))
-            pal.setColor(
-                QPalette.ColorRole.HighlightedText, QColor(T["text_on_accent"])
-            )
-            app_inst.setPalette(pal)
-
     # ──────────────────────────────────────────────────────────────────────────
     #  ICON HELPERS
     # ──────────────────────────────────────────────────────────────────────────
@@ -914,7 +913,10 @@ class XExplorer(QMainWindow):
             try:
                 for f in json.loads(res[0]):
                     path = f.get("path", "")
-                    label = f.get("label", path)
+                    # Migrate old drive-letter entries to their real UNC path
+                    # so that \\server\share is always shown, never D:\.
+                    path = _resolve_unc(path)
+                    label = _resolve_unc(f.get("label", path))
                     self._add_drive_item(path, label)
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -1012,7 +1014,11 @@ class XExplorer(QMainWindow):
     def add_managed_folder(self):
         path = QFileDialog.getExistingDirectory(self, "Select Folder to Index")
         if path:
-            self._add_drive_item(path, path)
+            # Resolve mapped network drives to their UNC path so the stored
+            # path and all indexed entries use \\server\share\... notation.
+            path = path.replace("/", "\\")
+            unc = _resolve_unc(path)
+            self._add_drive_item(unc, unc)
             self.save_settings()
 
     def add_ignore_rule(self):
@@ -1043,12 +1049,13 @@ class XExplorer(QMainWindow):
         ]
         added = []
         for d in drives:
-            if d not in existing:
-                letter = d[0].upper() if d else "?"
-                # Friendly label e.g. "System C:\" or "Data D:\"
-                label = f"{letter}:\\"
-                self._add_drive_item(d, label)
-                added.append(d)
+            # Resolve to UNC for mapped network drives so paths stored in the
+            # index always use \\server\share\... notation.
+            resolved = _resolve_unc(d)
+            if resolved not in existing and d not in existing:
+                label = resolved  # shows UNC path (or drive letter if local)
+                self._add_drive_item(resolved, label)
+                added.append(resolved)
         if added:
             self.save_settings()
             QMessageBox.information(self, "Drives Found", f"Added: {', '.join(added)}")
@@ -1144,23 +1151,38 @@ class XExplorer(QMainWindow):
             )
 
     def clear_index(self):
+        db_mb = self._db_size_mb()
         if (
             QMessageBox.question(
                 self,
                 "Clear Index",
-                "Wipe the entire index cache?",
+                f"Wipe the entire index cache and shrink the DB file?\n"
+                f"Current size: {db_mb:.1f} MB\n\n"
+                "This cannot be undone — you will need to re-index.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             == QMessageBox.StandardButton.Yes
         ):
+            # DELETE + VACUUM so the file actually shrinks on disk
             conn = sqlite3.connect(DB_PATH)
             conn.execute("DELETE FROM files")
+            conn.execute("DELETE FROM folder_stats")
+            conn.commit()
+            conn.execute("VACUUM")  # reclaims disk space
             conn.commit()
             conn.close()
             for w in [self._details, self._icons_view, self._tree_view]:
                 w.clear()
             self.update_stats()
+
+    @staticmethod
+    def _db_size_mb() -> float:
+        """Return the on-disk size of the index DB in megabytes."""
+        try:
+            return os.path.getsize(DB_PATH) / (1024 * 1024)
+        except OSError:
+            return 0.0
 
     def update_stats(self):
         try:
@@ -1177,8 +1199,10 @@ class XExplorer(QMainWindow):
                 if self._last_indexing_dur
                 else ""
             )
+            db_mb = self._db_size_mb()
+            db_str = f"  ·  DB: {db_mb:.0f} MB" if db_mb >= 1 else ""
             self._status_lbl.setText(
-                f"{count:,} items indexed  ·  Last run: {last}{dur_str}"
+                f"{count:,} items indexed  ·  Last run: {last}{dur_str}{db_str}"
             )
         except Exception:
             self._status_lbl.setText("Ready")
@@ -1193,8 +1217,6 @@ class XExplorer(QMainWindow):
     def change_filter(self, ftype):
         self.filter_type = ftype
         self.perform_search()
-
-
 
     def set_view(self, mode):
         self.view_mode = mode
@@ -1342,30 +1364,51 @@ class XExplorer(QMainWindow):
             lw.addItem(item)
         lw.setUpdatesEnabled(True)
 
+    @staticmethod
+    def _split_path_parts(path: str) -> list:
+        """Split a path into display parts, correctly handling UNC paths.
+
+        UNC example:  "\\\\server\\share\\folder\\file.txt"
+          -> ["\\\\server\\share", "folder", "file.txt"]
+        Local example: "C:\\folder\\file.txt"
+          -> ["C:", "folder", "file.txt"]
+        """
+        norm = path.replace("/", "\\")
+        if norm.startswith("\\\\"):
+            # UNC: \\server\share[\rest...]
+            # Strip the leading \\ then split; first two tokens form the UNC root.
+            stripped = norm[2:]  # "server\share\folder\file.txt"
+            tokens = stripped.split("\\")
+            if len(tokens) >= 2:
+                unc_root = "\\\\" + tokens[0] + "\\" + tokens[1]
+                rest = [t for t in tokens[2:] if t]
+                return [unc_root] + rest
+            return [norm]
+        # Regular path: filter out empty strings produced by a leading separator
+        return [p for p in norm.split("\\") if p]
+
     def _fill_tree(self, results):
         tree = self._tree_view
         tree.setUpdatesEnabled(False)
         tree.clear()
         nodes: dict[str, QTreeWidgetItem] = {}
         for path, is_dir in results[:1500]:
-            parts = path.replace("\\", "/").split("/")
+            parts = self._split_path_parts(path)
             parent = tree.invisibleRootItem()
-            so_far = ""
+            accumulated = ""
             for i, part in enumerate(parts):
-                sep = "/" if i < len(parts) - 1 else ""
-                so_far += part + sep
-                full = so_far.replace("/", "\\")
-                if so_far in nodes:
-                    parent = nodes[so_far]
+                accumulated = part if i == 0 else accumulated + "\\" + part
+                if accumulated in nodes:
+                    parent = nodes[accumulated]
                 else:
                     folder = (i < len(parts) - 1) or is_dir
                     icon = (
                         self._folder_icon(16) if folder else self._file_icon(part, 16)
                     )
-                    new = QTreeWidgetItem(parent, [part, full])
-                    new.setData(0, Qt.ItemDataRole.UserRole, full)
+                    new = QTreeWidgetItem(parent, [part, accumulated])
+                    new.setData(0, Qt.ItemDataRole.UserRole, accumulated)
                     new.setIcon(0, icon)
-                    nodes[so_far] = new
+                    nodes[accumulated] = new
                     parent = new
         tree.setUpdatesEnabled(True)
 

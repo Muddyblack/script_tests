@@ -6,7 +6,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from PyQt6.QtWidgets import QApplication
 
-from src.common.config import IMG_TO_TEXT_HOTKEY, SUMMON_HOTKEY
+from src.common.config import CHRONOS_HOTKEY, IMG_TO_TEXT_HOTKEY, SUMMON_HOTKEY
 
 from .hotkeys import _HotkeyWindow
 from .search import NexusSearch
@@ -36,12 +36,14 @@ def main():
         lambda: nexus.summon() if not nexus.isVisible() else nexus.hide()
     )
     bridge.snip_to_text_signal.connect(nexus.start_img_to_text)
+    bridge.chronos_signal.connect(nexus.start_chronos)
 
     # RegisterHotKey-based hotkeys (Win) or pynput (Linux)
     hw = _HotkeyWindow()
     hw.toggle_signal.connect(bridge.toggle_signal)
     hw.ocr_signal.connect(bridge.snip_to_text_signal)
-    hw.start(SUMMON_HOTKEY, IMG_TO_TEXT_HOTKEY)
+    hw.chronos_signal.connect(bridge.chronos_signal)
+    hw.start(SUMMON_HOTKEY, IMG_TO_TEXT_HOTKEY, CHRONOS_HOTKEY)
 
     # Pre-warm OCR worker in background so model is ready before first use
     from src.img_to_text.extractor import pre_warm as _ocr_prewarm

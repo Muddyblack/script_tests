@@ -169,13 +169,23 @@ def _get_proc(languages: list[str]) -> subprocess.Popen:
             [sys.executable, "-u", str(_WORKER)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,   # let worker's terminal output flow through to the console
             text=True,
         )
         _proc.stdin.write(",".join(languages) + "\n")
         _proc.stdin.flush()
-        # Wait for "ready"
-        _proc.stdout.readline()
+        # Wait for "ready" — or an error JSON if models are missing
+        startup_line = _proc.stdout.readline().strip()
+        if startup_line != "ready":
+            try:
+                data = json.loads(startup_line)
+                if "message" in data:
+                    raise RuntimeError(data["message"])
+            except (json.JSONDecodeError, KeyError):
+                pass
+            raise RuntimeError(
+                "OCR worker failed to start — check the console for details."
+            )
         _proc_languages = languages
 
     return _proc

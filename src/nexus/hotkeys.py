@@ -105,13 +105,16 @@ if sys.platform == "win32":
 
         toggle_signal = pyqtSignal()
         ocr_signal = pyqtSignal()
+        chronos_signal = pyqtSignal()
 
         _TOGGLE_ID = 1
         _OCR_ID = 2
+        _CHRONOS_ID = 3
 
-        def start(self, toggle_hotkey: str, ocr_hotkey: str):
+        def start(self, toggle_hotkey: str, ocr_hotkey: str, chronos_hotkey: str):
             self._toggle_mods, self._toggle_vk = _parse_hotkey(toggle_hotkey)
             self._ocr_mods, self._ocr_vk = _parse_hotkey(ocr_hotkey)
+            self._chronos_mods, self._chronos_vk = _parse_hotkey(chronos_hotkey)
             threading.Thread(target=self._run, daemon=True, name="HotkeyWindow").start()
 
         def _run(self):
@@ -121,6 +124,8 @@ if sys.platform == "win32":
                         self.toggle_signal.emit()
                     elif wparam == self._OCR_ID:
                         self.ocr_signal.emit()
+                    elif wparam == self._CHRONOS_ID:
+                        self.chronos_signal.emit()
                 return _user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
             proc = _WndProc(wnd_proc)
@@ -162,6 +167,12 @@ if sys.platform == "win32":
                 print(
                     f"[HotkeyWindow] RegisterHotKey (ocr) failed: {ctypes.GetLastError()}"
                 )
+            if not _user32.RegisterHotKey(
+                hwnd, self._CHRONOS_ID, self._chronos_mods, self._chronos_vk
+            ):
+                print(
+                    f"[HotkeyWindow] RegisterHotKey (chronos) failed: {ctypes.GetLastError()}"
+                )
 
             msg = wt.MSG()
             while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0):
@@ -177,8 +188,9 @@ else:
     class _HotkeyWindow(QObject):
         toggle_signal = pyqtSignal()
         ocr_signal = pyqtSignal()
+        chronos_signal = pyqtSignal()
 
-        def start(self, toggle_hotkey: str, ocr_hotkey: str):
+        def start(self, toggle_hotkey: str, ocr_hotkey: str, chronos_hotkey: str):
             if not pynput_keyboard:
                 print("Hotkeys not supported: 'pynput' library not found.")
                 return
@@ -210,6 +222,7 @@ else:
             hotkeys = {
                 format_hk(toggle_hotkey): self.toggle_signal.emit,
                 format_hk(ocr_hotkey): self.ocr_signal.emit,
+                format_hk(chronos_hotkey): self.chronos_signal.emit,
             }
 
             def run_listener():

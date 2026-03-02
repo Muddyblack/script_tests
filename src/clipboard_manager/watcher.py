@@ -6,7 +6,6 @@ is open.  The manager window is purely a *viewer* of this DB.
 """
 
 import hashlib
-import os
 import sqlite3
 import time
 
@@ -14,11 +13,10 @@ from PyQt6.QtCore import QObject, QTimer
 from PyQt6.QtWidgets import QApplication
 
 try:
-    from src.common.config import APPDATA
+    from src.common.config import CLIPBOARD_DB as CLIP_DB
 except ImportError:
-    APPDATA = os.getenv("APPDATA", ".")
-
-CLIP_DB = os.path.join(APPDATA, "nexus_clipboard.db")
+    import os as _os
+    CLIP_DB = _os.path.join(_os.getenv("APPDATA", "."), "nexus_clipboard.db")
 MAX_HISTORY = 500
 POLL_MS = 500
 

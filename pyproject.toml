@@ -9,7 +9,6 @@ dependencies = [
     "PyQt6",
     "PyQt6-WebEngine",
     "keyboard",
-    "mouse",
     "watchdog",
     "easyocr",
 ]
@@ -26,7 +25,6 @@ clipboard-manager = "src.clipboard_manager.clipboard_manager:main"
 port-inspector = "src.port_inspector.port_inspector:main"
 hash-tool = "src.hash_tool.hash_tool:main"
 window-manager = "src.window_manager.window_manager:main"
-env-var-explorer = "src.env_var_explorer.env_var_explorer:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -163,8 +163,9 @@ class ClipboardManager(QMainWindow):
         self.setMinimumSize(860, 580)
         self.resize(960, 640)
         self._build_ui()
-        self._apply_theme()
-        self._mgr.theme_changed.connect(self._apply_theme)
+        from src.common.theme import WindowThemeBridge
+
+        self._theme_bridge = WindowThemeBridge(self._mgr, self, TOOL_SHEET + _EXTRA)
         self._refresh_list()
 
         # Light UI refresh — picks up new entries written by the always-on watcher
@@ -278,11 +279,7 @@ class ClipboardManager(QMainWindow):
         splitter.setSizes([420, 380])
         outer.addWidget(splitter)
 
-    # ── Theme ─────────────────────────────────────────────────────────────────
-
-    def _apply_theme(self):
-        combined = TOOL_SHEET + _EXTRA
-        self._mgr.apply_to_widget(self, combined)
+    # ── List management ───────────────────────────────────────────────────────
 
     # ── List management ───────────────────────────────────────────────────────
 

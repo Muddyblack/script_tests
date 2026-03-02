@@ -527,7 +527,14 @@ class DriveWidget(QWidget):
         hl.setContentsMargins(12, 8, 12, 8)
         hl.setSpacing(10)
 
-        letter = path[0].upper() if path else "?"
+        # For UNC paths (\\server\share) use the first letter of the server
+        # name; for normal drive letters use the drive letter itself.
+        _np = path.replace("/", "\\") if path else ""
+        if _np.startswith("\\\\"):
+            _server = _np[2:].split("\\")[0]
+            letter = _server[0].upper() if _server else "N"
+        else:
+            letter = _np[0].upper() if _np else "?"
         self._badge = _LetterBadge(letter, theme)
         hl.addWidget(self._badge)
 

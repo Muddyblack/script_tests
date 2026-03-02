@@ -4,7 +4,9 @@ color_config.json
 .vscode/
 *.db
 win_venv/
-
+models/
+data/
+**/**/*artifactory*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

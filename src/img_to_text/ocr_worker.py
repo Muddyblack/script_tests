@@ -1,18 +1,45 @@
 """Persistent OCR worker — kept alive between calls, reads jobs from stdin."""
 
+import itertools
 import json
 import sys
+import threading
 from pathlib import Path
+
+# ── Terminal spinner ───────────────────────────────────────────────────────────
+
+def _start_spinner(msg: str) -> threading.Event:
+    """Start a braille spinner on stderr; returns a stop-event to kill it."""
+    stop = threading.Event()
+
+    def _spin():
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        for frame in itertools.cycle(frames):
+            if stop.is_set():
+                break
+            sys.stderr.write(f"\r  {frame}  {msg}   ")
+            sys.stderr.flush()
+            stop.wait(0.08)
+        # Clear the spinner line
+        sys.stderr.write("\r" + " " * (len(msg) + 10) + "\r")
+        sys.stderr.flush()
+
+    t = threading.Thread(target=_spin, daemon=True, name="ocr-spinner")
+    t.start()
+    return stop
 
 
 def get_model_dir() -> Path:
-    return Path.home() / ".EasyOCR" / "model"
+    # Store models inside the project so they travel with the repo
+    project_root = Path(__file__).parent.parent.parent
+    return project_root / "models" / "easyocr"
 
 
 def get_existing_models(model_dir: Path) -> set:
     if not model_dir.exists():
         return set()
     return {f.name for f in model_dir.iterdir()}
+
 
 
 def _avg_confidence(results) -> float:
@@ -53,25 +80,61 @@ def main():
     )
 
     model_dir = get_model_dir()
-    models_before = get_existing_models(model_dir)
+    project_root = Path(__file__).parent.parent.parent
 
-    if not models_before:
-        sys.stderr.write(
-            "⬇️  Downloading OCR models for the first time — this may take a minute.\n"
-            "    They'll be cached locally and never downloaded again.\n"
-        )
-        sys.stderr.flush()
+    sys.stderr.write(f"  🔁  Loading OCR models ({', '.join(sorted(get_existing_models(model_dir)))})…\n")
+    sys.stderr.flush()
+    spinner_stop = _start_spinner("Loading model weights")
+
+    import warnings
 
     import easyocr
 
-    # Drop recog_network — default is fine and avoids the invalid argument error
-    reader = easyocr.Reader(languages, gpu=False)
+    model_dir.mkdir(parents=True, exist_ok=True)
 
-    models_after = get_existing_models(model_dir)
-    new_models = models_after - models_before
-    if new_models:
-        sys.stderr.write(f"✅  Models ready ({', '.join(sorted(new_models))}).\n")
-        sys.stderr.flush()
+    # Suppress noisy-but-harmless third-party warnings
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*pin_memory.*", category=UserWarning)
+        warnings.filterwarnings("ignore", message=".*overflow.*", category=RuntimeWarning)
+        import os as _os
+        _devnull = open(_os.devnull, "w")
+        import sys as _sys
+        _old_stderr = _sys.stderr
+        _sys.stderr = _devnull
+        try:
+            reader = easyocr.Reader(
+                languages,
+                gpu=False,
+                model_storage_directory=str(model_dir),
+                download_enabled=False,   # never download — fail loudly instead
+            )
+        except Exception as exc:
+            rel_dir = (
+                model_dir.relative_to(project_root)
+                if model_dir.is_relative_to(project_root)
+                else model_dir
+            )
+            _sys.stderr = _old_stderr
+            _devnull.close()
+            spinner_stop.set()
+            # EasyOCR raises RuntimeError / FileNotFoundError for missing models
+            msg = (
+                f"Failed to load OCR model: {exc}\n\n"
+                f"Make sure all required .pth files are in  {rel_dir}\n"
+                "See  https://github.com/JaidedAI/EasyOCR  for model downloads."
+            )
+            sys.stderr.write(f"\n  ❌  {msg}\n\n")
+            sys.stderr.flush()
+            sys.stdout.write(json.dumps({"error": "missing_models", "message": msg}) + "\n")
+            sys.stdout.flush()
+            sys.exit(1)
+        finally:
+            _sys.stderr = _old_stderr
+            _devnull.close()
+
+    spinner_stop.set()
+    sys.stderr.write("  ✅  Ready.\n")
+    sys.stderr.flush()
 
     sys.stdout.write("ready\n")
     sys.stdout.flush()
@@ -115,6 +178,10 @@ def main():
             min_size = min(min_size, 1)
 
         try:
+            import warnings as _w
+            _w.filterwarnings("ignore", message=".*pin_memory.*", category=UserWarning)
+            _w.filterwarnings("ignore", message=".*overflow.*", category=RuntimeWarning)
+
             def _read(
                 adjust_value: float,
                 decoder: str,

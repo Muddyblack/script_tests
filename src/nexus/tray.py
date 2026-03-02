@@ -5,7 +5,7 @@ import os
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
-from src.common.config import ICON_PATH
+from src.common.config import CHRONOS_ICON_PATH, ICON_PATH, OCR_ICON_PATH
 from src.common.theme import ThemeManager
 
 
@@ -44,8 +44,16 @@ def create_tray_icon(app, nexus) -> QSystemTrayIcon:
     menu.addAction(show_action)
 
     ocr_action = QAction("🖼️  Snip → Text (OCR)", menu)
+    if os.path.exists(OCR_ICON_PATH):
+        ocr_action.setIcon(QIcon(OCR_ICON_PATH))
     ocr_action.triggered.connect(nexus.start_img_to_text)
     menu.addAction(ocr_action)
+
+    chronos_action = QAction("⏳  Tasks / Chronos", menu)
+    if os.path.exists(CHRONOS_ICON_PATH):
+        chronos_action.setIcon(QIcon(CHRONOS_ICON_PATH))
+    chronos_action.triggered.connect(nexus.start_chronos)
+    menu.addAction(chronos_action)
 
     menu.addSeparator()
 

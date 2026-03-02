@@ -1,5 +1,6 @@
 """Reusable Qt widgets: custom input, icon loader, signal bridge, rainbow frame."""
 
+import contextlib
 import os
 
 from PyQt6.QtCore import (
@@ -262,6 +263,9 @@ class IconWorker(QRunnable):
                 QTimer.singleShot(0, self.nexus.lazy_load_visible_icons)
         except Exception:
             pass
+        finally:
+            with contextlib.suppress(Exception):
+                self.nexus.pending_icons.discard(self.cache_key)
 
 
 # ---------------------------------------------------------------------------
@@ -272,3 +276,4 @@ class NexusBridge(QObject):
 
     toggle_signal = pyqtSignal()
     snip_to_text_signal = pyqtSignal()
+    chronos_signal = pyqtSignal()

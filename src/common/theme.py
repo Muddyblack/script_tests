@@ -14,6 +14,7 @@ For WebEngine-based tools:
 
 import json
 import os
+import sys
 
 from PyQt6.QtCore import QFileSystemWatcher, QObject, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
@@ -291,19 +292,26 @@ def apply_win32_titlebar(win_id: int, bg_hex: str, is_dark: bool) -> None:
         dwmapi = ctypes.windll.dwmapi
         hwnd = ctypes.wintypes.HWND(win_id)
 
-        # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-        dark = ctypes.c_int(1 if is_dark else 0)
-        dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
-
-        # DWMWA_CAPTION_COLOR = 35  (Windows 11+)
-        rgb = _hex_to_rgb(bg_hex)
-        if rgb:
-            r, g, b = rgb
-            # COLORREF is 0x00BBGGRR
-            colorref = ctypes.c_int(r | (g << 8) | (b << 16))
+        # Ensure the window is shown and handled by the OS
+        # Sometimes a tiny delay helps for initial window creation
+        def _apply():
+            # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+            dark = ctypes.c_int(1 if is_dark else 0)
             dwmapi.DwmSetWindowAttribute(
-                hwnd, 35, ctypes.byref(colorref), ctypes.sizeof(colorref)
+                hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark)
             )
+
+            # DWMWA_CAPTION_COLOR = 35  (Windows 11+)
+            rgb = _hex_to_rgb(bg_hex)
+            if rgb:
+                r, g, b = rgb
+                # COLORREF is 0x00BBGGRR (Windows uses BGR)
+                colorref = ctypes.c_int(r | (g << 8) | (b << 16))
+                dwmapi.DwmSetWindowAttribute(
+                    hwnd, 35, ctypes.byref(colorref), ctypes.sizeof(colorref)
+                )
+
+        _apply()
     except Exception:
         pass
 
@@ -320,7 +328,11 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int] | None:
         return None
     h = h.lstrip("#")
     if len(h) < 6:
-        return None
+        # Resolve shorthand #RGB to #RRGGBB
+        if len(h) == 3:
+            h = "".join([c * 2 for c in h])
+        else:
+            return None
     try:
         return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     except ValueError:
@@ -328,24 +340,67 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int] | None:
 
 
 # ---------------------------------------------------------------------------
-# WebThemeBridge — plug-and-play theme injection for QWebEngineView tools
+# Bridges — plug-and-play theme injection
 # ---------------------------------------------------------------------------
-class WebThemeBridge:
-    """Connects a ThemeManager to a QWebEngineView.
 
-    On construction:
-    - Registers a QWebEngineScript that runs at DocumentCreation (zero flash).
-    - Connects theme_changed so live theme switches re-inject immediately.
-    - Calls view.loadFinished to re-apply after each page load.
+
+class WindowThemeBridge:
+    """Connects a ThemeManager to a QMainWindow or QWidget top-level.
+
+    Automatically handles:
+    - QSS substitution and application
+    - QPalette sync (for native widgets)
+    - Windows 11 title bar coloring (same as Chronos)
+    - Live updates when the theme changes
 
     Usage::
 
-        from src.common.theme import ThemeManager, WebThemeBridge
-        self.mgr = ThemeManager()
-        self.web = QWebEngineView()
-        self._theme_bridge = WebThemeBridge(self.mgr, self.web)
-        # done — theme is managed automatically
+        self._theme_bridge = WindowThemeBridge(ThemeManager(), self, TOOL_SHEET)
     """
+
+    def __init__(
+        self,
+        mgr: "_ThemeManager",
+        window,
+        qss_template: str | None = None,
+        titlebar_color_key: str = "bg_base",
+    ):
+        from PyQt6.QtCore import QTimer
+
+        self._mgr = mgr
+        self._win = window
+        self._qss = qss_template
+        self._color_key = titlebar_color_key
+
+        # Connect signals
+        mgr.theme_changed.connect(self.apply)
+
+        # Initial apply with a tiny delay to ensure winId is valid and window is initialized
+        QTimer.singleShot(0, self.apply)
+
+    def apply(self):
+        if not self._win:
+            return
+
+        # 1. Apply QSS
+        if self._qss:
+            self._mgr.apply_to_widget(self._win, self._qss)
+
+        # 2. Apply Palette
+        self._win.setPalette(self._mgr.get_palette())
+
+        # 3. Apply Win32 titlebar
+        if sys.platform == "win32":
+            try:
+                # Use the specific color key (usually bg_base or bg_elevated)
+                color = self._mgr[self._color_key]
+                apply_win32_titlebar(int(self._win.winId()), color, self._mgr.is_dark)
+            except Exception:
+                pass
+
+
+class WebThemeBridge:
+    """Connects a ThemeManager to a QWebEngineView."""
 
     _SCRIPT_NAME = "nexus_web_theme"
 
@@ -362,14 +417,14 @@ class WebThemeBridge:
         # Set Qt background color to match theme (prevents white flash)
         view.page().setBackgroundColor(QColor(mgr["bg_base"]))
 
-        # Inject script before first paint
+        # Inject script
         self._inject_script()
 
         # Re-apply on every page load and on theme change
         view.loadFinished.connect(lambda ok: self._on_load(ok))
         mgr.theme_changed.connect(self._on_theme_changed)
 
-        # Apply titlebar after the event loop starts (winId needs a shown window)
+        # Apply titlebar after the event loop starts
         from PyQt6.QtCore import QTimer
 
         QTimer.singleShot(0, self._apply_titlebar)
@@ -387,7 +442,6 @@ class WebThemeBridge:
         script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
         script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
         page_scripts = self._view.page().scripts()
-        # Remove any existing script with the same name (PyQt6 has no findScript)
         for existing in page_scripts.toList():
             if existing.name() == self._SCRIPT_NAME:
                 page_scripts.remove(existing)
@@ -403,7 +457,7 @@ class WebThemeBridge:
 
     def _apply_titlebar(self):
         win = self._view.window()
-        if win and win.isVisible():
+        if win:
             apply_win32_titlebar(
                 int(win.winId()), self._mgr["bg_base"], self._mgr.is_dark
             )

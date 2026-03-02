@@ -190,14 +190,15 @@ class ArchiverWindow(QMainWindow):
 
         self.progress_signal.connect(self._on_progress)
         self.done_signal.connect(self._on_done)
-        self.mgr.theme_changed.connect(self._apply_theme)
-
         self._build_ui()
-        self._apply_theme()
+        from src.common.theme import WindowThemeBridge
+
+        self._theme_bridge = WindowThemeBridge(self.mgr, self, TOOL_SHEET)
+        self.mgr.theme_changed.connect(self._sync_custom_theme)
+        self._sync_custom_theme()
         self._load_settings()
 
-    def _apply_theme(self):
-        self.mgr.apply_to_widget(self, TOOL_SHEET)
+    def _sync_custom_theme(self):
         self._set_status_dot(self.mgr["success"])
         self.opts_frame.setStyleSheet(
             f"background: {self.mgr['bg_overlay']}; border-radius: 10px; border: 1px solid {self.mgr['border_light']};"

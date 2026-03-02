@@ -33,11 +33,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.common.config import ASSETS_DIR
+from src.common.config import APPDATA, ASSETS_DIR
 from src.common.theme import ThemeManager
 
 # --- CONFIGURATION & DATABASE ---
-DB_PATH = os.path.join(os.getenv("APPDATA", "."), "regex_sandbox.db")
+DB_PATH = os.path.join(APPDATA, "regex_sandbox.db")
 
 
 def init_db():

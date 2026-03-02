@@ -329,11 +329,6 @@ def launch_window_manager(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.window_manager.window_manager"])
 
 
-def launch_env_var_explorer(nexus) -> None:
-    """Launch the Env Var Explorer."""
-    nexus.status_lbl.setText("⚙️ Launching Env Var Explorer...")
-    subprocess.Popen([sys.executable, "-m", "src.env_var_explorer.env_var_explorer"])
-
 
 def run_macro(nexus, macro_id: int) -> None:
     """Execute a Ghost Typist macro in a background thread."""
