@@ -47,11 +47,37 @@ from PyQt6.QtWidgets import (
 )
 
 from src.archiver.backend import (
-    BACKEND,
-    CREATABLE_FORMATS,
-    MD_MAP,
-    MT_MAP,
-    CreateOptions,
+    BACKEND as BACKEND,
+)
+from src.archiver.backend import (
+    CREATABLE_FORMATS as CREATABLE_FORMATS,
+)
+from src.archiver.backend import (
+    MD_MAP as MD_MAP,
+)
+from src.archiver.backend import (
+    MT_MAP as MT_MAP,
+)
+from src.archiver.backend import (
+    MX_MAP as MX_MAP,
+)
+from src.archiver.backend import (
+    CreateOptions as CreateOptions,
+)
+from src.archiver.backend import (
+    create_archive as create_archive,
+)
+from src.archiver.backend import (
+    detect_format as detect_format,
+)
+from src.archiver.backend import (
+    extract_archive as extract_archive,
+)
+from src.archiver.backend import (
+    get_capabilities as get_capabilities,
+)
+from src.archiver.backend import (
+    is_archive as is_archive,
 )
 from src.common.config import ARCHIVER_SETTINGS, ASSETS_DIR
 from src.common.theme import ThemeManager
