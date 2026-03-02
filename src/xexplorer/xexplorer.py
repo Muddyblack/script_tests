@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QStatusBar,
@@ -137,7 +138,7 @@ class XExplorer(QMainWindow):
         from src.common.theme import WindowThemeBridge
 
         self._theme_bridge = WindowThemeBridge(
-            ThemeManager(), self, titlebar_color_key="bg_elevated"
+            ThemeManager(), self, titlebar_color_key="sidebar_bg"
         )
         self._theme_bridge.apply()  # Initial apply
         self._apply_theme()  # Apply QSS
@@ -176,22 +177,28 @@ class XExplorer(QMainWindow):
         self._ribbon.setFloatable(False)
         self._ribbon.setObjectName("ribbon_bar")
         self._ribbon.setFixedHeight(54)
+        self._ribbon.setContentsMargins(0, 0, 0, 0)
 
         ribbon_widget = QWidget()
+        ribbon_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         rbl = QHBoxLayout(ribbon_widget)
-        rbl.setContentsMargins(10, 4, 10, 4)
-        rbl.setSpacing(4)
+        rbl.setContentsMargins(10, 6, 10, 6)
+        rbl.setSpacing(6)
+        rbl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         T = self.T
 
-        # Search bar (center, expanding)
-        self._search_bar = SearchBar(T)
-        self._search_bar.textChanged.connect(self._on_search_changed)
-        rbl.addWidget(self._search_bar, stretch=1)
+        def vsep():
+            f = QFrame()
+            f.setFrameShape(QFrame.Shape.VLine)
+            f.setFixedWidth(1)
+            f.setFixedHeight(28)
+            f.setObjectName("ribbon_sep")
+            return f
 
-        rbl.addSpacing(6)
-
-        # View mode buttons
+        # ── Left: view-mode buttons ──────────────────────────────────────────
         self._rb_detail = RibbonBtn(
             Icons.view_details(T["text_secondary"], 20), "Details", T
         )
@@ -205,17 +212,16 @@ class XExplorer(QMainWindow):
         for w in [self._rb_detail, self._rb_icons, self._rb_tree]:
             rbl.addWidget(w)
 
-        def vsep():
-            f = QFrame()
-            f.setFrameShape(QFrame.Shape.VLine)
-            f.setFixedWidth(1)
-            f.setFixedHeight(30)
-            f.setObjectName("ribbon_sep")
-            return f
+        rbl.addWidget(vsep())
+
+        # ── Center: search bar (expands) ────────────────────────────────────
+        self._search_bar = SearchBar(T)
+        self._search_bar.textChanged.connect(self._on_search_changed)
+        rbl.addWidget(self._search_bar, stretch=1)
 
         rbl.addWidget(vsep())
 
-        # Action buttons
+        # ── Right: action buttons ────────────────────────────────────────────
         self._rb_index = QPushButton("⚡  Index")
         self._rb_index.setObjectName("action_btn_primary")
         self._rb_index.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -382,7 +388,7 @@ class XExplorer(QMainWindow):
         self._details.setObjectName("details_view")
         self._details.setRootIsDecorated(False)
         self._details.setUniformRowHeights(True)
-        self._details.setAlternatingRowColors(True)
+        self._details.setAlternatingRowColors(False)
         self._details.setHeaderLabels(["Name", "Type", "Size", "Modified"])
         self._details.setSelectionMode(
             QAbstractItemView.SelectionMode.ExtendedSelection
@@ -493,8 +499,17 @@ class XExplorer(QMainWindow):
             from src.common.theme import apply_win32_titlebar
 
             apply_win32_titlebar(
-                int(self.winId()), ThemeManager()["bg_elevated"], ThemeManager().is_dark
+                int(self.winId()), ThemeManager()["sidebar_bg"], ThemeManager().is_dark
             )
+        # Force drive widgets to repaint now that the sidebar has its final width.
+        QTimer.singleShot(0, self._repaint_drive_widgets)
+
+    def _repaint_drive_widgets(self):
+        for i in range(self.folder_list.count()):
+            item = self.folder_list.item(i)
+            w = self.folder_list.itemWidget(item)
+            if isinstance(w, DriveWidget):
+                w.update()
 
     def _on_theme_changed(self):
         self._icon_cache.clear()
@@ -504,7 +519,7 @@ class XExplorer(QMainWindow):
             from src.common.theme import apply_win32_titlebar
 
             apply_win32_titlebar(
-                int(self.winId()), ThemeManager()["bg_elevated"], ThemeManager().is_dark
+                int(self.winId()), ThemeManager()["sidebar_bg"], ThemeManager().is_dark
             )
 
     def _apply_theme(self):
@@ -691,15 +706,21 @@ class XExplorer(QMainWindow):
 
         /* ── Details view ── */
         QTreeWidget#details_view {{
-            background: {T["bg_elevated"]};
-            alternate-background-color: {T["row_alt"]};
+            background: {T["sidebar_bg"]};
+            alternate-background-color: {T["sidebar_bg"]};
             border: none;
             outline: none;
             show-decoration-selected: 1;
         }}
-        QTreeWidget#details_view::item {{ border: none; }}
+        QTreeWidget#details_view::item {{ border: none; background: transparent; }}
+        QTreeWidget#details_view::item:hover {{ background: {T["sidebar_hover"]}; }}
+        QTreeWidget#details_view::item:selected {{
+            background: {T["sidebar_sel"]};
+            color: {T["text_primary"]};
+            border-left: 2px solid {T["sidebar_sel_bar"]};
+        }}
         QHeaderView::section {{
-            background: {T["bg_overlay"]};
+            background: {T["sidebar_bg"]};
             color: {T["text_secondary"]};
             border: none;
             border-bottom: 1px solid {T["border"]};
@@ -709,12 +730,12 @@ class XExplorer(QMainWindow):
             font-weight: 600;
         }}
         QHeaderView::section:hover {{
-            background: {T["bg_control_hov"]};
+            background: {T["sidebar_hover"]};
         }}
 
         /* ── Icons view ── */
         QListWidget#icons_view {{
-            background: {T["bg_elevated"]};
+            background: {T["sidebar_bg"]};
             border: none;
             outline: none;
         }}
@@ -726,18 +747,18 @@ class XExplorer(QMainWindow):
             padding: 4px;
         }}
         QListWidget#icons_view::item:hover {{
-            background: {T["bg_control_hov"]};
+            background: {T["sidebar_hover"]};
             border-color: {T["border"]};
         }}
         QListWidget#icons_view::item:selected {{
-            background: {T["sel_bg"]};
+            background: {T["sidebar_sel"]};
             border-color: {acc};
             color: {T["text_primary"]};
         }}
 
         /* ── Tree view ── */
         QTreeWidget#tree_view {{
-            background: {T["bg_elevated"]};
+            background: {T["sidebar_bg"]};
             border: none;
             outline: none;
         }}
@@ -745,15 +766,15 @@ class XExplorer(QMainWindow):
             padding: 3px 4px;
             color: {T["text_primary"]};
         }}
-        QTreeWidget#tree_view::item:hover  {{ background: {T["bg_control_hov"]}; }}
-        QTreeWidget#tree_view::item:selected {{ background: {T["sel_bg"]}; color: {T["text_primary"]}; }}
+        QTreeWidget#tree_view::item:hover  {{ background: {T["sidebar_hover"]}; }}
+        QTreeWidget#tree_view::item:selected {{ background: {T["sidebar_sel"]}; color: {T["text_primary"]}; }}
 
         /* ── Results panel ── */
-        QWidget#results_panel {{ background: {T["bg_elevated"]}; }}
+        QWidget#results_panel {{ background: {T["sidebar_bg"]}; }}
 
         /* ── Status bar ── */
         QStatusBar#main_sb {{
-            background: {T["bg_elevated"]};
+            background: {T["sidebar_bg"]};
             border-top: 1px solid {T["border"]};
             min-height: 24px;
         }}
