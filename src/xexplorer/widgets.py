@@ -2,7 +2,7 @@
 
 import shutil
 
-from PyQt6.QtCore import QRect, Qt, pyqtSignal
+from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -304,6 +304,23 @@ class SidebarList(QListWidget):
             if w:
                 w.set_hovered(False)
         super().leaveEvent(e)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.sync_item_sizes()
+
+    def sync_item_sizes(self):
+        viewport_w = max(1, self.viewport().width() - 2)
+        for i in range(self.count()):
+            item = self.item(i)
+            hint = item.sizeHint()
+            height = hint.height() if hint.height() > 0 else 32
+            if hint.width() != viewport_w:
+                item.setSizeHint(QSize(viewport_w, height))
+            w = self._widget_at(item)
+            if w:
+                w.updateGeometry()
+                w.update()
 
     def update_style(self):
         T = self._theme

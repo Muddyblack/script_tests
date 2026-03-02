@@ -32,7 +32,7 @@ def _start_spinner(msg: str) -> threading.Event:
 def get_model_dir() -> Path:
     # Store models inside the project so they travel with the repo
     project_root = Path(__file__).parent.parent.parent
-    return project_root / "models" / "easyocr"
+    return project_root / "data" / "models" / "easyocr"
 
 
 def get_existing_models(model_dir: Path) -> set:
@@ -97,17 +97,17 @@ def main():
         warnings.filterwarnings("ignore", message=".*pin_memory.*", category=UserWarning)
         warnings.filterwarnings("ignore", message=".*overflow.*", category=RuntimeWarning)
         import os as _os
-        _devnull = open(_os.devnull, "w")
         import sys as _sys
         _old_stderr = _sys.stderr
-        _sys.stderr = _devnull
         try:
-            reader = easyocr.Reader(
-                languages,
-                gpu=False,
-                model_storage_directory=str(model_dir),
-                download_enabled=False,   # never download — fail loudly instead
-            )
+            with open(_os.devnull, "w") as _devnull:
+                _sys.stderr = _devnull
+                reader = easyocr.Reader(
+                    languages,
+                    gpu=False,
+                    model_storage_directory=str(model_dir),
+                    download_enabled=False,   # never download — fail loudly instead
+                )
         except Exception as exc:
             rel_dir = (
                 model_dir.relative_to(project_root)
@@ -115,7 +115,6 @@ def main():
                 else model_dir
             )
             _sys.stderr = _old_stderr
-            _devnull.close()
             spinner_stop.set()
             # EasyOCR raises RuntimeError / FileNotFoundError for missing models
             msg = (
@@ -130,7 +129,6 @@ def main():
             sys.exit(1)
         finally:
             _sys.stderr = _old_stderr
-            _devnull.close()
 
     spinner_stop.set()
     sys.stderr.write("  ✅  Ready.\n")

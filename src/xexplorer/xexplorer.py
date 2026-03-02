@@ -879,9 +879,10 @@ class XExplorer(QMainWindow):
         item.setData(Qt.ItemDataRole.UserRole, path)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
         w = DriveWidget(path, label, self.T)
-        item.setSizeHint(QSize(0, 66))
+        item.setSizeHint(QSize(max(1, self.folder_list.viewport().width() - 2), 66))
         self.folder_list.addItem(item)
         self.folder_list.setItemWidget(item, w)
+        self.folder_list.sync_item_sizes()
 
     def _add_ignore_item(self, rule: str, checked: bool = True):
         """Add an ignore rule with toggle switch to ignore_list."""

@@ -52,6 +52,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.common.config import APPDATA as _APPDATA
 from src.common.config import OCR_ICON_PATH
 from src.common.theme import ThemeManager, apply_win32_titlebar
 
@@ -131,8 +132,6 @@ _recent_snips: deque[_SnipRecord] = deque(maxlen=10)
 # ---------------------------------------------------------------------------
 # OCR language settings (persisted)
 # ---------------------------------------------------------------------------
-
-from src.common.config import APPDATA as _APPDATA
 
 _OCR_SETTINGS_FILE = Path(_APPDATA) / "nexus_ocr_settings.json"
 
