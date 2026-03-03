@@ -14,7 +14,7 @@ import sqlite3
 import sys
 import time
 
-from PyQt6.QtCore import QFileInfo, QObject, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QFileInfo, QObject, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -658,30 +658,52 @@ class XExplorerBridge(QObject):
 
     @pyqtSlot(str, result=str)
     def get_file_icon_b64(self, path: str) -> str:
-        """Return a base64-encoded PNG of the system file icon (~24px)."""
+        """Return a base64-encoded PNG of the system file icon (high-res)."""
         ext = os.path.splitext(path)[1].lower() if not os.path.isdir(path) else "__DIR__"
-        if ext in self._icon_cache:
-            return self._icon_cache[ext]
+        # Per-file cache key for exe/lnk/url (each has a unique icon),
+        # extension-based key for everything else (same as Nexus logic).
+        is_dir = os.path.isdir(path)
+        cache_key = (
+            "__DIR__"
+            if is_dir
+            else (path if ext in (".exe", ".lnk", ".url") else ext)
+        )
+        if cache_key in self._icon_cache:
+            return self._icon_cache[cache_key]
         try:
+            from PyQt6.QtCore import QByteArray, QBuffer, QIODevice
+
             fi = QFileInfo(path) if os.path.exists(path) else None
             icon = self._icon_provider.icon(fi) if fi else (
                 self._icon_provider.icon(QFileIconProvider.IconType.Folder)
-                if os.path.isdir(path)
+                if is_dir
                 else self._icon_provider.icon(QFileIconProvider.IconType.File)
             )
-            pm: QPixmap = icon.pixmap(24, 24)
-            buf = pm.toImage()
-            # Write via QBuffer workaround
-            from PyQt6.QtCore import QBuffer, QIODevice
-            ba = bytearray()
-            buf2 = QBuffer()
-            buf2.open(QIODevice.OpenMode.WriteOnly)
-            buf.save(buf2, "PNG")
-            data = bytes(buf2.data())
-            b64 = base64.b64encode(data).decode()
-            self._icon_cache[ext] = b64
+            # Render at 256×256 then scale down for sharp icons (Nexus approach)
+            pm: QPixmap = icon.pixmap(256, 256)
+            if pm.isNull():
+                print(f"[icon] pixmap null for {path}")
+                return ""
+            pm = pm.scaled(
+                48, 48,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            # Serialize pixmap → PNG → base64
+            ba = QByteArray()
+            buf = QBuffer(ba)
+            buf.open(QIODevice.OpenModeFlag.WriteOnly)
+            ok = pm.save(buf, "PNG")
+            buf.close()
+            if not ok or ba.isEmpty():
+                print(f"[icon] PNG save failed for {path}, ok={ok}")
+                return ""
+            b64 = base64.b64encode(bytes(ba)).decode()
+            self._icon_cache[cache_key] = b64
+            print(f"[icon] OK {os.path.basename(path)} → {len(b64)} chars")
             return b64
-        except Exception:
+        except Exception as exc:
+            print(f"[icon] EXCEPTION for {path}: {exc}")
             return ""
 
     @pyqtSlot(str, result=str)
