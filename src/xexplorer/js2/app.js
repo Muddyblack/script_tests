@@ -662,8 +662,8 @@ const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, 
                         const isSel = selected.has(f.path);
                         return (
                             <tr key={f.path} className={`file-row ${isSel ? 'selected' : ''}`}
-                                onClick={e => (f.is_dir && !e.ctrlKey && !e.shiftKey && !selected.has(f.path)) ? onDouble(f) : onSelect(f, e)}
-                                onDoubleClick={e => !f.is_dir && onDouble(f)}
+                                onClick={e => onSelect(f, e)}
+                                onDoubleClick={() => onDouble(f)}
                                 onContextMenu={e => { e.preventDefault(); onCtxMenu(e, f); }}>
                                 <td>
                                     <FileIcon name={f.name} path={f.path} is_dir={f.is_dir} size={15} className="file-icon" />
@@ -693,8 +693,8 @@ const IconsView = ({ files, selected, onSelect, onDouble, onCtxMenu }) => (
                 const short = f.name.length > 15 ? f.name.slice(0, 14) + '…' : f.name;
                 return (
                     <div key={f.path} className={`icon-item ${isSel ? 'selected' : ''}`}
-                        onClick={e => (f.is_dir && !e.ctrlKey && !e.shiftKey && !selected.has(f.path)) ? onDouble(f) : onSelect(f, e)}
-                        onDoubleClick={e => !f.is_dir && onDouble(f)}
+                        onClick={e => onSelect(f, e)}
+                        onDoubleClick={() => onDouble(f)}
                         onContextMenu={e => { e.preventDefault(); onCtxMenu(e, f); }}
                         title={f.path}>
                         <FileIcon name={f.name} path={f.path} is_dir={f.is_dir} size={38} className="big-icon" />
@@ -1124,9 +1124,11 @@ const App = () => {
             return;
         }
 
-        // Plain click on already-selected item → deselect / clear
-        if (activeTab.selected.has(file.path)) {
-            patchActive({ selected: new Set(), previewFile: null, selectionAnchor: null });
+        if (activeTab.selected.has(file.path) && !e.ctrlKey && !e.shiftKey) {
+            // Keep selected to avoid flickering on double click
+            if (activeTab.selected.size > 1) {
+                patchActive({ selected: new Set([file.path]), previewFile: file, selectionAnchor: file.path });
+            }
             return;
         }
         patchActive({
