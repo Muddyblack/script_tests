@@ -14,7 +14,7 @@ import sqlite3
 import sys
 import time
 
-from PyQt6.QtCore import QFileInfo, QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QFileInfo, QObject, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -137,6 +137,39 @@ class XExplorerBridge(QObject):
         self._start_time: float = 0.0
         self._current_roots: list[str] = []
         self._initial_path: str = initial_path
+        self._auto_reindex_timer: QTimer | None = None
+        # Browse-folder change poller — emits live_changed when the currently
+        # viewed folder's mtime changes (covers non-indexed paths too).
+        self._browse_poll_path: str = ""
+        self._browse_poll_mtime: float = 0.0
+        self._browse_poll_timer = QTimer(self)
+        self._browse_poll_timer.setInterval(750)
+        self._browse_poll_timer.timeout.connect(self._poll_browse_dir)
+        self._browse_poll_timer.start()
+
+    # ── Browse-path polling ──────────────────────────────────────────────────
+
+    @pyqtSlot(str)
+    def set_active_browse_path(self, path: str) -> None:
+        """JS calls this every time the active tab navigates to a new folder."""
+        self._browse_poll_path = path
+        try:
+            self._browse_poll_mtime = os.stat(path).st_mtime if path else 0.0
+        except OSError:
+            self._browse_poll_mtime = 0.0
+
+    def _poll_browse_dir(self) -> None:
+        """Check if the watched browse folder changed; fire live_changed if so."""
+        path = self._browse_poll_path
+        if not path:
+            return
+        try:
+            mtime = os.stat(path).st_mtime
+        except OSError:
+            mtime = 0.0
+        if mtime != self._browse_poll_mtime:
+            self._browse_poll_mtime = mtime
+            self.live_changed.emit()
 
     # ── Window management ─────────────────────────────────────────────────────
 
@@ -258,6 +291,7 @@ class XExplorerBridge(QObject):
         # Start filesystem watchers on first config load (and whenever config is re-read)
         if folders and not self._observers:
             self._restart_watchers(folders)
+            self._schedule_auto_reindex(folders)
 
         return json.dumps({"folders": folders, "ignore": ignore})
 
@@ -430,6 +464,8 @@ class XExplorerBridge(QObject):
 
         results = []
         for path, is_dir in pairs[:3000]:
+            if not os.path.exists(path):
+                continue
             name = os.path.basename(path) or path
             _, ext = os.path.splitext(name)
             results.append({
@@ -492,6 +528,48 @@ class XExplorerBridge(QObject):
             conn.commit()
         self.indexing_done.emit(count, dur)
         self._emit_stats()
+        self._schedule_auto_reindex()  # start periodic timer after first index completes
+
+    # ── Periodic auto-reindex ────────────────────────────────────────────────
+
+    _AUTO_REINDEX_INTERVAL_MS = 30 * 60 * 1000  # 30 minutes
+
+    def _schedule_auto_reindex(self, folders: list[dict] | None = None) -> None:
+        """Start a repeating timer that re-indexes all configured folders periodically.
+        Safe to call multiple times — only one timer is ever active.
+        """
+        if self._auto_reindex_timer is not None:
+            return  # already scheduled
+        self._auto_reindex_timer = QTimer(self)
+        self._auto_reindex_timer.setInterval(self._AUTO_REINDEX_INTERVAL_MS)
+        self._auto_reindex_timer.timeout.connect(self._auto_reindex)
+        self._auto_reindex_timer.start()
+
+    def _auto_reindex(self) -> None:
+        """Silently re-index all configured folders (skipped if a manual index is running)."""
+        if self._worker and self._worker.isRunning():
+            return  # don't interrupt a user-triggered index
+        # Reload folder list from DB so we always use the current config
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                c = conn.cursor()
+                c.execute("SELECT value FROM settings WHERE key='folders'")
+                res = c.fetchone()
+            roots = [f["path"] for f in json.loads(res[0])] if res else []
+        except Exception:
+            roots = []
+        if not roots:
+            return
+        roots = [r for r in roots if os.path.isdir(r)]
+        if not roots:
+            return
+        ignore_rules = self._get_active_ignore_rules()
+        self._current_roots = roots
+        self._start_time = time.time()
+        self._worker = IndexerWorker(roots, ignore_rules)
+        self._worker.progress.connect(self._on_progress)
+        self._worker.finished.connect(self._on_done)
+        self._worker.start()
 
     # ── Stats ─────────────────────────────────────────────────────────────────
 

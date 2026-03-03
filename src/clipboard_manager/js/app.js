@@ -7,19 +7,21 @@ const { bridge, getBridge, showToast } = window;
 
 // ── Tailwind config ────────────────────────────────────────────────────────
 tailwind.config = {
-    theme: { extend: {
-        colors: {
-            bg: 'var(--bg-base)', bg1: 'var(--bg-elevated)', bg2: 'var(--bg-overlay)',
-            acc: 'var(--accent)', t1: 'var(--text-primary)', t2: 'var(--text-secondary)', t3: 'var(--text-disabled)',
+    theme: {
+        extend: {
+            colors: {
+                bg: 'var(--bg-base)', bg1: 'var(--bg-elevated)', bg2: 'var(--bg-overlay)',
+                acc: 'var(--accent)', t1: 'var(--text-primary)', t2: 'var(--text-secondary)', t3: 'var(--text-disabled)',
+            }
         }
-    }}
+    }
 };
 
 // ── Utilities ──────────────────────────────────────────────────────────────
 function fmtTime(ts) {
     const diff = (Date.now() / 1000) - ts;
-    if (diff < 60)    return 'just now';
-    if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
@@ -38,7 +40,7 @@ function guessTextType(content) {
 }
 
 function textTypeIcon(t) {
-    if (t === 'url')  return '🔗';
+    if (t === 'url') return '🔗';
     if (t === 'code') return '📄';
     return '📋';
 }
@@ -89,8 +91,8 @@ const CtxMenu = memo(({ items, pos, onClose }) => {
         return () => { clearTimeout(t); document.removeEventListener('mousedown', h); };
     }, [onClose]);
 
-    const top  = Math.min(pos.y, window.innerHeight - items.length * 34 - 20);
-    const left = Math.min(pos.x, window.innerWidth  - 200);
+    const top = Math.min(pos.y, window.innerHeight - items.length * 34 - 20);
+    const left = Math.min(pos.x, window.innerWidth - 200);
 
     return (
         <div className="ctx-menu" style={{ top, left }}>
@@ -98,10 +100,10 @@ const CtxMenu = memo(({ items, pos, onClose }) => {
                 it === 'sep'
                     ? <div key={i} className="ctx-sep" />
                     : <div key={i} className={`ctx-item ${it.danger ? 'danger' : ''}`}
-                           onClick={() => { it.action(); onClose(); }}>
-                          <em className="ctx-icon">{it.icon}</em>
-                          {it.label}
-                      </div>
+                        onClick={() => { it.action(); onClose(); }}>
+                        <em className="ctx-icon">{it.icon}</em>
+                        {it.label}
+                    </div>
             )}
         </div>
     );
@@ -110,13 +112,13 @@ const CtxMenu = memo(({ items, pos, onClose }) => {
 // ── Drag-resize handle ─────────────────────────────────────────────────────
 function ResizeHandle({ cssVar, defaultW, min, max }) {
     const dragging = useRef(false);
-    const startX   = useRef(0);
-    const startW   = useRef(defaultW);
+    const startX = useRef(0);
+    const startW = useRef(defaultW);
 
     function onMouseDown(e) {
         dragging.current = true;
-        startX.current   = e.clientX;
-        startW.current   = parseInt(getComputedStyle(document.documentElement).getPropertyValue(cssVar)) || defaultW;
+        startX.current = e.clientX;
+        startW.current = parseInt(getComputedStyle(document.documentElement).getPropertyValue(cssVar)) || defaultW;
         e.currentTarget.classList.add('dragging');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
@@ -145,11 +147,11 @@ function ResizeHandle({ cssVar, defaultW, min, max }) {
 
 // ── Clip Item ──────────────────────────────────────────────────────────────
 const ClipItem = memo(({ clip, selected, onSelect, onCopy, onTogglePin, onDelete, onCtx }) => {
-    const imgSrc  = useImageSrc(clip);
+    const imgSrc = useImageSrc(clip);
     const isImage = IMAGE_TYPES.has(clip.type);
     const textType = isImage ? 'image' : guessTextType(clip.content);
-    const preview  = clip.content.replace(/\s+/g, ' ').trim();
-    const short    = preview.length > 100 ? preview.slice(0, 100) + '…' : preview;
+    const preview = clip.content.replace(/\s+/g, ' ').trim();
+    const short = preview.length > 100 ? preview.slice(0, 100) + '…' : preview;
 
     return (
         <div
@@ -162,8 +164,8 @@ const ClipItem = memo(({ clip, selected, onSelect, onCopy, onTogglePin, onDelete
             {isImage && imgSrc
                 ? <img src={imgSrc} className="clip-thumb" alt="img" />
                 : <span className="clip-type-icon">
-                      {clip.pinned ? '📌' : isImage ? '🖼️' : textTypeIcon(textType)}
-                  </span>
+                    {clip.pinned ? '📌' : isImage ? '🖼️' : textTypeIcon(textType)}
+                </span>
             }
 
             {/* Body */}
@@ -214,16 +216,16 @@ const ImagePreview = memo(({ clip }) => {
 
 // ── App ────────────────────────────────────────────────────────────────────
 function App() {
-    const [clips, setClips]       = useState([]);
-    const [total, setTotal]       = useState(0);
-    const [query, setQuery]       = useState('');
-    const [filter, setFilter]     = useState('all'); // all | pinned
+    const [clips, setClips] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [query, setQuery] = useState('');
+    const [filter, setFilter] = useState('all'); // all | pinned
     const [selected, setSelected] = useState(null);
-    const [status, setStatus]     = useState('Loading…');
-    const [ctx, setCtx]           = useState(null);
-    const searchRef               = useRef(null);
-    const pollRef                 = useRef(null);
-    const bridgeRef               = useRef(null);
+    const [status, setStatus] = useState('Loading…');
+    const [ctx, setCtx] = useState(null);
+    const searchRef = useRef(null);
+    const pollRef = useRef(null);
+    const bridgeRef = useRef(null);
 
     // ── Load ──────────────────────────────────────────────────────────────
     const refresh = useCallback(async (q = query, f = filter) => {
@@ -244,18 +246,17 @@ function App() {
     }, [query, filter]);
 
     useEffect(() => {
-        bridge().then(async b => {
+        bridge().then(b => {
             bridgeRef.current = b;
-            await refresh(query, filter);
-            if (b.clip_added && b.clip_added.connect) {
-                b.clip_added.connect(() => refresh(query, filter));
-            }
-            pollRef.current = setInterval(() => refresh(query, filter), 800);
+            refresh();
         });
-        return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }, []);
 
-    useEffect(() => { refresh(query, filter); }, [query, filter]);
+    useEffect(() => {
+        refresh();
+        const i = setInterval(refresh, 800);
+        return () => clearInterval(i);
+    }, [refresh]);
 
     // ── Keyboard ─────────────────────────────────────────────────────────
     useEffect(() => {
@@ -320,16 +321,18 @@ function App() {
 
     const ctxItems = ctx ? [
         { icon: '⎘', label: 'Copy', action: () => copyClip(ctx.clip) },
-        { icon: ctx.clip.pinned ? '📌' : '📍',
-          label: ctx.clip.pinned ? 'Unpin' : 'Pin', action: () => togglePin(ctx.clip) },
+        {
+            icon: ctx.clip.pinned ? '📌' : '📍',
+            label: ctx.clip.pinned ? 'Unpin' : 'Pin', action: () => togglePin(ctx.clip)
+        },
         'sep',
         { icon: '✕', label: 'Delete', danger: true, action: () => deleteClip(ctx.clip) },
     ] : [];
 
     // ── Preview header meta ───────────────────────────────────────────────
     const isSelImage = selected ? IMAGE_TYPES.has(selected.type) : false;
-    const charCount  = selected && !isSelImage ? selected.content.length : 0;
-    const lineCount  = selected && !isSelImage ? selected.content.split('\n').length : 0;
+    const charCount = selected && !isSelImage ? selected.content.length : 0;
+    const lineCount = selected && !isSelImage ? selected.content.split('\n').length : 0;
 
     return (
         <div className="shell">
@@ -356,7 +359,7 @@ function App() {
                 {/* List panel */}
                 <div className="list-panel">
                     <div className="filter-row">
-                        <button className={`chip ${filter === 'all'    ? 'active' : ''}`} onClick={() => setFilter('all')}>All</button>
+                        <button className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>All</button>
                         <button className={`chip ${filter === 'pinned' ? 'active' : ''}`} onClick={() => setFilter('pinned')}>📌 Pinned</button>
                     </div>
 
@@ -366,7 +369,7 @@ function App() {
                                 <div className="empty-icon">{query ? '🔍' : '📋'}</div>
                                 <div className="empty-title">{query ? 'No results' : 'No history yet'}</div>
                                 <div className="empty-sub">{query ? `Nothing matched "${query}"` : 'Copy something to start tracking your clipboard.'}</div>
-                              </div>
+                            </div>
                             : clips.map(clip => (
                                 <ClipItem
                                     key={clip.id}
@@ -383,7 +386,7 @@ function App() {
                     </div>
 
                     <div className="list-actions">
-                        <button className="btn btn-primary"   disabled={!selected} onClick={() => selected && copyClip(selected)}>⎘ Copy</button>
+                        <button className="btn btn-primary" disabled={!selected} onClick={() => selected && copyClip(selected)}>⎘ Copy</button>
                         <button className="btn btn-secondary" disabled={!selected} onClick={() => selected && togglePin(selected)}>
                             {selected?.pinned ? '📌 Unpin' : '📍 Pin'}
                         </button>
@@ -415,7 +418,7 @@ function App() {
                                 <div className="preview-empty-icon">📋</div>
                                 <div className="preview-empty-title">Nothing selected</div>
                                 <div className="preview-empty-sub">Select an item from the list to preview its full content.</div>
-                              </div>
+                            </div>
                             : isSelImage
                                 ? <ImagePreview clip={selected} />
                                 : <pre className="preview-text">{selected.content}</pre>

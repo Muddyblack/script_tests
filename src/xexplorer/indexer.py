@@ -36,6 +36,19 @@ class IndexerWorker(QThread):
             if not self._running or not os.path.isdir(root_path):
                 continue
 
+            # Purge stale entries under this root before re-scanning.
+            try:
+                norm = root_path.replace('/', '\\')
+                c.execute("DELETE FROM files WHERE path = ? OR path LIKE ?",
+                          (norm, norm.rstrip('\\') + '\\%'))
+                # Also handle forward-slash variants
+                norm_fwd = root_path.replace('\\', '/')
+                c.execute("DELETE FROM files WHERE path = ? OR path LIKE ?",
+                          (norm_fwd, norm_fwd.rstrip('/') + '/%'))
+                conn.commit()
+            except Exception:
+                pass
+
             queue: deque[str] = deque([root_path])
             while queue and self._running:
                 current = queue.popleft()

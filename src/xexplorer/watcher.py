@@ -59,6 +59,21 @@ class LiveCacheUpdater(FileSystemEventHandler):
     def on_deleted(self, event):
         try:
             self._c.execute("DELETE FROM files WHERE path=?", (event.src_path,))
+            if event.is_directory:
+                # Cascade: remove every child that lived inside the deleted folder.
+                # Normalise to backslash (Windows) and strip any trailing separator
+                # so the LIKE pattern matches both shallow and deep children.
+                norm = event.src_path.replace("/", "\\").rstrip("\\")
+                self._c.execute(
+                    "DELETE FROM files WHERE path LIKE ?",
+                    (norm + "\\%",),
+                )
+                # Also handle forward-slash stored paths
+                norm_fwd = event.src_path.replace("\\", "/").rstrip("/")
+                self._c.execute(
+                    "DELETE FROM files WHERE path LIKE ?",
+                    (norm_fwd + "/%",),
+                )
             self._conn.commit()
             self._notify()
         except sqlite3.OperationalError:

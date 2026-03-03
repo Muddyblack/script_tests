@@ -36,20 +36,10 @@ class ClipboardBridge(QObject):
         if q:
             rows = self._conn.execute(
                 """SELECT id, content, pinned, ts, type FROM clips
-                   WHERE type='text' AND lower(content) LIKE ?
+                   WHERE (type='text' AND lower(content) LIKE ?)
                    ORDER BY pinned DESC, ts DESC LIMIT 300""",
                 (f"%{q}%",),
             ).fetchall()
-            # Also include image entries when searching (no text to match on)
-            img_rows = self._conn.execute(
-                """SELECT id, content, pinned, ts, type FROM clips
-                   WHERE type='image'
-                   ORDER BY pinned DESC, ts DESC LIMIT 300"""
-            ).fetchall()
-            # Merge and re-sort
-            all_rows = rows + img_rows
-            all_rows.sort(key=lambda r: (-r[2], -r[3]))
-            rows = all_rows[:300]
         else:
             rows = self._conn.execute(
                 """SELECT id, content, pinned, ts, type FROM clips

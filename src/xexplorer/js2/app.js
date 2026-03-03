@@ -1015,6 +1015,8 @@ const App = () => {
             const list = JSON.parse(raw);
             patchTab(tabId, { results: list, loading: false });
             setStatusMsg(`📁 ${list.length} items`);
+            // Tell the bridge which folder to poll for live updates
+            if (br.set_active_browse_path) br.set_active_browse_path(path);
         });
     }, [activeTabId, activeTab.browsePath, liveRefreshTick]);
 

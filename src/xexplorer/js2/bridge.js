@@ -61,6 +61,7 @@ if (typeof QWebChannel !== 'undefined') {
             drop_tab:          () => {},
             get_initial_path:  () => '',
             get_favorites:     () => '[]',
+            set_active_browse_path: () => {},
         };
         _bridgeReady = true;
         _bridgeQueue.forEach(fn => fn(_bridge));

@@ -1,6 +1,7 @@
 """System-level command execution: toggles, process management, macros."""
 
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -281,7 +282,9 @@ def launch_window_manager(nexus) -> None:
 def launch_ghost_typist(nexus) -> None:
     """Launch Ghost Typist text-expander UI."""
     nexus.status_lbl.setText("⌨️ Launching Ghost Typist...")
-    subprocess.Popen([sys.executable, "-m", "src.ghost_typist"])
+    env = os.environ.copy()
+    env["NEXUS_OWNS_WATCHER"] = "1"
+    subprocess.Popen([sys.executable, "-m", "src.ghost_typist"], env=env)
 
 
 def run_macro(nexus, macro_id: int) -> None:

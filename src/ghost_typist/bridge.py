@@ -1,6 +1,7 @@
 """Ghost Typist — PyQt/Python bridge exposed to the WebEngine page."""
 
 import json
+import os
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
@@ -14,11 +15,14 @@ class GhostTypistBridge(QObject):
     def __init__(self) -> None:
         super().__init__()
         db.init_db()
-        watcher = get_watcher()
-        watcher.reload_snippets()
-        # Auto-start if DB says enabled
-        if db.get_setting("watcher_enabled", "1") == "1":
-            watcher.start()
+        # When launched from Nexus, the Nexus process already owns the keyboard
+        # hook. Skip starting a second watcher in this subprocess to prevent
+        # every trigger from expanding twice.
+        if os.environ.get("NEXUS_OWNS_WATCHER") != "1":
+            watcher = get_watcher()
+            watcher.reload_snippets()
+            if db.get_setting("watcher_enabled", "1") == "1":
+                watcher.start()
 
     # ── Snippets ──────────────────────────────────────────────────────────────
 
@@ -44,16 +48,19 @@ class GhostTypistBridge(QObject):
 
     @pyqtSlot(result=bool)
     def get_watcher_status(self) -> bool:
+        if os.environ.get("NEXUS_OWNS_WATCHER") == "1":
+            return db.get_setting("watcher_enabled", "1") == "1"
         return get_watcher().is_running
 
     @pyqtSlot(bool)
     def set_watcher_enabled(self, enabled: bool) -> None:
-        w = get_watcher()
-        if enabled:
-            w.start()
-        else:
-            w.stop()
         db.set_setting("watcher_enabled", "1" if enabled else "0")
+        if os.environ.get("NEXUS_OWNS_WATCHER") != "1":
+            w = get_watcher()
+            if enabled:
+                w.start()
+            else:
+                w.stop()
 
     # ── Settings ───────────────────────────────────────────────────────────────
 
