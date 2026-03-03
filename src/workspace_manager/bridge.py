@@ -436,8 +436,8 @@ class WorkspaceBridge(QObject):
             )
 
             try:
-                if entry_type == "vscode":
-                    self._launch_vscode(path)
+                if entry_type in ("ide", "vscode"):
+                    self._launch_ide(path, entry.get("ide", "vscode"))
                 elif entry_type == "url":
                     os.startfile(path)
                 elif entry_type == "program":
@@ -463,22 +463,104 @@ class WorkspaceBridge(QObject):
 
             time.sleep(0.3)
 
-    def _launch_vscode(self, path: str):
+    # ── IDE launcher ───────────────────────────────────────────────────────
+    _IDE_CLI = {
+        "vscode":         "code",
+        "cursor":         "cursor",
+        "windsurf":       "windsurf",
+        "zed":            "zed",
+        "intellij":       "idea",
+        "pycharm":        "pycharm",
+        "webstorm":       "webstorm",
+        "clion":          "clion",
+        "rider":          "rider",
+        "goland":         "goland",
+        "android_studio": "studio",
+        "rubymine":       "mine",
+        "datagrip":       "datagrip",
+        "sublime":        "subl",
+        "nvim":           "nvim",
+    }
+
+    def _launch_ide(self, path: str, ide_key: str = "vscode"):
+        import glob as _glob
+        # 1. Try CLI on PATH (works for most cross-platform + JetBrains Toolbox shell scripts)
+        cli = self._IDE_CLI.get(ide_key, ide_key)
         try:
-            subprocess.Popen(["code", path], shell=True)
-        except FileNotFoundError:
-            code_exe = os.path.join(
-                os.environ.get("LOCALAPPDATA", ""),
-                "Programs", "Microsoft VS Code", "Code.exe",
-            )
-            if os.path.isfile(code_exe):
-                subprocess.Popen([code_exe, path])
+            subprocess.Popen([cli, path], shell=True)
+            return
+        except Exception:
+            pass
+
+        local = os.environ.get("LOCALAPPDATA", "")
+        appdata = os.environ.get("APPDATA", "")
+        prog = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+        prog86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+
+        # 2. Known install paths per IDE
+        candidates: list[str] = {
+            "vscode": [
+                os.path.join(local, "Programs", "Microsoft VS Code", "Code.exe"),
+            ],
+            "cursor": [
+                os.path.join(local, "Programs", "cursor", "Cursor.exe"),
+                os.path.join(local, "cursor", "Cursor.exe"),
+            ],
+            "windsurf": [
+                os.path.join(local, "Programs", "Windsurf", "Windsurf.exe"),
+                os.path.join(local, "Windsurf", "Windsurf.exe"),
+            ],
+            "zed": [
+                os.path.join(local, "Zed", "zed.exe"),
+                os.path.join(prog, "Zed", "zed.exe"),
+            ],
+            "sublime": [
+                os.path.join(prog, "Sublime Text", "sublime_text.exe"),
+                os.path.join(prog, "Sublime Text 4", "sublime_text.exe"),
+                os.path.join(prog, "Sublime Text 3", "sublime_text.exe"),
+                os.path.join(prog86, "Sublime Text", "sublime_text.exe"),
+            ],
+            "nvim": [
+                os.path.join(prog, "Neovim", "bin", "nvim.exe"),
+                os.path.join(local, "Programs", "Neovim", "bin", "nvim.exe"),
+            ],
+            "android_studio": [
+                os.path.join(prog, "Android", "Android Studio", "bin", "studio64.exe"),
+            ],
+        }.get(ide_key, [])
+
+        # JetBrains: search Program Files install + Toolbox
+        _jb_names = {
+            "intellij":  ("IntelliJ IDEA*",  "idea64.exe"),
+            "pycharm":   ("PyCharm*",         "pycharm64.exe"),
+            "webstorm":  ("WebStorm*",        "webstorm64.exe"),
+            "clion":     ("CLion*",           "clion64.exe"),
+            "rider":     ("Rider*",           "rider64.exe"),
+            "goland":    ("GoLand*",          "goland64.exe"),
+            "rubymine":  ("RubyMine*",        "rubymine64.exe"),
+            "datagrip":  ("DataGrip*",        "datagrip64.exe"),
+        }
+        if ide_key in _jb_names:
+            pattern, exe = _jb_names[ide_key]
+            # Standard JetBrains install
+            for root in (prog, prog86):
+                hits = _glob.glob(os.path.join(root, "JetBrains", pattern, "bin", exe))
+                candidates.extend(sorted(hits, reverse=True))
+            # JetBrains Toolbox
+            toolbox_root = os.path.join(local, "JetBrains", "Toolbox", "apps")
+            toolbox_hits = _glob.glob(os.path.join(toolbox_root, "**", "bin", exe), recursive=True)
+            candidates.extend(sorted(toolbox_hits, reverse=True))
+
+        for exe_path in candidates:
+            if os.path.isfile(exe_path):
+                subprocess.Popen([exe_path, path])
+                return
 
     def _find_new_window(self, path: str, entry_type: str, title_hint: str) -> int | None:
         search_terms = []
         if title_hint:
             search_terms.append(title_hint.lower()[:40])
-        if entry_type == "vscode":
+        if entry_type in ("vscode", "ide"):
             search_terms.append(os.path.basename(path).lower())
         else:
             search_terms.append(os.path.splitext(os.path.basename(path))[0].lower())
