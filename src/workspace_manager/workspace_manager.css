@@ -593,3 +593,45 @@ html, body {
     display: flex; flex-direction: column; gap: 3px; max-height: 200px; overflow-y: auto;
 }
 .capture-item-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── entry drag handle ───────────────────────────────────────────── */
+.entry-drag-handle {
+    display: flex; align-items: center;
+    color: var(--text-disabled); cursor: grab; flex-shrink: 0;
+    padding: 0 2px; transition: color .1s;
+}
+.entry-drag-handle:hover { color: var(--text-secondary); }
+.entry-card[draggable] { cursor: default; }
+.entry-card.dragging { opacity: 0.45; border-color: var(--accent); }
+.entry-card:not(.dragging):not(.float-in)[data-dragover] { border-color: var(--accent); }
+
+/* ── entry advanced options ──────────────────────────────────────── */
+.entry-adv {
+    padding: 8px 12px 10px;
+    border-top: 1px solid var(--border-light);
+    display: flex; flex-direction: column; gap: 7px;
+    background: var(--bg-overlay);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.adv-field {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11.5px; color: var(--text-secondary);
+}
+.adv-field > span:first-child { min-width: 110px; color: var(--text-disabled); }
+.adv-field-check { cursor: pointer; }
+.adv-field-check input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px; }
+.adv-select {
+    flex: 1; padding: 3px 6px; font-size: 11.5px;
+    background: var(--bg-control); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    outline: none; cursor: pointer;
+}
+.adv-select:focus { border-color: var(--border-focus); }
+.adv-num {
+    width: 70px; padding: 3px 6px; font-size: 11.5px;
+    background: var(--bg-control); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    outline: none;
+}
+.adv-num:focus { border-color: var(--border-focus); }
+.btn-icon.active { color: var(--accent); }

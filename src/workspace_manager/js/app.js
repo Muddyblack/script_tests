@@ -65,6 +65,12 @@ if (typeof QWebChannel !== 'undefined') {
                 { id: 'bot_left',   label: 'Bot-Left',   icon: 'ArrowDownLeft' },
                 { id: 'bot_right',  label: 'Bot-Right',  icon: 'ArrowDownRight' },
             ]),
+            get_monitors: () => JSON.stringify([{ index: 0, x: 0, y: 0, w: 1920, h: 1080, primary: true }]),
+            duplicate_workspace: _id => JSON.stringify({ id: Date.now(), name: 'Copy', entries: [], pinned: false, color: '', last_opened: null, open_count: 0 }),
+            export_workspace: _id => JSON.stringify({ ok: true }),
+            import_workspace: () => JSON.stringify({ id: Date.now(), name: 'Imported Workspace', entries: [], pinned: false, color: '' }),
+            save_all_windows: name => JSON.stringify({ id: Date.now(), name, entries: [], pinned: false, color: '' }),
+            snap_window_on: () => {},
             windows_refreshed: { connect: () => {} },
         };
         _bridgeReady = true;
@@ -294,16 +300,51 @@ function AppPickerModal({ onPick, onClose }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── ENTRY ROW (inside workspace editor) ──────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-function EntryRow({ entry, index, presets, onUpdate, onRemove }) {
+function EntryRow({ entry, index, presets, monitors, onUpdate, onRemove, onMoveEntry }) {
+    const [showAdv, setShowAdv] = useState(false);
+    const cardRef = useRef(null);
+
     const typeIcon = entry.type === 'ide'
         ? (IDE_BY_KEY[entry.ide]?.icon || Icons.Code2)
         : entry.type === 'vscode' ? Icons.Code2
         : entry.type === 'url' ? Icons.Globe
         : Icons.AppWindow;
     const displayName = entry.title_hint || entry.proc_name || entry.path?.split('\\').pop() || 'Unknown';
+
+    // ── drag-and-drop ────────────────────────────────────────────────────────
+    const handleDragStart = (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(index));
+        setTimeout(() => cardRef.current?.classList.add('dragging'), 0);
+    };
+    const handleDragEnd = () => {
+        cardRef.current?.classList.remove('dragging');
+        cardRef.current?.removeAttribute('data-dragover');
+    };
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        cardRef.current?.setAttribute('data-dragover', '1');
+    };
+    const handleDragLeave = (e) => {
+        if (!cardRef.current?.contains(e.relatedTarget))
+            cardRef.current?.removeAttribute('data-dragover');
+    };
+    const handleDrop = (e) => {
+        e.preventDefault();
+        cardRef.current?.removeAttribute('data-dragover');
+        const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (!isNaN(from) && from !== index) onMoveEntry(from, index);
+    };
+
     return (
-        <div className="entry-card float-in">
+        <div ref={cardRef} className="entry-card float-in" draggable
+            onDragStart={handleDragStart} onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
             <div className="entry-card-top">
+                <span className="entry-drag-handle">
+                    <Icon icon={Icons.GripVertical} size={14} />
+                </span>
                 <span className="entry-type-icon">
                     <Icon icon={typeIcon} size={14} />
                 </span>
@@ -313,6 +354,10 @@ function EntryRow({ entry, index, presets, onUpdate, onRemove }) {
                         <div className="entry-path">{entry.path.length > 60 ? '…' + entry.path.slice(-58) : entry.path}</div>
                     )}
                 </div>
+                <button className={`btn-icon ${showAdv ? 'active' : ''}`}
+                    onClick={() => setShowAdv(v => !v)} title="Advanced options">
+                    <Icon icon={Icons.Settings2} size={13} />
+                </button>
                 <button className="btn-icon btn-danger" onClick={() => onRemove(index)} title="Remove">
                     <Icon icon={Icons.Trash2} size={13} />
                 </button>
@@ -322,6 +367,42 @@ function EntryRow({ entry, index, presets, onUpdate, onRemove }) {
                 <PositionStrip presets={presets} value={entry.position || 'default'}
                     onChange={pos => onUpdate(index, { ...entry, position: pos })} />
             </div>
+            {showAdv && (
+                <div className="entry-adv">
+                    {monitors && monitors.length > 1 && (
+                        <label className="adv-field">
+                            <span>Monitor</span>
+                            <select className="adv-select"
+                                value={entry.monitor ?? 0}
+                                onChange={e => onUpdate(index, { ...entry, monitor: parseInt(e.target.value) })}>
+                                {monitors.map(m => (
+                                    <option key={m.index} value={m.index}>
+                                        {`Monitor ${m.index + 1}${m.primary ? ' (primary)' : ''}  ${m.w}×${m.h}`}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
+                    <label className="adv-field">
+                        <span>Window wait (s)</span>
+                        <input type="number" className="adv-num" min="0" max="30" step="0.5"
+                            value={entry.window_wait ?? 1.8}
+                            onChange={e => onUpdate(index, { ...entry, window_wait: parseFloat(e.target.value) || 1.8 })} />
+                    </label>
+                    <label className="adv-field">
+                        <span>Launch delay (s)</span>
+                        <input type="number" className="adv-num" min="0" max="30" step="0.5"
+                            value={entry.launch_delay ?? 0.3}
+                            onChange={e => onUpdate(index, { ...entry, launch_delay: parseFloat(e.target.value) || 0.3 })} />
+                    </label>
+                    <label className="adv-field adv-field-check">
+                        <span>Kill if running</span>
+                        <input type="checkbox"
+                            checked={!!entry.close_existing}
+                            onChange={e => onUpdate(index, { ...entry, close_existing: e.target.checked })} />
+                    </label>
+                </div>
+            )}
         </div>
     );
 }
@@ -329,7 +410,7 @@ function EntryRow({ entry, index, presets, onUpdate, onRemove }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── WORKSPACE EDITOR ─────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-function WorkspaceEditor({ workspace, presets, onClose, onSave }) {
+function WorkspaceEditor({ workspace, presets, monitors, onClose, onSave }) {
     const isNew = !workspace?.id;
     const [name, setName] = useState(workspace?.name || '');
     const [entries, setEntries] = useState(workspace?.entries ? [...workspace.entries] : []);
@@ -340,6 +421,14 @@ function WorkspaceEditor({ workspace, presets, onClose, onSave }) {
 
     const updateEntry = (i, e) => setEntries(prev => prev.map((x, j) => j === i ? e : x));
     const removeEntry = (i) => setEntries(prev => prev.filter((_, j) => j !== i));
+    const moveEntry   = useCallback((from, to) => {
+        setEntries(prev => {
+            const next = [...prev];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
+    }, []);
 
     const handlePick = ({ type, name: appName, path, ide }) => {
         setShowPicker(false);
@@ -411,8 +500,8 @@ function WorkspaceEditor({ workspace, presets, onClose, onSave }) {
                     ) : (
                         <div className="entry-list">
                             {entries.map((e, i) => (
-                                <EntryRow key={i} entry={e} index={i} presets={presets}
-                                    onUpdate={updateEntry} onRemove={removeEntry} />
+                                <EntryRow key={i} entry={e} index={i} presets={presets} monitors={monitors || []}
+                                    onUpdate={updateEntry} onRemove={removeEntry} onMoveEntry={moveEntry} />
                             ))}
                             <button className="entry-add-more" onClick={() => setShowPicker(true)}>
                                 <Icon icon={Icons.Plus} size={12} /> Add another app
@@ -432,7 +521,7 @@ function WorkspaceEditor({ workspace, presets, onClose, onSave }) {
 }
 
 // ── Workspace Card ──────────────────────────────────────────────────────────
-function WorkspaceCard({ ws, onLaunch, onEdit, onDelete, onPin }) {
+function WorkspaceCard({ ws, onLaunch, onEdit, onDelete, onPin, onDuplicate, onExport }) {
     const entryCount = ws.entries?.length || 0;
     const types = [...new Set((ws.entries || []).map(e => e.type))];
     return (
@@ -458,6 +547,12 @@ function WorkspaceCard({ ws, onLaunch, onEdit, onDelete, onPin }) {
                 <button className="btn-icon" title={ws.pinned ? 'Unpin' : 'Pin'}
                     onClick={() => onPin(ws)} style={ws.pinned ? { color: 'var(--warning)' } : {}}>
                     <Icon icon={ws.pinned ? Icons.PinOff : Icons.Pin} size={14} />
+                </button>
+                <button className="btn-icon" title="Duplicate" onClick={() => onDuplicate(ws)}>
+                    <Icon icon={Icons.Copy} size={14} />
+                </button>
+                <button className="btn-icon" title="Export to file" onClick={() => onExport(ws)}>
+                    <Icon icon={Icons.Download} size={14} />
                 </button>
                 <button className="btn-icon" title="Edit" onClick={() => onEdit(ws)}>
                     <Icon icon={Icons.Pencil} size={14} />
@@ -583,6 +678,7 @@ function App() {
     const [selectedWins, setSelectedWins] = useState(new Set());
     const [search, setSearch] = useState('');
     const [presets, setPresets] = useState([]);
+    const [monitors, setMonitors] = useState([]);
     const [editor, setEditor] = useState(null);   // null | {workspace}
     const [captureModal, setCaptureModal] = useState(false);
     const [status, flash] = useStatus();
@@ -595,9 +691,11 @@ function App() {
             Promise.all([
                 Promise.resolve(b.get_workspaces()),
                 Promise.resolve(b.get_position_presets()),
-            ]).then(([wsj, psj]) => {
+                Promise.resolve(b.get_monitors()),
+            ]).then(([wsj, psj, monj]) => {
                 setWorkspaces(JSON.parse(wsj));
                 setPresets(JSON.parse(psj));
+                setMonitors(JSON.parse(monj));
                 setLoading(false);
             });
             b.windows_refreshed.connect(j => setWindows(JSON.parse(j)));
@@ -664,6 +762,35 @@ function App() {
         });
     }, [flash, refreshWorkspaces]);
 
+    const handleDuplicate = useCallback((ws) => {
+        getBridge(b => {
+            Promise.resolve(b.duplicate_workspace(ws.id)).then(j => {
+                const r = JSON.parse(j);
+                r.error ? flash(r.error, 'error') : (refreshWorkspaces(), flash(`Duplicated "${ws.name}"`, 'success'));
+            });
+        });
+    }, [flash, refreshWorkspaces]);
+
+    const handleExport = useCallback((ws) => {
+        getBridge(b => {
+            Promise.resolve(b.export_workspace(ws.id)).then(j => {
+                const r = JSON.parse(j);
+                if (r.cancelled) return;
+                r.error ? flash(r.error, 'error') : flash(`Exported "${ws.name}"`, 'success');
+            });
+        });
+    }, [flash]);
+
+    const handleImport = useCallback(() => {
+        getBridge(b => {
+            Promise.resolve(b.import_workspace()).then(j => {
+                const r = JSON.parse(j);
+                if (r.cancelled) return;
+                r.error ? flash(r.error, 'error') : (refreshWorkspaces(), flash(`Imported "${r.name}"`, 'success'));
+            });
+        });
+    }, [flash, refreshWorkspaces]);
+
     // ── window actions ──────────────────────────────────────────────────────
     const toggleWin = useCallback((hwnd) => {
         setSelectedWins(prev => {
@@ -713,6 +840,9 @@ function App() {
                     <div className="app-header-sub">capture · organize · launch</div>
                 </div>
                 <div className="app-header-right">
+                    <button className="btn btn-ghost" onClick={handleImport} title="Import workspace from file">
+                        <Icon icon={Icons.Upload} size={12} /> Import
+                    </button>
                     <button className="btn btn-primary" onClick={() => setEditor({ workspace: {} })}>
                         <Icon icon={Icons.Plus} size={12} /> New
                     </button>
@@ -780,7 +910,9 @@ function App() {
                                         onLaunch={handleLaunch}
                                         onEdit={w => setEditor({ workspace: w })}
                                         onDelete={handleDelete}
-                                        onPin={handlePin} />
+                                        onPin={handlePin}
+                                        onDuplicate={handleDuplicate}
+                                        onExport={handleExport} />
                                 ))}
                             </AnimatePresence>
                         )}
@@ -805,6 +937,11 @@ function App() {
                                 <button className="btn btn-ghost btn-sm"
                                     onClick={() => setSelectedWins(new Set(windows.map(w => w.hwnd)))}>
                                     <Icon icon={Icons.CheckSquare} size={11} /> All
+                                </button>
+                                <button className="btn btn-ghost btn-sm"
+                                    title="Capture all open windows as a new workspace"
+                                    onClick={() => { setSelectedWins(new Set(windows.map(w => w.hwnd))); setCaptureModal(true); }}>
+                                    <Icon icon={Icons.SaveAll} size={11} /> Save All
                                 </button>
                                 {selectedWins.size > 0 && (
                                     <button className="btn btn-primary btn-sm" onClick={() => setCaptureModal(true)}>
@@ -845,7 +982,7 @@ function App() {
             {/* Workspace editor (full overlay) */}
             <AnimatePresence>
                 {editor && (
-                    <WorkspaceEditor workspace={editor.workspace} presets={presets}
+                    <WorkspaceEditor workspace={editor.workspace} presets={presets} monitors={monitors}
                         onClose={() => setEditor(null)} onSave={handleSaveWorkspace} />
                 )}
             </AnimatePresence>

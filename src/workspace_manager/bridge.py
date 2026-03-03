@@ -7,6 +7,7 @@ Launching a workspace opens every entry and snaps each window into place.
 Also exposes live-window listing so users can pick from currently open
 programs and capture their positions into a workspace.
 """
+import copy
 import ctypes
 import ctypes.wintypes
 import json
@@ -40,8 +41,50 @@ GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x00000080
 
 
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize",    ctypes.wintypes.DWORD),
+        ("rcMonitor", RECT),
+        ("rcWork",    RECT),
+        ("dwFlags",   ctypes.wintypes.DWORD),
+    ]
+
+
 def _screen_size() -> tuple[int, int]:
     return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+
+def _get_monitors() -> list[dict]:
+    """Return all monitors, primary first."""
+    results: list[dict] = []
+    idx = [0]
+
+    @ctypes.WINFUNCTYPE(
+        ctypes.c_bool,
+        ctypes.wintypes.HMONITOR,
+        ctypes.wintypes.HDC,
+        ctypes.POINTER(RECT),
+        ctypes.wintypes.LPARAM,
+    )
+    def _cb(hMon, _hdc, _lprc, _data):
+        mi = MONITORINFO()
+        mi.cbSize = ctypes.sizeof(MONITORINFO)
+        user32.GetMonitorInfoW(hMon, ctypes.byref(mi))
+        r = mi.rcMonitor
+        results.append({
+            "index":   idx[0],
+            "x":       r.left,
+            "y":       r.top,
+            "w":       r.right  - r.left,
+            "h":       r.bottom - r.top,
+            "primary": bool(mi.dwFlags & 1),
+        })
+        idx[0] += 1
+        return True
+
+    user32.EnumDisplayMonitors(None, None, _cb, 0)
+    results.sort(key=lambda m: (not m["primary"], m["x"]))
+    return results
 
 
 def _get_pid(hwnd: int) -> int:
@@ -166,24 +209,76 @@ POSITION_PRESETS = [
 ]
 
 
-def _snap_rect(preset: str) -> tuple[int, int, int, int]:
-    sw, sh = _screen_size()
+def _snap_rect(preset: str, monitor_index: int = 0) -> tuple[int, int, int, int]:
+    monitors = _get_monitors()
+    if monitors and 0 <= monitor_index < len(monitors):
+        mon = monitors[monitor_index]
+        mx, my, sw, sh = mon["x"], mon["y"], mon["w"], mon["h"]
+    else:
+        mx, my = 0, 0
+        sw, sh = _screen_size()
     hw, hh = sw // 2, sh // 2
     presets = {
-        "default": (0, 0, 0, 0),
-        "left_half": (0, 0, hw, sh),
-        "right_half": (hw, 0, hw, sh),
-        "top_half": (0, 0, sw, hh),
-        "bottom_half": (0, hh, sw, hh),
-        "top_left": (0, 0, hw, hh),
-        "top_right": (hw, 0, hw, hh),
-        "bottom_left": (0, hh, hw, hh),
-        "bottom_right": (hw, hh, hw, hh),
-        "fullscreen": (0, 0, sw, sh),
-        "center_80": (int(sw * 0.1), int(sh * 0.1), int(sw * 0.8), int(sh * 0.8)),
-        "center_60": (int(sw * 0.2), int(sh * 0.2), int(sw * 0.6), int(sh * 0.6)),
+        "default":      (0, 0, 0, 0),
+        "left_half":    (mx,      my,      hw,           sh),
+        "right_half":   (mx + hw, my,      hw,           sh),
+        "top_half":     (mx,      my,      sw,           hh),
+        "bottom_half":  (mx,      my + hh, sw,           hh),
+        "top_left":     (mx,      my,      hw,           hh),
+        "top_right":    (mx + hw, my,      hw,           hh),
+        "bottom_left":  (mx,      my + hh, hw,           hh),
+        "bottom_right": (mx + hw, my + hh, hw,           hh),
+        "fullscreen":   (mx,      my,      sw,           sh),
+        "center_80":    (mx + int(sw * 0.1), my + int(sh * 0.1), int(sw * 0.8), int(sh * 0.8)),
+        "center_60":    (mx + int(sw * 0.2), my + int(sh * 0.2), int(sw * 0.6), int(sh * 0.6)),
     }
     return presets.get(preset, (0, 0, 0, 0))
+
+
+# ── IDE detection from open windows ─────────────────────────────────────────
+
+# Maps process exe name → (entry_type, ide_key).  Separators used in window title
+# to extract the project path: VS Code / Cursor use " — ", JetBrains use " – ".
+_PROC_TO_IDE: dict[str, tuple[str, str]] = {
+    "code.exe":          ("ide", "vscode"),
+    "cursor.exe":        ("ide", "cursor"),
+    "windsurf.exe":      ("ide", "windsurf"),
+    "idea64.exe":        ("ide", "intellij"),
+    "pycharm64.exe":     ("ide", "pycharm"),
+    "webstorm64.exe":    ("ide", "webstorm"),
+    "clion64.exe":       ("ide", "clion"),
+    "rider64.exe":       ("ide", "rider"),
+    "goland64.exe":      ("ide", "goland"),
+    "rubymine64.exe":    ("ide", "rubymine"),
+    "datagrip64.exe":    ("ide", "datagrip"),
+    "sublime_text.exe":  ("ide", "sublime"),
+    "nvim.exe":          ("ide", "nvim"),
+}
+
+
+def _detect_window_ide(proc_name: str, exec_path: str, title: str) -> tuple[str, str, str]:
+    """Return (entry_type, ide_key, path) for a window.
+
+    Tries to extract a project path/name from the window title.
+    Falls back to ('program', '', exec_path) for non-IDE windows.
+    """
+    pn = proc_name.lower()
+    match = _PROC_TO_IDE.get(pn)
+    if not match:
+        for exe, val in _PROC_TO_IDE.items():
+            if pn.endswith(exe):
+                match = val
+                break
+    if not match:
+        return "program", "", exec_path
+
+    etype, ide_key = match
+    path = exec_path
+    for sep in (" — ", " – ", " - "):
+        if sep in title:
+            path = title.split(sep)[0].strip()
+            break
+    return etype, ide_key, path
 
 
 # ── VS Code recent scanner ────────────────────────────────────────────────
@@ -426,14 +521,20 @@ class WorkspaceBridge(QObject):
 
     def _launch_entries(self, entries: list[dict]):
         for entry in entries:
-            entry_type = entry.get("type", "program")
-            path = entry.get("path", "")
-            args = entry.get("args", "")
-            position = entry.get("position", "default")
+            entry_type  = entry.get("type", "program")
+            path        = entry.get("path", "")
+            args        = entry.get("args", "")
+            position    = entry.get("position", "default")
+            monitor     = entry.get("monitor", 0)
+            window_wait = float(entry.get("window_wait", 1.8))
+            launch_delay = float(entry.get("launch_delay", 0.3))
             custom_rect = (
                 entry.get("x", 0), entry.get("y", 0),
                 entry.get("w", 0), entry.get("h", 0),
             )
+
+            if entry.get("close_existing", False):
+                self._close_existing_processes(path)
 
             try:
                 if entry_type in ("ide", "vscode"):
@@ -451,17 +552,44 @@ class WorkspaceBridge(QObject):
                 continue
 
             if position != "default" or any(v != 0 for v in custom_rect):
-                time.sleep(1.8)
+                time.sleep(window_wait)
                 hwnd = self._find_new_window(path, entry_type, entry.get("title_hint", ""))
                 if hwnd:
                     if position == "custom" and any(v != 0 for v in custom_rect):
                         _move_window(hwnd, *custom_rect)
                     elif position != "default":
-                        rect = _snap_rect(position)
+                        rect = _snap_rect(position, monitor)
                         if rect != (0, 0, 0, 0):
                             _move_window(hwnd, *rect)
 
-            time.sleep(0.3)
+            time.sleep(launch_delay)
+
+    def _close_existing_processes(self, path: str) -> None:
+        """Terminate any running processes whose exe name matches *path*."""
+        target = os.path.basename(path).lower()
+        if not target:
+            return
+        try:
+            seen: set[int] = set()
+            for w in _list_windows():
+                pn  = w["proc_name"].lower()
+                ep  = os.path.basename(w.get("exec_path", "")).lower()
+                if target in pn or (ep and target in ep):
+                    pid = w["pid"]
+                    if pid and pid not in seen:
+                        seen.add(pid)
+            for pid in seen:
+                try:
+                    h = kernel32.OpenProcess(0x0001, False, pid)  # PROCESS_TERMINATE
+                    if h:
+                        kernel32.TerminateProcess(h, 0)
+                        kernel32.CloseHandle(h)
+                except Exception:
+                    pass
+            if seen:
+                time.sleep(0.8)
+        except Exception:
+            pass
 
     # ── IDE launcher ───────────────────────────────────────────────────────
     _IDE_CLI = {
@@ -604,24 +732,93 @@ class WorkspaceBridge(QObject):
             w = win_map.get(hwnd)
             if not w:
                 continue
-            entry_type = "program"
-            path = w["exec_path"]
-            if "code" in w["proc_name"].lower():
-                entry_type = "vscode"
-                title = w["title"]
-                if " — " in title:
-                    path = title.split(" — ")[0].strip()
-            entries.append({
-                "type": entry_type,
-                "path": path,
+            entry_type, ide_key, path = _detect_window_ide(
+                w["proc_name"], w["exec_path"], w["title"]
+            )
+            entry: dict = {
+                "type":       entry_type,
+                "path":       path,
                 "title_hint": w["title"][:80],
-                "proc_name": w["proc_name"],
-                "position": "custom",
+                "proc_name":  w["proc_name"],
+                "position":   "custom",
                 "x": w["x"], "y": w["y"],
                 "w": w["w"], "h": w["h"],
-            })
+            }
+            if ide_key:
+                entry["ide"] = ide_key
+            entries.append(entry)
 
         return self.save_workspace(json.dumps({"name": name, "entries": entries}))
+
+    # ── Duplicate / Export / Import ───────────────────────────────────────
+
+    @pyqtSlot(int, result=str)
+    def duplicate_workspace(self, ws_id: int) -> str:
+        """Clone a workspace with ' (copy)' appended to its name."""
+        for ws in self._data["workspaces"]:
+            if ws["id"] == ws_id:
+                new_ws = copy.deepcopy(ws)
+                new_ws["id"]         = self._data["next_id"]
+                self._data["next_id"] += 1
+                new_ws["name"]       = ws["name"] + " (copy)"
+                new_ws["pinned"]     = False
+                new_ws["last_opened"] = None
+                new_ws["open_count"] = 0
+                self._data["workspaces"].append(new_ws)
+                self._save_data()
+                return json.dumps(new_ws)
+        return json.dumps({"error": "Not found"})
+
+    @pyqtSlot(int, result=str)
+    def export_workspace(self, ws_id: int) -> str:
+        """Save a single workspace to a user-chosen JSON file."""
+        ws = next((w for w in self._data["workspaces"] if w["id"] == ws_id), None)
+        if not ws:
+            return json.dumps({"error": "Not found"})
+        path, _ = QFileDialog.getSaveFileName(
+            None, "Export Workspace",
+            f"{ws['name']}.json", "JSON (*.json)"
+        )
+        if not path:
+            return json.dumps({"cancelled": True})
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(ws, f, indent=2)
+            return json.dumps({"ok": True, "path": path})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(result=str)
+    def import_workspace(self) -> str:
+        """Load a workspace from a user-chosen JSON file and add it."""
+        path, _ = QFileDialog.getOpenFileName(
+            None, "Import Workspace", "", "JSON (*.json)"
+        )
+        if not path:
+            return json.dumps({"cancelled": True})
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                ws = json.load(f)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+        ws.pop("id", None)
+        ws.pop("open_count", None)
+        ws.pop("last_opened", None)
+        return self.save_workspace(json.dumps(ws))
+
+    # ── Save all open windows ──────────────────────────────────────────────
+
+    @pyqtSlot(str, result=str)
+    def save_all_windows(self, name: str) -> str:
+        """Capture every currently visible window as a new workspace."""
+        name = name.strip()
+        if not name:
+            return json.dumps({"error": "Name is required"})
+        all_wins = _list_windows()
+        if not all_wins:
+            return json.dumps({"error": "No open windows found"})
+        hwnds = [w["hwnd"] for w in all_wins]
+        return self.capture_windows(json.dumps({"name": name, "hwnds": hwnds}))
 
     # ── VS Code recent ─────────────────────────────────────────────────────
 
@@ -668,6 +865,18 @@ class WorkspaceBridge(QObject):
     def get_screen_info(self) -> str:
         sw, sh = _screen_size()
         return json.dumps({"width": sw, "height": sh})
+
+    @pyqtSlot(result=str)
+    def get_monitors(self) -> str:
+        """Return list of all connected monitors with geometry."""
+        return json.dumps(_get_monitors())
+
+    @pyqtSlot(int, str, int)
+    def snap_window_on(self, hwnd: int, preset: str, monitor_index: int) -> None:
+        """Snap *hwnd* to *preset* on the given monitor index."""
+        rect = _snap_rect(preset, monitor_index)
+        if rect != (0, 0, 0, 0):
+            _move_window(hwnd, *rect)
 
     @pyqtSlot(result=str)
     def get_position_presets(self) -> str:
