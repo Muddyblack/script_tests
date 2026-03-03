@@ -43,7 +43,7 @@ from PyQt6.QtWidgets import (
 )
 
 try:
-    from src.common.config import ICON_PATH
+    from src.common.config import PORT_INSPECTOR_ICON_PATH as ICON_PATH
 except ImportError:
     ICON_PATH = ""
 

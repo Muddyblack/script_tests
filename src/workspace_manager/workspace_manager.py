@@ -1,4 +1,4 @@
-"""Hash Tool — WebEngine-powered file & text hashing window."""
+"""Workspace Manager — WebEngine-powered workspace launcher."""
 
 import os
 import sys
@@ -16,24 +16,22 @@ except ImportError:
     ASSETS_DIR = ""
 
 from src.common.theme import ThemeManager, WebThemeBridge
-from src.hash_tool.bridge import HashToolBridge
+from src.workspace_manager.bridge import WorkspaceBridge
 
 
-class HashTool(QMainWindow):
+class WorkspaceManager(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.mgr = ThemeManager()
-        self.setWindowTitle("Hash Tool")
-
+        self.setWindowTitle("Workspace Manager")
         try:
-            icon_path = os.path.join(ASSETS_DIR, "hash_tool.png")
+            icon_path = os.path.join(ASSETS_DIR, "workspace_manager.png")
             if os.path.exists(icon_path):
                 self.setWindowIcon(QIcon(icon_path))
         except Exception:
             pass
-
-        self.resize(780, 680)
-        self.setMinimumSize(620, 520)
+        self.resize(880, 640)
+        self.setMinimumSize(640, 480)
 
         self.view = QWebEngineView()
         settings = self.view.settings()
@@ -45,52 +43,50 @@ class HashTool(QMainWindow):
             attr = getattr(QWebEngineSettings.WebAttribute, attr_name, None)
             if attr:
                 settings.setAttribute(attr, True)
-
         self.setCentralWidget(self.view)
 
-        self.bridge = HashToolBridge(self)
+        self.bridge = WorkspaceBridge(self)
         self.channel = QWebChannel(self)
         self.channel.registerObject("pyBridge", self.bridge)
         self.view.page().setWebChannel(self.channel)
 
-        # Live theme injection
         self._theme_bridge = WebThemeBridge(self.mgr, self.view)
 
         self.shortcut_devtools = QShortcut(QKeySequence("F12"), self)
         self.shortcut_devtools.activated.connect(self._open_devtools)
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        html_path = os.path.join(script_dir, "hash_tool.html")
+        html_path = os.path.join(script_dir, "workspace_manager.html")
         self.view.setUrl(QUrl.fromLocalFile(html_path))
 
     def _open_devtools(self) -> None:
         self._devtools = QWebEngineView()
-        self._devtools.setWindowTitle("Hash Tool DevTools")
+        self._devtools.setWindowTitle("Workspace Manager DevTools")
         self._devtools.resize(1100, 750)
         self.view.page().setDevToolsPage(self._devtools.page())
         self._devtools.show()
 
 
-def launch() -> "HashTool":
-    """Create and show the window (for embedding inside Nexus; QApplication must exist)."""
-    win = HashTool()
+def launch() -> "WorkspaceManager":
+    """Create and show the window (for embedding inside nexus)."""
+    win = WorkspaceManager()
     win.show()
     return win
 
 
 def main() -> None:
-    """Standalone entry point — creates its own QApplication."""
+    """Standalone entry point."""
     if sys.platform == "win32":
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.hash_tool")
-
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "nexus.workspace_manager"
+        )
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(True)
-    win = HashTool()
+    win = WorkspaceManager()
     win.show()
     sys.exit(app.exec())
 
 
 if __name__ == "__main__":
     main()
-

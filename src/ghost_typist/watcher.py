@@ -6,17 +6,77 @@ replacements when a snippet trigger is detected.
 
 Special expansion tokens
 ------------------------
-    __DATE__   → today's date  (YYYY-MM-DD)
-    __TIME__   → current time  (HH:MM)
-    __CLIP__   → current clipboard text (requires PyQt app running)
+    __DATE__        → today's date  (YYYY-MM-DD)
+    __TIME__        → current time  (HH:MM)
+    __CLIP__        → current clipboard text (requires PyQt app running)
+
+Key tokens  (can be mixed with plain text)
+------------------------------------------
+    {tab}           → Tab key
+    {enter}         → Enter / Return
+    {space}         → Space
+    {backspace}     → Backspace
+    {up}/{down}/{left}/{right}  → arrow keys
+    {home}/{end}/{pgup}/{pgdn}  → navigation
+    {esc}           → Escape
+    {del}           → Delete
+    {f1} … {f12}    → function keys
+    {ctrl+a}        → Ctrl+A  (any combo the keyboard lib understands)
+
+    Example expansion:  John{tab}Doe{tab}jdoe@example.com{enter}
 """
 
 import datetime
+import os
+import re
 import threading
+import time
 
 import keyboard  # type: ignore
 
 from src.ghost_typist.db import get_all_snippets, increment_use
+
+try:
+    from src.common.config import GHOST_TYPIST_DB as _DB_PATH
+except Exception:
+    _DB_PATH = None
+
+# How often the background thread checks for DB changes (seconds)
+_AUTO_RELOAD_INTERVAL = 2.0
+
+# Regex that matches {key} tokens inside an expansion string.
+_KEY_TOKEN_RE = re.compile(r"\{([^}]+)\}")
+
+# Friendly aliases so users can type intuitive names
+_KEY_ALIASES: dict[str, str] = {
+    "pgup": "page up",
+    "pgdn": "page down",
+    "pgdown": "page down",
+    "del": "delete",
+    "ret": "enter",
+    "return": "enter",
+    "cr": "enter",
+}
+
+
+def _parse_expansion(text: str) -> list[tuple[str, str]]:
+    """Split *text* into alternating plain-text and {key-token} segments.
+
+    Returns a list of ``(kind, value)`` tuples where *kind* is either
+    ``'text'`` or ``'key'``.
+    """
+    parts: list[tuple[str, str]] = []
+    last = 0
+    for m in _KEY_TOKEN_RE.finditer(text):
+        if m.start() > last:
+            parts.append(("text", text[last : m.start()]))
+        raw = m.group(1).strip().lower()
+        parts.append(("key", _KEY_ALIASES.get(raw, raw)))
+        last = m.end()
+    if last < len(text):
+        parts.append(("text", text[last:]))
+    return parts
+
 
 # Maximum characters we keep in the rolling buffer.
 # Triggers longer than this will never match.
@@ -52,6 +112,8 @@ class SnippetWatcher:
         self._running = False
         self._hook_handle = None
         self._suppressing = False             # avoid reacting to own keystrokes
+        self._reload_thread: threading.Thread | None = None
+        self._last_db_mtime: float = 0.0
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -60,15 +122,26 @@ class SnippetWatcher:
         rows = get_all_snippets()
         with self._lock:
             self._snippets = {r["trigger"]: r["expansion"] for r in rows}
+        # Update mtime stamp so the polling thread doesn't double-reload
+        try:
+            if _DB_PATH and os.path.exists(_DB_PATH):
+                self._last_db_mtime = os.path.getmtime(_DB_PATH)
+        except Exception:
+            pass
 
     def start(self) -> None:
-        """Attach global keyboard hook."""
+        """Attach global keyboard hook + start background DB-change watcher."""
         if self._running:
             return
         self.reload_snippets()
         self._buffer = ""
         self._hook_handle = keyboard.hook(self._on_key_event, suppress=False)
         self._running = True
+        # Background thread: reload snippets automatically when DB file changes
+        self._reload_thread = threading.Thread(
+            target=self._db_reload_loop, daemon=True, name="gt-db-watcher"
+        )
+        self._reload_thread.start()
 
     def stop(self) -> None:
         """Detach global keyboard hook."""
@@ -85,6 +158,21 @@ class SnippetWatcher:
         return self._running
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _db_reload_loop(self) -> None:
+        """Daemon thread: reload snippets whenever the DB file is modified."""
+        while self._running:
+            time.sleep(_AUTO_RELOAD_INTERVAL)
+            if not self._running:
+                break
+            try:
+                if _DB_PATH and os.path.exists(_DB_PATH):
+                    mtime = os.path.getmtime(_DB_PATH)
+                    if mtime != self._last_db_mtime:
+                        self._last_db_mtime = mtime
+                        self.reload_snippets()
+            except Exception:
+                pass
 
     def _on_key_event(self, event: keyboard.KeyboardEvent) -> None:
         """Called for every key press/release system-wide."""
@@ -130,8 +218,13 @@ class SnippetWatcher:
             self._fire_replacement(matched_trigger, matched_expansion)
 
     def _fire_replacement(self, trigger: str, expansion: str) -> None:
-        """Delete typed trigger characters and type the expansion."""
+        """Delete typed trigger characters and type the expansion.
+
+        Plain text segments are sent via ``keyboard.write``; ``{key}`` tokens
+        are sent via ``keyboard.press_and_release`` so any key or combo works.
+        """
         expansion = _resolve_expansion(expansion)
+        parts = _parse_expansion(expansion)
 
         self._suppressing = True
         try:
@@ -139,8 +232,13 @@ class SnippetWatcher:
             for _ in range(len(trigger)):
                 keyboard.press_and_release("backspace")
 
-            # Type the replacement
-            keyboard.write(expansion, delay=0.004)
+            # Type the replacement, honouring {key} tokens
+            for kind, value in parts:
+                if kind == "key":
+                    keyboard.press_and_release(value)
+                else:
+                    if value:
+                        keyboard.write(value, delay=0.004)
         finally:
             self._suppressing = False
 

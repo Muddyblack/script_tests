@@ -81,9 +81,6 @@ from .system_commands import (
     launch_archiver as _launch_archiver,
 )
 from .system_commands import (
-    launch_base64_tool as _launch_base64_tool,
-)
-from .system_commands import (
     launch_chronos as _launch_chronos,
 )
 from .system_commands import (
@@ -108,7 +105,7 @@ from .system_commands import (
     launch_regex_helper as _launch_regex,
 )
 from .system_commands import (
-    launch_window_manager as _launch_window_manager,
+    launch_workspace_manager as _launch_workspace_manager,
 )
 from .system_commands import (
     launch_xexplorer as _launch_xexplorer,
@@ -1500,7 +1497,7 @@ class NexusSearch(QWidget):
                     "xexplorer - File Manager",
                     "Modern explorer with fast search",
                     "xexplorer",
-                    "folder.svg",
+                    "xexplorer.png",
                     "#3b82f6",
                 ),
                 (
@@ -1514,21 +1511,14 @@ class NexusSearch(QWidget):
                     "Regex Helper",
                     "Offline Pattern Tester",
                     "regex_helper",
-                    "search.svg",
+                    "regex_sandbox.png",
                     "#f472b6",
-                ),
-                (
-                    "Base64 Encoder/Decoder",
-                    "Encode and decode text strings",
-                    "base64_tool",
-                    "hash.svg",
-                    "#4f46e5",
                 ),
                 (
                     "Color Picker",
                     "Hex & RGB preview + color tool",
                     "color_picker",
-                    "palette.svg",
+                    "color_picker.png",
                     "#8b5cf6",
                 ),
                 (
@@ -1542,7 +1532,7 @@ class NexusSearch(QWidget):
                     "Chronos Hub",
                     "Achievement & Mission Tracker",
                     "chronos_hub",
-                    "clock.svg",
+                    "chronos.png",
                     "#fbbf24",
                 ),
                 (
@@ -1556,41 +1546,41 @@ class NexusSearch(QWidget):
                     "Snip → Text (OCR)",
                     "Select an area on screen and copy text to clipboard",
                     "img_to_text",
-                    "image.svg",
+                    "ocr_icon.png",
                     "#22c55e",
                 ),
                 (
                     "Image → Text (OCR)",
                     "Open file / drag-drop / paste image and extract text",
                     "img_to_text_gui",
-                    "image.svg",
+                    "ocr_icon.png",
                     "#34d399",
                 ),
                 (
                     "Clipboard Manager",
                     "Persistent multi-history clipboard with search & pin",
                     "clipboard_manager",
-                    "copy.svg",
+                    "clipboard_manager.png",
                     "#f472b6",
                 ),
                 (
                     "Port Inspector",
                     "Real-time network ports · kill by PID",
                     "port_inspector",
-                    "server.svg",
+                    "port_inspector.png",
                     "#38bdf8",
                 ),
                 (
                     "Hash Tool",
-                    "MD5 · SHA-1 · SHA-256 · SHA-512  file & text hashing",
+                    "MD5 · SHA-1 · SHA-256 · SHA-512 hashing + Base64 encode/decode",
                     "hash_tool",
-                    "hash.svg",
+                    "hash_tool.png",
                     "#a3e635",
                 ),
                 (
-                    "Window Manager",
-                    "Snap · tile · save & restore window layouts",
-                    "window_manager",
+                    "Workspace Manager",
+                    "Open · organize · launch VS Code workspaces",
+                    "workspace_manager",
                     "menu.svg",
                     "#fb923c",
                 ),
@@ -1598,7 +1588,7 @@ class NexusSearch(QWidget):
                     "Ghost Typist",
                     "Text expansion · snippets · macros",
                     "ghost_typist",
-                    "keyboard.svg",
+                    "ghost_typist.png",
                     "#a855f7",
                 ),
             ]
@@ -1953,6 +1943,7 @@ class NexusSearch(QWidget):
             self.status_lbl.setText("Path not found on disk")
 
     def populate_list_results(self, candidates):
+        from PyQt6.QtGui import QPixmap
         self.current_candidates = candidates[:50]
         self.results_list.setUpdatesEnabled(False)
 
@@ -1998,24 +1989,33 @@ class NexusSearch(QWidget):
                 icon_label.setPixmap(cached_pixmap)
                 icon_label.setProperty("native_loaded", True)
             else:
-                # Render SVG with color
-                color_hex = c.get("color", "#9ca3af")
-                svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", icon_name)
-                if not os.path.exists(svg_path):
-                    svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", "file.svg")
-
-                try:
-                    from PyQt6.QtCore import QByteArray
-                    from PyQt6.QtGui import QPixmap
-
-                    with open(svg_path, encoding="utf-8") as fs:
-                        svg_data = fs.read()
-                    svg_data = svg_data.replace("currentColor", color_hex)
-                    pix = QPixmap()
-                    pix.loadFromData(QByteArray(svg_data.encode("utf-8")), "SVG")
+                # Check for direct asset first (PNG/JPG)
+                asset_path = os.path.join(PROJECT_ROOT, "assets", icon_name)
+                if os.path.exists(asset_path) and icon_name.lower().endswith(
+                    (".png", ".jpg", ".jpeg", ".ico")
+                ):
+                    pix = QPixmap(asset_path)
                     icon_label.setPixmap(pix)
-                except Exception:
-                    pass
+                else:
+                    # Render SVG with color
+                    color_hex = c.get("color", "#9ca3af")
+                    svg_path = os.path.join(PROJECT_ROOT, "assets", "svgs", icon_name)
+                    if not os.path.exists(svg_path):
+                        svg_path = os.path.join(
+                            PROJECT_ROOT, "assets", "svgs", "file.svg"
+                        )
+
+                    try:
+                        from PyQt6.QtCore import QByteArray
+
+                        with open(svg_path, encoding="utf-8") as fs:
+                            svg_data = fs.read()
+                        svg_data = svg_data.replace("currentColor", color_hex)
+                        pix = QPixmap()
+                        pix.loadFromData(QByteArray(svg_data.encode("utf-8")), "SVG")
+                        icon_label.setPixmap(pix)
+                    except Exception:
+                        pass
 
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -2224,23 +2224,38 @@ class NexusSearch(QWidget):
                 if content["_data"]:
                     item.setData(0, Qt.ItemDataRole.UserRole, content["_data"]["data"])
                     file_path = content["_data"].get("file_path")
+                    icon_name = content["_data"].get("icon", "")
+
+                    # Try to set icon
+                    loaded_icon = None
                     if file_path:
                         ext = os.path.splitext(file_path)[1].lower()
                         cache_key = (
                             file_path if ext in [".exe", ".lnk", ".url"] else ext
                         )
                         if cache_key in self.icon_cache:
-                            item.setIcon(0, QIcon(self.icon_cache[cache_key]))
+                            loaded_icon = QIcon(self.icon_cache[cache_key])
                         else:
-                            icon_str = content["_data"].get("icon", "🔹")
-                            item.setText(0, f"{icon_str} {name}")
                             if cache_key not in self.pending_icons:
                                 self.pending_icons.add(cache_key)
                                 worker = IconWorker(file_path, cache_key, self)
                                 self.thread_pool.start(worker)
+
+                    if not loaded_icon and icon_name:
+                        # Check assets for PNG
+                        asset_path = os.path.join(PROJECT_ROOT, "assets", icon_name)
+                        if os.path.exists(asset_path) and icon_name.lower().endswith(
+                            (".png", ".jpg", ".jpeg", ".ico")
+                        ):
+                            loaded_icon = QIcon(asset_path)
+
+                    if loaded_icon:
+                        item.setIcon(0, loaded_icon)
+                        item.setText(0, name)
                     else:
-                        icon = content["_data"].get("icon", "🔹")
-                        item.setText(0, f"{icon} {name}")
+                        # Fallback to emoji if no icon found or icon is an SVG filename
+                        display_icon = icon_name if len(icon_name) <= 2 else "🔹"
+                        item.setText(0, f"{display_icon} {name}")
                 else:
                     item.setIcon(
                         0,
@@ -2378,8 +2393,6 @@ class NexusSearch(QWidget):
                     _launch_archiver(self)
                 elif data["cmd"] == "color_picker":
                     _launch_color_picker(self)
-                elif data["cmd"] == "base64_tool":
-                    _launch_base64_tool(self)
                 elif data["cmd"] == "chronos_hub":
                     _launch_chronos(self)
                 elif data["cmd"] == "img_to_text":
@@ -2392,8 +2405,8 @@ class NexusSearch(QWidget):
                     _launch_port_inspector(self)
                 elif data["cmd"] == "hash_tool":
                     _launch_hash_tool(self)
-                elif data["cmd"] == "window_manager":
-                    _launch_window_manager(self)
+                elif data["cmd"] == "workspace_manager":
+                    _launch_workspace_manager(self)
                 elif data["cmd"] == "ghost_typist":
                     _launch_ghost_typist(self)
                 elif (
@@ -2487,7 +2500,7 @@ class NexusSearch(QWidget):
             self.populate_list_results(self.current_candidates)
 
     def _open_theme_picker(self):
-        """Open the VS Code-style floating theme picker."""
+        """Open the VS Code-style floating theme picker (from button)."""
         # Close existing if open
         if hasattr(self, "_theme_picker") and self._theme_picker:
             self._theme_picker.close()
@@ -2496,6 +2509,33 @@ class NexusSearch(QWidget):
         # Position it below the theme button
         btn_pos = self._theme_btn.mapToGlobal(self._theme_btn.rect().bottomLeft())
         self._theme_picker.move(btn_pos.x(), btn_pos.y() + 4)
+        self._theme_picker.show()
+        self._theme_picker.raise_()
+        self._theme_picker.activateWindow()
+
+    def open_theme_picker_global(self):
+        """Open the theme picker from a global hotkey — centered on screen."""
+        # Close existing if open (toggle behaviour)
+        if hasattr(self, "_theme_picker") and self._theme_picker and self._theme_picker.isVisible():
+            self._theme_picker.close()
+            return
+
+        self._theme_picker = _ThemePickerPopup(None)  # no parent → true top-level
+        self._theme_picker.setWindowFlags(
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+
+        # Center on the screen that has the cursor
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        sg = screen.availableGeometry()
+        pw = self._theme_picker.sizeHint().width() or 280
+        ph = self._theme_picker.sizeHint().height() or 330
+        self._theme_picker.move(
+            sg.x() + (sg.width() - pw) // 2,
+            sg.y() + (sg.height() - ph) // 3,   # slightly above center, like VS Code
+        )
         self._theme_picker.show()
         self._theme_picker.raise_()
         self._theme_picker.activateWindow()

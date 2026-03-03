@@ -10,8 +10,11 @@ import contextlib
 import html
 import json
 import os
+import queue as _queue
+import shutil
 import sqlite3
 import sys
+import threading
 import time
 
 from PyQt6.QtCore import QFileInfo, QObject, Qt, QTimer, pyqtSignal, pyqtSlot
@@ -125,6 +128,9 @@ class XExplorerBridge(QObject):
     open_window_requested = pyqtSignal(str)       # path to pre-navigate
     # Signal → JS (sent to a target window when a tab is dropped onto it)
     tab_incoming          = pyqtSignal(str)       # JSON {path, title}
+    # Async file-op progress/done
+    file_op_progress      = pyqtSignal(str, int, int, str)  # op_id, done, total, current_name
+    file_op_done          = pyqtSignal(str, str)            # op_id, JSON {errors:[]}
 
     def __init__(self, initial_path: str = "") -> None:
         super().__init__()
@@ -146,6 +152,35 @@ class XExplorerBridge(QObject):
         self._browse_poll_timer.setInterval(750)
         self._browse_poll_timer.timeout.connect(self._poll_browse_dir)
         self._browse_poll_timer.start()
+        # Thread-safe relay queue: worker threads post events here instead of
+        # emitting signals directly (cross-thread signal emission via the
+        # WebEngine bridge is unreliable from plain Python threads).
+        self._op_emit_queue: _queue.Queue = _queue.Queue()
+        self._cancel_flags: dict[str, threading.Event] = {}
+        self._op_flush_timer = QTimer(self)
+        self._op_flush_timer.setInterval(50)  # flush 20×/s
+        self._op_flush_timer.timeout.connect(self._flush_op_queue)
+        self._op_flush_timer.start()
+
+    # ── Op-queue flush (main-thread relay for worker-thread signals) ─────────
+
+    def _flush_op_queue(self) -> None:
+        """Called by QTimer on the main thread; relays queued signal emissions."""
+        try:
+            while True:
+                item = self._op_emit_queue.get_nowait()
+                kind = item[0]
+                if kind == 'progress':
+                    _, op_id, done, total, current = item
+                    self.file_op_progress.emit(op_id, done, total, current)
+                elif kind == 'done':
+                    _, op_id, json_str = item
+                    self.file_op_done.emit(op_id, json_str)
+                    self.live_changed.emit()
+                    # Clean up cancel flag
+                    self._cancel_flags.pop(op_id, None)
+        except _queue.Empty:
+            pass
 
     # ── Browse-path polling ──────────────────────────────────────────────────
 
@@ -607,6 +642,133 @@ class XExplorerBridge(QObject):
             conn.commit()
         self._emit_stats()
 
+    # ── Async file-move / copy / delete / rename ──────────────────────────────
+
+    @pyqtSlot(str, str, str)
+    def copy_items(self, op_id: str, sources_json: str, dest_dir: str) -> None:
+        """Copy files/folders into dest_dir asynchronously.
+
+        Emits file_op_progress(op_id, done, total, current) during the operation
+        and file_op_done(op_id, json) with {errors:[]} when finished.
+        Uses shutil.copy2 (preserves metadata); cross-device safe.
+        """
+        sources: list[str] = json.loads(sources_json)
+        cancel = threading.Event()
+        self._cancel_flags[op_id] = cancel
+
+        def _run() -> None:
+            errors: list[str] = []
+            total = len(sources)
+            for i, src in enumerate(sources):
+                if cancel.is_set():
+                    errors.append("Cancelled")
+                    break
+                name = os.path.basename(src.rstrip("/\\"))
+                self._op_emit_queue.put(('progress', op_id, i, total, name))
+                try:
+                    dst = os.path.join(dest_dir, name)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(src, dst)
+                except Exception as exc:
+                    errors.append(f"{name}: {exc}")
+            self._op_emit_queue.put(('progress', op_id, total, total, ''))
+            self._op_emit_queue.put(('done', op_id, json.dumps({"errors": errors})))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot(str, str, str)
+    def move_items(self, op_id: str, sources_json: str, dest_dir: str) -> None:
+        """Move files/folders into dest_dir asynchronously.
+
+        Same-drive renames are instant; cross-device falls back to copy+delete.
+        """
+        sources: list[str] = json.loads(sources_json)
+        cancel = threading.Event()
+        self._cancel_flags[op_id] = cancel
+
+        def _run() -> None:
+            errors: list[str] = []
+            total = len(sources)
+            for i, src in enumerate(sources):
+                if cancel.is_set():
+                    errors.append("Cancelled")
+                    break
+                name = os.path.basename(src.rstrip("/\\"))
+                self._op_emit_queue.put(('progress', op_id, i, total, name))
+                try:
+                    dst = os.path.join(dest_dir, name)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    shutil.move(src, dst)
+                except Exception as exc:
+                    errors.append(f"{name}: {exc}")
+            self._op_emit_queue.put(('progress', op_id, total, total, ''))
+            self._op_emit_queue.put(('done', op_id, json.dumps({"errors": errors})))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot(str, str)
+    def delete_items(self, op_id: str, paths_json: str) -> None:
+        """Send items to trash (send2trash if available) or permanently delete."""
+        paths: list[str] = json.loads(paths_json)
+        cancel = threading.Event()
+        self._cancel_flags[op_id] = cancel
+
+        def _run() -> None:
+            errors: list[str] = []
+            total = len(paths)
+            for i, path in enumerate(paths):
+                if cancel.is_set():
+                    errors.append("Cancelled")
+                    break
+                name = os.path.basename(path)
+                self._op_emit_queue.put(('progress', op_id, i, total, name))
+                try:
+                    try:
+                        import send2trash  # type: ignore
+                        send2trash.send2trash(path)
+                    except ImportError:
+                        if os.path.isdir(path):
+                            shutil.rmtree(path, ignore_errors=False)
+                        else:
+                            os.unlink(path)
+                except Exception as exc:
+                    errors.append(f"{name}: {exc}")
+            self._op_emit_queue.put(('progress', op_id, total, total, ''))
+            self._op_emit_queue.put(('done', op_id, json.dumps({"errors": errors})))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot(str)
+    def cancel_file_op(self, op_id: str) -> None:
+        """Signal a running file operation to stop at the next item boundary."""
+        flag = self._cancel_flags.get(op_id)
+        if flag:
+            flag.set()
+
+    @pyqtSlot(str, str, result=str)
+    def rename_item(self, path: str, new_name: str) -> str:
+        """Rename a single file or folder. Returns '' on success or an error string."""
+        new_name = new_name.strip()
+        if not new_name:
+            return "Name cannot be empty"
+        # Forbid characters Windows does not allow in file names
+        forbidden = set('<>:"/\\|?*')
+        if any(c in forbidden for c in new_name):
+            return f"Name contains invalid characters: {' '.join(c for c in new_name if c in forbidden)}"
+        try:
+            parent = os.path.dirname(path)
+            dst = os.path.join(parent, new_name)
+            if os.path.exists(dst):
+                return f"'{new_name}' already exists"
+            os.rename(path, dst)
+            self.live_changed.emit()
+            return ""
+        except Exception as exc:
+            return str(exc)
+
     # ── File operations ───────────────────────────────────────────────────────
 
     @pyqtSlot(str)
@@ -743,6 +905,34 @@ class XExplorerBridge(QObject):
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
         return json.dumps({"type": "unsupported", "content": ""})
+
+    @pyqtSlot(str, result=bool)
+    def can_preview(self, path: str) -> bool:
+        """Return True if we have a previewer for this path."""
+        if not path or not os.path.isfile(path):
+            return False
+        ext = os.path.splitext(path)[1].lower()
+        IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
+        TEXT_EXTS  = {
+            ".txt", ".md", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".yaml",
+            ".yml", ".toml", ".ini", ".cfg", ".html", ".css", ".xml", ".csv",
+            ".sh", ".bat", ".ps1", ".rs", ".go", ".java", ".c", ".cpp", ".h",
+            ".log", ".env", ".gitignore",
+        }
+        PDF_EXTS    = {".pdf"}
+        OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
+        
+        if ext in IMAGE_EXTS or ext in TEXT_EXTS or ext in PDF_EXTS or ext in OFFICE_EXTS:
+            return True
+        
+        # Check size for generic text preview
+        try:
+            if os.path.getsize(path) < 256 * 1024:
+                return True
+        except OSError:
+            pass
+            
+        return False
 
     @pyqtSlot(str, int, result=str)
     def get_preview_page(self, path: str, page: int) -> str:

@@ -1152,3 +1152,124 @@ input, textarea, select, button { font-family: inherit; outline: none; }
     color: var(--accent);
     line-height: 1;
 }
+
+/* ── File-op modals ─────────────────────────────────────────────────────────── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: rgba(0,0,0,.48);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: modal-fade-in .12s ease;
+}
+.modal-nonblock { pointer-events: none; }
+.modal-nonblock .modal-box { pointer-events: all; }
+@keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-focus, var(--border));
+    border-radius: 14px;
+    box-shadow: 0 28px 64px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);
+    display: flex;
+    flex-direction: column;
+    min-width: 320px;
+    max-width: 96vw;
+    animation: modal-box-in .15s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes modal-box-in { from { transform: scale(.93) translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 18px 11px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+}
+.modal-close {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-disabled); font-size: 14px; padding: 2px 5px; border-radius: 5px;
+    transition: background .12s, color .12s;
+}
+.modal-close:hover { background: var(--bg-overlay); color: var(--text-primary); }
+.modal-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.modal-footer {
+    padding: 10px 18px 14px;
+    display: flex; justify-content: flex-end; gap: 8px;
+    border-top: 1px solid var(--border);
+}
+.modal-file-row { display: flex; align-items: center; gap: 8px; }
+.modal-old-name {
+    font-size: 13px; color: var(--text-secondary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.modal-input {
+    width: 100%; padding: 8px 11px;
+    background: var(--bg-base); border: 1.5px solid var(--border);
+    border-radius: 8px; color: var(--text-primary); font-size: 13px;
+    transition: border-color .15s, box-shadow .15s;
+}
+.modal-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.modal-err { font-size: 11.5px; color: var(--error, #ef4444); }
+.modal-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.modal-dest {
+    font-size: 11.5px; color: var(--text-secondary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 4px 8px; background: var(--bg-base); border-radius: 6px;
+    border: 1px solid var(--border);
+}
+.modal-progress-track {
+    height: 6px; background: var(--bg-overlay); border-radius: 99px; overflow: hidden;
+}
+.modal-progress-fill {
+    height: 100%; background: var(--accent); border-radius: 99px;
+    transition: width .18s ease;
+}
+.modal-prog-label { font-size: 11.5px; color: var(--text-disabled); text-align: right; }
+.modal-errors { max-height: 90px; overflow-y: auto; }
+.modal-error-item { font-size: 11px; color: var(--error, #ef4444); padding: 1px 0; }
+
+/* ── Drag-and-drop ───────────────────────────────────────────────────────────── */
+.drag-ghost {
+    position: fixed;
+    top: -200px; left: 0;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 9px;
+    padding: 5px 14px;
+    font-size: 12px; font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 4px 18px rgba(0,0,0,.45);
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* Drop-target highlight on folder rows */
+.file-row.drag-over td { background: color-mix(in srgb, var(--accent) 14%, transparent) !important; }
+.file-row.drag-over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.icon-item.drag-over {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+}
+
+/* Drop zone on main panel when dragging to current dir */
+.main-panel[data-drag-active] {
+    outline: 2px dashed var(--accent);
+    outline-offset: -6px;
+    border-radius: 6px;
+}
+
+/* Cut items — dimmed */
+.file-row.cut-item { opacity: 0.42; }
+.icon-item.cut-item { opacity: 0.42; }

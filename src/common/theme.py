@@ -170,6 +170,25 @@ class _ThemeManager(QObject):
         return themes
 
     # ------------------------------------------------------------------
+    # Theme cycling (global hotkeys: Ctrl+Shift+T / Ctrl+Shift+K)
+    # ------------------------------------------------------------------
+    def cycle_theme(self, step: int = 1) -> str:
+        """Switch to the next (+1) or previous (-1) theme and return its display name."""
+        themes = self.get_available_themes()  # list of (folder, display_name)
+        if not themes:
+            return self.current_theme_name
+        names = [t[0] for t in themes]
+        try:
+            idx = names.index(self.current_theme_name)
+        except ValueError:
+            idx = 0
+        new_idx = (idx + step) % len(names)
+        new_name = names[new_idx]
+        self.load_theme(new_name)
+        self.theme_changed.emit()
+        return dict(themes).get(new_name, new_name)
+
+    # ------------------------------------------------------------------
     # Convenience accessors
     # ------------------------------------------------------------------
     def __getitem__(self, key: str) -> str:

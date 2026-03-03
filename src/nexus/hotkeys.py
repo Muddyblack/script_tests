@@ -106,15 +106,18 @@ if sys.platform == "win32":
         toggle_signal = pyqtSignal()
         ocr_signal = pyqtSignal()
         chronos_signal = pyqtSignal()
+        theme_picker_signal = pyqtSignal()
 
         _TOGGLE_ID = 1
         _OCR_ID = 2
         _CHRONOS_ID = 3
+        _THEME_PICKER_ID = 4
 
         def start(self, toggle_hotkey: str, ocr_hotkey: str, chronos_hotkey: str):
             self._toggle_mods, self._toggle_vk = _parse_hotkey(toggle_hotkey)
             self._ocr_mods, self._ocr_vk = _parse_hotkey(ocr_hotkey)
             self._chronos_mods, self._chronos_vk = _parse_hotkey(chronos_hotkey)
+            self._theme_picker_mods, self._theme_picker_vk = _parse_hotkey("ctrl+shift+t")
             threading.Thread(target=self._run, daemon=True, name="HotkeyWindow").start()
 
         def _run(self):
@@ -126,6 +129,8 @@ if sys.platform == "win32":
                         self.ocr_signal.emit()
                     elif wparam == self._CHRONOS_ID:
                         self.chronos_signal.emit()
+                    elif wparam == self._THEME_PICKER_ID:
+                        self.theme_picker_signal.emit()
                 return _user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
             proc = _WndProc(wnd_proc)
@@ -173,6 +178,12 @@ if sys.platform == "win32":
                 print(
                     f"[HotkeyWindow] RegisterHotKey (chronos) failed: {ctypes.GetLastError()}"
                 )
+            if not _user32.RegisterHotKey(
+                hwnd, self._THEME_PICKER_ID, self._theme_picker_mods, self._theme_picker_vk
+            ):
+                print(
+                    f"[HotkeyWindow] RegisterHotKey (theme_picker) failed: {ctypes.GetLastError()}"
+                )
 
             msg = wt.MSG()
             while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0):
@@ -189,6 +200,7 @@ else:
         toggle_signal = pyqtSignal()
         ocr_signal = pyqtSignal()
         chronos_signal = pyqtSignal()
+        theme_picker_signal = pyqtSignal()
 
         def start(self, toggle_hotkey: str, ocr_hotkey: str, chronos_hotkey: str):
             if not pynput_keyboard:
@@ -223,6 +235,7 @@ else:
                 format_hk(toggle_hotkey): self.toggle_signal.emit,
                 format_hk(ocr_hotkey): self.ocr_signal.emit,
                 format_hk(chronos_hotkey): self.chronos_signal.emit,
+                format_hk("ctrl+shift+t"): self.theme_picker_signal.emit,
             }
 
             def run_listener():

@@ -165,12 +165,19 @@ def _get_proc(languages: list[str]) -> subprocess.Popen:
         if _proc is not None:
             _proc.stdin.close()
             _proc.wait()
+        # CREATE_NEW_PROCESS_GROUP isolates the child from the parent's
+        # Ctrl+C signal so torch/easyocr imports can't be interrupted by the
+        # user closing nexus while the model is loading.
+        _extra: dict = {}
+        if sys.platform == "win32":
+            _extra["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         _proc = subprocess.Popen(
             [sys.executable, "-u", str(_WORKER)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=None,   # let worker's terminal output flow through to the console
             text=True,
+            **_extra,
         )
         _proc.stdin.write(",".join(languages) + "\n")
         _proc.stdin.flush()

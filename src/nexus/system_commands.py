@@ -243,12 +243,6 @@ def launch_color_picker(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.color_picker.color_picker"])
 
 
-def launch_base64_tool(nexus) -> None:
-    """Launch the System Base-64 tool."""
-    nexus.status_lbl.setText("🔢 Launching Base64 Tool...")
-    subprocess.Popen([sys.executable, "-m", "src.base64_tool.base64_tool"])
-
-
 def launch_chronos(nexus) -> None:
     """Launch the Chronos Hub."""
     nexus.status_lbl.setText("⏳ Launching Chronos Hub...")
@@ -273,10 +267,10 @@ def launch_hash_tool(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.hash_tool.hash_tool"])
 
 
-def launch_window_manager(nexus) -> None:
-    """Launch the Window Manager."""
-    nexus.status_lbl.setText("🪟 Launching Window Manager...")
-    subprocess.Popen([sys.executable, "-m", "src.window_manager.window_manager"])
+def launch_workspace_manager(nexus) -> None:
+    """Launch the Workspace Manager."""
+    nexus.status_lbl.setText("🪟 Launching Workspace Manager...")
+    subprocess.Popen([sys.executable, "-m", "src.workspace_manager"])
 
 
 def launch_ghost_typist(nexus) -> None:

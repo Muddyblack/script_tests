@@ -43,6 +43,7 @@ def main():
     hw.toggle_signal.connect(bridge.toggle_signal)
     hw.ocr_signal.connect(bridge.snip_to_text_signal)
     hw.chronos_signal.connect(bridge.chronos_signal)
+    hw.theme_picker_signal.connect(nexus.open_theme_picker_global)
     hw.start(SUMMON_HOTKEY, IMG_TO_TEXT_HOTKEY, CHRONOS_HOTKEY)
 
     # Pre-warm OCR worker in background so model is ready before first use
