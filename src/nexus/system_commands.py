@@ -267,12 +267,6 @@ def launch_hash_tool(nexus) -> None:
     subprocess.Popen([sys.executable, "-m", "src.hash_tool.hash_tool"])
 
 
-def launch_workspace_manager(nexus) -> None:
-    """Launch the Workspace Manager."""
-    nexus.status_lbl.setText("🪟 Launching Workspace Manager...")
-    subprocess.Popen([sys.executable, "-m", "src.workspace_manager"])
-
-
 def launch_ghost_typist(nexus) -> None:
     """Launch Ghost Typist text-expander UI."""
     nexus.status_lbl.setText("⌨️ Launching Ghost Typist...")

@@ -3,15 +3,13 @@
 import os
 
 # ---------------------------------------------------------------------------
-# Data directory — everything lives INSIDE the project so the whole app is
-# self-contained and portable.  Nothing is written to Windows roaming/AppData.
+# Data directory — everything lives INSIDE the project.
 # ---------------------------------------------------------------------------
 # Absolute path to the repository root (two levels up from src/common/)
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-# All persistent data goes here.  Add data/ to .gitignore.
 APPDATA = os.path.join(PROJECT_ROOT, "data")
 os.makedirs(APPDATA, exist_ok=True)
 
@@ -27,8 +25,9 @@ SEARCH_HISTORY_FILE = os.path.join(APPDATA, "nexus_history.json")
 FILE_OPS_SETTINGS = os.path.join(APPDATA, "nexus_file_ops.json")
 ARCHIVER_SETTINGS = os.path.join(APPDATA, "nexus_archiver.json")
 WORKSPACES_FILE = os.path.join(APPDATA, "nexus_workspaces.json")
+COLOR_PICKER_CONFIG = os.path.join(APPDATA, "nexus_color_picker.json")
 
-# Chronos sub-folder (keeps its DB + Chromium web-profile out of roaming)
+# Chronos sub-folder
 CHRONOS_DIR = os.path.join(APPDATA, "chronos")
 CHRONOS_DB = os.path.join(CHRONOS_DIR, "chronos_data.db")
 CHRONOS_SETTINGS = os.path.join(CHRONOS_DIR, "chronos_settings.json")
@@ -51,4 +50,3 @@ HASH_TOOL_ICON_PATH = os.path.join(ASSETS_DIR, "hash_tool.png")
 CLIPBOARD_MANAGER_ICON_PATH = os.path.join(ASSETS_DIR, "clipboard_manager.png")
 COLOR_PICKER_ICON_PATH = os.path.join(ASSETS_DIR, "color_picker.png")
 REGEX_HELPER_ICON_PATH = os.path.join(ASSETS_DIR, "regex_sandbox.png")
-WORKSPACE_MANAGER_ICON_PATH = os.path.join(ASSETS_DIR, "workspace_manager.png")

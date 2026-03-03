@@ -7,69 +7,27 @@ This window is a pure React/web UI backed by ClipboardBridge over QWebChannel.
 import os
 import sys
 
-from PyQt6.QtCore import QUrl
-from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
-from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEngineSettings
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QMainWindow
-
-try:
-    from src.common.config import ASSETS_DIR
-except ImportError:
-    ASSETS_DIR = ""
+from PyQt6.QtWidgets import QApplication
 
 from src.clipboard_manager.bridge import ClipboardBridge
-from src.common.theme import ThemeManager, WebThemeBridge
+from src.common.web_app_window import BaseWebApp
 
 
-class ClipboardManager(QMainWindow):
+class ClipboardManager(BaseWebApp):
     """Clipboard history viewer powered by a web UI."""
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.mgr = ThemeManager()
+    WINDOW_TITLE = "Clipboard Manager"
+    ICON_NAME = "clipboard_manager"
+    DEFAULT_SIZE = (1100, 700)
+    MIN_SIZE = (740, 480)
 
-        self.setWindowTitle("Clipboard Manager")
-        self.resize(1100, 700)
-        self.setMinimumSize(740, 480)
+    def create_bridge(self) -> ClipboardBridge:
+        return ClipboardBridge(self)
 
-        icon_path = os.path.join(ASSETS_DIR, "clipboard_manager.png")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+    def html_path(self) -> str:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "clipboard_manager.html")
 
-        self.view = QWebEngineView()
-        s = self.view.settings()
-        for attr in ("DeveloperExtrasEnabled", "LocalContentCanAccessFileUrls",
-                     "LocalContentCanAccessRemoteUrls"):
-            a = getattr(QWebEngineSettings.WebAttribute, attr, None)
-            if a:
-                s.setAttribute(a, True)
-
-        self.setCentralWidget(self.view)
-
-        self.bridge = ClipboardBridge(self)
-        self.channel = QWebChannel(self)
-        self.channel.registerObject("pyBridge", self.bridge)
-        self.view.page().setWebChannel(self.channel)
-
-        self._theme_bridge = WebThemeBridge(self.mgr, self.view)
-
-        self.shortcut_devtools = QShortcut(QKeySequence("F12"), self)
-        self.shortcut_devtools.activated.connect(self._open_devtools)
-
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        html_path  = os.path.join(script_dir, "clipboard_manager.html")
-        self.view.setUrl(QUrl.fromLocalFile(html_path))
-
-    def _open_devtools(self) -> None:
-        self._devtools = QWebEngineView()
-        self._devtools.setWindowTitle("Clipboard Manager DevTools")
-        self._devtools.resize(1100, 750)
-        self.view.page().setDevToolsPage(self._devtools.page())
-        self._devtools.show()
-
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:
         self.bridge.close()
         super().closeEvent(event)
 

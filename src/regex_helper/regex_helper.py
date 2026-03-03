@@ -36,8 +36,15 @@ from PyQt6.QtWidgets import (
 from src.common.config import APPDATA, ASSETS_DIR
 from src.common.theme import ThemeManager, WindowThemeBridge
 
-# --- CONFIGURATION & DATABASE ---
 DB_PATH = os.path.join(APPDATA, "regex_sandbox.db")
+
+_DEFAULT_PATTERNS = [
+    ("Email Address", r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", 0, "test@example.com", "Regex"),
+    ("URL (Simple)", r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+", 0, "Check out https://google.com", "Regex"),
+    ("IP Address (IPv4)", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0, "Local: 127.0.0.1", "Regex"),
+    ("Date (YYYY-MM-DD)", r"\d{4}-\d{2}-\d{2}", 0, "Today is 2024-05-20", "Regex"),
+    ("Phone Number (US)", r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}", 0, "Call (555) 123-4567", "Regex"),
+]
 
 
 def init_db():
@@ -53,138 +60,89 @@ def init_db():
                 mode TEXT DEFAULT 'Regex'
             )
         """)
-        # Safe migration if updating from an older version of the app
         with contextlib.suppress(sqlite3.OperationalError):
             cursor.execute("ALTER TABLE patterns ADD COLUMN mode TEXT DEFAULT 'Regex'")
-
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
+            CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)
         """)
         conn.commit()
 
 
 def seed_defaults():
-    defaults = [
-        (
-            "Email Address",
-            r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
-            0,
-            "test@example.com",
-            "Regex",
-        ),
-        (
-            "URL (Simple)",
-            r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+",
-            0,
-            "Check out https://google.com",
-            "Regex",
-        ),
-        (
-            "IP Address (IPv4)",
-            r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
-            0,
-            "Local: 127.0.0.1",
-            "Regex",
-        ),
-        (
-            "Date (YYYY-MM-DD)",
-            r"\d{4}-\d{2}-\d{2}",
-            0,
-            "Today is 2024-05-20",
-            "Regex",
-        ),
-        (
-            "Phone Number (US)",
-            r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}",
-            0,
-            "Call (555) 123-4567",
-            "Regex",
-        ),
-    ]
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM patterns")
-        if cursor.fetchone()[0] == 0:
+        if cursor.execute("SELECT COUNT(*) FROM patterns").fetchone()[0] == 0:
             cursor.executemany(
                 "INSERT INTO patterns (name, pattern, flags, test_string, mode) VALUES (?, ?, ?, ?, ?)",
-                defaults,
+                _DEFAULT_PATTERNS,
             )
             conn.commit()
 
 
-# --- BACKGROUND WORKERS ---
 class FileSearchWorker(QThread):
     progress = pyqtSignal(int)
-    results_found = pyqtSignal(list)  # Batch of matches (file_path, line_num, content)
+    results_found = pyqtSignal(list)
     finished = pyqtSignal(int)
+
+    MAX_MATCHES = 2000
+    BATCH_SIZE = 50
 
     def __init__(self, directory, pattern, extensions, flags):
         super().__init__()
         self.directory = directory
         self.pattern = pattern
-        self.extensions = [
-            e.strip().lower() for e in extensions.split(",") if e.strip()
-        ]
+        self.extensions = [e.strip().lower() for e in extensions.split(",") if e.strip()]
         self.flags = flags
         self._is_running = True
 
     def stop(self):
         self._is_running = False
 
+    def _matches_extension(self, filename):
+        return not self.extensions or any(filename.lower().endswith(e) for e in self.extensions)
+
     def run(self):
-        match_count = 0
-        MAX_TOTAL_MATCHES = 2000
         try:
             regex = re.compile(self.pattern, self.flags)
         except re.error:
             self.finished.emit(0)
             return
 
-        file_list = []
-        for root, _, files in os.walk(self.directory):
-            if not self._is_running:
-                break
-            for f in files:
-                if not self.extensions or any(
-                    f.lower().endswith(ext) for ext in self.extensions
-                ):
-                    file_list.append(os.path.join(root, f))
-
-        total_files = len(file_list)
+        file_list = [
+            os.path.join(root, f)
+            for root, _, files in os.walk(self.directory)
+            for f in files
+            if self._matches_extension(f)
+        ]
+        total = len(file_list)
+        match_count = 0
         batch = []
 
         for i, file_path in enumerate(file_list):
-            if not self._is_running or match_count >= MAX_TOTAL_MATCHES:
+            if not self._is_running or match_count >= self.MAX_MATCHES:
                 break
-
             try:
                 with open(file_path, encoding="utf-8", errors="ignore") as f:
                     for line_num, line in enumerate(f, 1):
                         if regex.search(line):
                             batch.append((file_path, line_num, line.strip()))
                             match_count += 1
-
-                            if len(batch) >= 50:
+                            if len(batch) >= self.BATCH_SIZE:
                                 self.results_found.emit(batch)
                                 batch = []
-
-                            if match_count >= MAX_TOTAL_MATCHES:
+                            if match_count >= self.MAX_MATCHES:
                                 break
             except Exception:
                 continue
 
-            if total_files > 0:
-                self.progress.emit(int((i / total_files) * 100))
+            if total > 0:
+                self.progress.emit(int((i / total) * 100))
 
         if batch:
             self.results_found.emit(batch)
         self.finished.emit(match_count)
 
 
-# --- CODE GENERATION DIALOG ---
 class CodeGenDialog(QDialog):
     def __init__(self, parent, code_text, lang):
         super().__init__(parent)
@@ -203,16 +161,15 @@ class CodeGenDialog(QDialog):
         btn_copy = QPushButton("📋 Copy to Clipboard")
         btn_copy.setObjectName("accent_btn")
         btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_copy.clicked.connect(self.copy_to_clipboard)
+        btn_copy.clicked.connect(self._copy_and_close)
         layout.addWidget(btn_copy)
 
-    def copy_to_clipboard(self):
+    def _copy_and_close(self):
         QApplication.clipboard().setText(self.editor.toPlainText())
         QMessageBox.information(self, "Copied", "Code copied to clipboard!")
         self.accept()
 
 
-# --- MAIN UI ---
 class RegexSandbox(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -220,16 +177,17 @@ class RegexSandbox(QMainWindow):
         init_db()
         seed_defaults()
         self.setWindowTitle("Regex Sandbox & Library | Offline Pattern Tester")
+
         icon_path = os.path.join(ASSETS_DIR, "regex_sandbox.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        self.resize(1100, 750)
 
+        self.resize(1100, 750)
         self.base_font = QFont("Segoe UI", 10)
         self.code_font = QFont("Consolas", 11)
         self.current_pattern_id = None
+        self.search_thread = None
 
-        # Debounce timer to prevent lag when typing huge strings
         self.eval_timer = QTimer()
         self.eval_timer.setSingleShot(True)
         self.eval_timer.timeout.connect(self.evaluate_regex)
@@ -238,10 +196,7 @@ class RegexSandbox(QMainWindow):
         self.mgr.theme_changed.connect(self.apply_theme)
         self.apply_theme()
         self.load_patterns()
-
-        # File search worker
-        self.search_thread = None
-        self._theme_bridge = WindowThemeBridge(self.mgr, self)  # Win32 titlebar + palette
+        self._theme_bridge = WindowThemeBridge(self.mgr, self)
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -249,89 +204,82 @@ class RegexSandbox(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        main_layout.addWidget(self._build_sidebar())
+        main_layout.addWidget(self._build_content())
 
-        # --- LEFT SIDEBAR (LIBRARY) ---
+    def _build_sidebar(self):
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(280)
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(20, 20, 20, 20)
-        sidebar_layout.setSpacing(15)
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
 
         title = QLabel("SAVED PATTERNS")
         title.setObjectName("section_title")
-        sidebar_layout.addWidget(title)
+        layout.addWidget(title)
 
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("🔍 Filter patterns...")
         self.filter_input.textChanged.connect(self.filter_patterns)
-        sidebar_layout.addWidget(self.filter_input)
+        layout.addWidget(self.filter_input)
 
         self.pattern_list = QListWidget()
         self.pattern_list.itemClicked.connect(self.select_pattern)
-        sidebar_layout.addWidget(self.pattern_list)
+        layout.addWidget(self.pattern_list)
 
         btn_save = QPushButton("💾 Save Current Pattern")
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_save.clicked.connect(self.save_pattern)
-        sidebar_layout.addWidget(btn_save)
+        layout.addWidget(btn_save)
 
         btn_del = QPushButton("🗑 Delete Selected")
         btn_del.setObjectName("danger_btn")
         btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_del.clicked.connect(self.delete_pattern)
-        sidebar_layout.addWidget(btn_del)
+        layout.addWidget(btn_del)
 
-        sidebar_layout.addStretch()
+        layout.addStretch()
+        return sidebar
 
-        # --- MAIN CONTENT AREA ---
-        content_wrapper = QWidget()
-        content_wrapper.setObjectName("main_content")
-        content_layout = QVBoxLayout(content_wrapper)
-        content_layout.setContentsMargins(10, 10, 10, 10)
-        content_layout.setSpacing(0)
+    def _build_content(self):
+        wrapper = QWidget()
+        wrapper.setObjectName("main_content")
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(0)
 
-        # Tabs
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
-        content_layout.addWidget(self.tabs)
+        layout.addWidget(self.tabs)
 
-        # Tab 1: Sandbox (Main Tester)
         self.setup_sandbox_tab()
-
-        # Tab 2: Find in Files
         self.setup_search_tab()
-
-        # Tab 3: Cheat Sheet
         self.setup_cheat_sheet_tab()
-
-        main_layout.addWidget(sidebar)
-        main_layout.addWidget(content_wrapper)
+        return wrapper
 
     def setup_sandbox_tab(self):
-        sandbox_page = QWidget()
-        layout = QVBoxLayout(sandbox_page)
+        page = QWidget()
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # Pattern Header with Mode Switch
-        header_layout = QHBoxLayout()
-        lbl_regex = QLabel("PATTERN")
-        lbl_regex.setObjectName("section_title")
-        header_layout.addWidget(lbl_regex)
-
-        header_layout.addStretch()
+        # Pattern header
+        header = QHBoxLayout()
+        lbl = QLabel("PATTERN")
+        lbl.setObjectName("section_title")
+        header.addWidget(lbl)
+        header.addStretch()
 
         lbl_mode = QLabel("Mode:")
         lbl_mode.setObjectName("mode_label")
-        header_layout.addWidget(lbl_mode)
+        header.addWidget(lbl_mode)
 
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Regex", "Wildcard (*, ?)", "Exact Match"])
         self.mode_combo.currentTextChanged.connect(self.trigger_evaluation)
-        header_layout.addWidget(self.mode_combo)
-
-        layout.addLayout(header_layout)
+        header.addWidget(self.mode_combo)
+        layout.addLayout(header)
 
         self.regex_input = QLineEdit()
         self.regex_input.setFont(self.code_font)
@@ -339,22 +287,20 @@ class RegexSandbox(QMainWindow):
         self.regex_input.textChanged.connect(self.trigger_evaluation)
         layout.addWidget(self.regex_input)
 
-        # Flags layout
+        # Flags
         flags_layout = QHBoxLayout()
         self.chk_ignorecase = QCheckBox("Ignore Case (i)")
         self.chk_multiline = QCheckBox("Multiline (m)")
         self.chk_dotall = QCheckBox("Dot All (s)")
-
-        for chk in [self.chk_ignorecase, self.chk_multiline, self.chk_dotall]:
+        for chk in (self.chk_ignorecase, self.chk_multiline, self.chk_dotall):
             chk.stateChanged.connect(self.trigger_evaluation)
             flags_layout.addWidget(chk)
         flags_layout.addStretch()
         layout.addLayout(flags_layout)
 
-        # Split for Test String & Matches
-        split_layout = QHBoxLayout()
+        # Split: test string | match table
+        split = QHBoxLayout()
 
-        # Test String Column
         test_col = QVBoxLayout()
         lbl_target = QLabel("TEST STRING")
         lbl_target.setObjectName("section_title")
@@ -362,26 +308,22 @@ class RegexSandbox(QMainWindow):
 
         self.text_input = QTextEdit()
         self.text_input.setFont(self.code_font)
-        self.text_input.setPlaceholderText(
-            "Paste the logs or data you want to test against here..."
-        )
+        self.text_input.setPlaceholderText("Paste the logs or data you want to test against here...")
         self.text_input.textChanged.connect(self.trigger_evaluation)
         test_col.addWidget(self.text_input)
 
-        # Replacement Field (Optional)
-        replace_layout = QHBoxLayout()
+        replace_row = QHBoxLayout()
         lbl_replace = QLabel("REPLACE WITH:")
         lbl_replace.setObjectName("mode_label")
-        replace_layout.addWidget(lbl_replace)
+        replace_row.addWidget(lbl_replace)
         self.replace_input = QLineEdit()
         self.replace_input.setPlaceholderText("Optional: Replacement string...")
         self.replace_input.textChanged.connect(self.trigger_evaluation)
-        replace_layout.addWidget(self.replace_input)
-        test_col.addLayout(replace_layout)
+        replace_row.addWidget(self.replace_input)
+        test_col.addLayout(replace_row)
 
-        split_layout.addLayout(test_col, 2)
+        split.addLayout(test_col, 2)
 
-        # Groups / Matches Table Column
         match_col = QVBoxLayout()
         lbl_groups = QLabel("GROUPS & MATCHES")
         lbl_groups.setObjectName("section_title")
@@ -390,92 +332,73 @@ class RegexSandbox(QMainWindow):
         self.group_table = QTableWidget()
         self.group_table.setColumnCount(3)
         self.group_table.setHorizontalHeaderLabels(["#", "Content", "Range"])
-        self.group_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
+        self.group_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.group_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.group_table.setShowGrid(False)
         self.group_table.itemClicked.connect(self.highlight_match_from_table)
         match_col.addWidget(self.group_table)
 
-        split_layout.addLayout(match_col, 1)
-        layout.addLayout(split_layout)
+        split.addLayout(match_col, 1)
+        layout.addLayout(split)
 
-        # Replacement Result Preview
         self.replace_preview = QTextEdit()
         self.replace_preview.setReadOnly(True)
         self.replace_preview.setMaximumHeight(80)
-        self.replace_preview.setPlaceholderText(
-            "Replacement preview will appear here..."
-        )
+        self.replace_preview.setPlaceholderText("Replacement preview will appear here...")
         self.replace_preview.setVisible(False)
         layout.addWidget(self.replace_preview)
 
-        # Match Info
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("status_label")
         self.status_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         layout.addWidget(self.status_label)
 
-        # Code Gen Footer
-        footer_layout = QHBoxLayout()
-        footer_layout.addWidget(QLabel("Generator:"))
+        footer = QHBoxLayout()
+        footer.addWidget(QLabel("Generator:"))
+        for label, slot in [("🐍 Python", self.generate_python), ("🟨 JavaScript", self.generate_javascript)]:
+            btn = QPushButton(label)
+            btn.setObjectName("accent_btn")
+            btn.clicked.connect(slot)
+            footer.addWidget(btn)
+        footer.addStretch()
+        layout.addLayout(footer)
 
-        btn_gen_py = QPushButton("🐍 Python")
-        btn_gen_py.setObjectName("accent_btn")
-        btn_gen_py.clicked.connect(self.generate_python)
-        footer_layout.addWidget(btn_gen_py)
-
-        btn_gen_js = QPushButton("🟨 JavaScript")
-        btn_gen_js.setObjectName("accent_btn")
-        btn_gen_js.clicked.connect(self.generate_javascript)
-        footer_layout.addWidget(btn_gen_js)
-
-        footer_layout.addStretch()
-        layout.addLayout(footer_layout)
-
-        self.tabs.addTab(sandbox_page, "Sandbox")
+        self.tabs.addTab(page, "Sandbox")
 
     def setup_search_tab(self):
-        search_page = QWidget()
-        layout = QVBoxLayout(search_page)
+        page = QWidget()
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # Header
         header = QLabel("SEARCH IN LOCAL FILES")
         header.setObjectName("section_title")
         layout.addWidget(header)
 
-        # Search Controls
-        ctrl_layout = QHBoxLayout()
-
+        ctrl = QHBoxLayout()
         self.dir_input = QLineEdit()
         self.dir_input.setPlaceholderText("Select directory to search...")
-        ctrl_layout.addWidget(self.dir_input)
+        ctrl.addWidget(self.dir_input)
 
         btn_browse = QPushButton("📁 Browse")
         btn_browse.clicked.connect(self.browse_directory)
-        ctrl_layout.addWidget(btn_browse)
+        ctrl.addWidget(btn_browse)
 
         self.ext_input = QLineEdit()
         self.ext_input.setPlaceholderText("Ext: .py, .txt, .js")
         self.ext_input.setFixedWidth(120)
-        ctrl_layout.addWidget(self.ext_input)
+        ctrl.addWidget(self.ext_input)
 
         self.btn_run_search = QPushButton("🔍 Find All")
         self.btn_run_search.setObjectName("accent_btn")
         self.btn_run_search.clicked.connect(self.start_file_search)
-        ctrl_layout.addWidget(self.btn_run_search)
+        ctrl.addWidget(self.btn_run_search)
+        layout.addLayout(ctrl)
 
-        layout.addLayout(ctrl_layout)
-
-        # Results List
         self.file_results = QListWidget()
         self.file_results.itemDoubleClicked.connect(self.open_file_result)
         layout.addWidget(self.file_results)
 
-        # Progress Bar
         self.search_progress = QProgressBar()
         self.search_progress.setVisible(False)
         self.search_progress.setFixedHeight(4)
@@ -486,11 +409,11 @@ class RegexSandbox(QMainWindow):
         self.search_status.setObjectName("status_label")
         layout.addWidget(self.search_status)
 
-        self.tabs.addTab(search_page, "Find in Files")
+        self.tabs.addTab(page, "Find in Files")
 
     def setup_cheat_sheet_tab(self):
-        cheat_page = QWidget()
-        layout = QVBoxLayout(cheat_page)
+        page = QWidget()
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(20, 20, 20, 20)
 
         cheat_text = QTextEdit()
@@ -524,273 +447,60 @@ class RegexSandbox(QMainWindow):
             </table>
         """)
         layout.addWidget(cheat_text)
-        self.tabs.addTab(cheat_page, "Cheat Sheet")
+        self.tabs.addTab(page, "Cheat Sheet")
 
     def apply_theme(self):
-        self.trigger_evaluation()  # Re-evaluate to update text highlights
+        self.trigger_evaluation()
+        m = self.mgr
+        self.setStyleSheet(f"""
+            QMainWindow {{ background-color: {m["bg_base"]}; }}
+            QWidget {{ background-color: {m["bg_base"]}; color: {m["text_primary"]}; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; }}
+            QFrame#sidebar {{ background-color: {m["bg_elevated"]}; border-right: 1px solid {m["border"]}; }}
+            QLabel#section_title {{ color: {m["text_secondary"]}; font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }}
+            QLabel#mode_label {{ color: {m["text_secondary"]}; }}
+            QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{ background-color: {m["bg_overlay"]}; border: 1px solid {m["border"]}; padding: 12px; border-radius: 8px; color: {m["text_primary"]}; font-size: 13px; }}
+            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 1px solid {m["accent"]}; background-color: {m["bg_base"]}; }}
+            QComboBox::drop-down {{ border: none; }}
+            QCheckBox {{ color: {m["text_secondary"]}; spacing: 8px; }}
+            QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {m["border"]}; background-color: {m["bg_base"]}; }}
+            QCheckBox::indicator:checked {{ background-color: {m["accent"]}; border: 1.5px solid {m["accent"]}; }}
+            QPushButton {{ background-color: {m["bg_elevated"]}; border: 1px solid {m["border"]}; padding: 8px 12px; border-radius: 6px; font-weight: 600; color: {m["text_primary"]}; font-size: 11px; }}
+            QPushButton:hover {{ background-color: {m["bg_control_hov"]}; border: 1px solid {m["border_light"]}; }}
+            QPushButton:pressed {{ background-color: {m["bg_control_prs"]}; }}
+            QPushButton#accent_btn {{ background: {m["accent"]}; color: {m["text_on_accent"]}; border: none; font-size: 12px; }}
+            QPushButton#accent_btn:hover {{ background: {m["accent_hover"]}; }}
+            QPushButton#danger_btn {{ background-color: {m["bg_overlay"]}; color: {m["danger"]}; border: 1px solid {m["danger"]}; }}
+            QListWidget {{ background-color: transparent; border: none; outline: none; }}
+            QListWidget::item {{ background-color: {m["bg_overlay"]}; padding: 6px 10px; border-radius: 5px; margin-bottom: 3px; border: 1px solid transparent; }}
+            QListWidget::item:hover {{ background-color: {m["bg_control_hov"]}; border: 1px solid {m["border"]}; }}
+            QListWidget::item:selected {{ background-color: {m["bg_elevated"]}; color: {m["accent"]}; border: 1px solid {m["accent"]}; }}
+            QTabWidget::pane {{ border: 1px solid {m["border"]}; top: -1px; background-color: {m["bg_base"]}; }}
+            QTabBar::tab {{ background: {m["bg_elevated"]}; border: 1px solid {m["border"]}; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: {m["text_secondary"]}; font-weight: bold; margin-right: 2px; }}
+            QTabBar::tab:selected {{ background: {m["bg_base"]}; color: {m["accent"]}; border-bottom: 2px solid {m["accent"]}; }}
+            QTabBar::tab:hover {{ background: {m["bg_overlay"]}; }}
+            QTableWidget {{ background-color: {m["bg_overlay"]}; border: 1px solid {m["border"]}; border-radius: 8px; color: {m["text_primary"]}; gridline-color: transparent; outline: none; }}
+            QHeaderView::section {{ background-color: {m["bg_elevated"]}; padding: 8px; border: none; font-weight: bold; color: {m["text_secondary"]}; border-bottom: 1px solid {m["border"]}; }}
+            QTableWidget::item {{ padding: 5px; }}
+            QTableWidget::item:selected {{ background-color: {m["accent"]}; color: {m["text_on_accent"]}; }}
+            QProgressBar {{ background-color: {m["bg_overlay"]}; border: none; border-radius: 2px; }}
+            QProgressBar::chunk {{ background-color: {m["accent"]}; border-radius: 2px; }}
+            QScrollBar:vertical {{ border: none; background: transparent; width: 4px; margin: 0px; }}
+            QScrollBar::handle:vertical {{ background: {m["border_light"]}; border-radius: 2px; min-height: 40px; }}
+        """)
+        self.highlight_bg = m["accent"]
+        self.highlight_fg = m["text_on_accent"]
 
-        # We can use the manager to apply the theme.
-        # However, Regex Helper has a very specific complex stylesheet.
-        # I'll convert it to use manager variables.
-
-        style = f"""
-                QMainWindow {{ background-color: {self.mgr["bg_base"]}; }}
-                QWidget {{ background-color: {self.mgr["bg_base"]}; color: {self.mgr["text_primary"]}; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; }}
-
-                QFrame#sidebar {{
-                    background-color: {self.mgr["bg_elevated"]};
-                    border-right: 1px solid {self.mgr["border"]};
-                }}
-
-                QLabel#section_title {{ color: {self.mgr["text_secondary"]}; font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }}
-                QLabel#mode_label {{ color: {self.mgr["text_secondary"]}; }}
-
-                QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{
-                    background-color: {self.mgr["bg_overlay"]};
-                    border: 1px solid {self.mgr["border"]};
-                    padding: 12px;
-                    border-radius: 8px;
-                    color: {self.mgr["text_primary"]};
-                    font-size: 13px;
-                }}
-                QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 1px solid {self.mgr["accent"]}; background-color: {self.mgr["bg_base"]}; }}
-                QComboBox::drop-down {{ border: none; }}
-
-                QCheckBox {{ color: {self.mgr["text_secondary"]}; spacing: 8px; }}
-                QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {self.mgr["border"]}; background-color: {self.mgr["bg_base"]}; }}
-                QCheckBox::indicator:checked {{ background-color: {self.mgr["accent"]}; border: 1.5px solid {self.mgr["accent"]}; }}
-
-                QPushButton {{
-                    background-color: {self.mgr["bg_elevated"]};
-                    border: 1px solid {self.mgr["border"]};
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    font-weight: 600;
-                    color: {self.mgr["text_primary"]};
-                    font-size: 11px;
-                }}
-                QPushButton:hover {{ background-color: {self.mgr["bg_control_hov"]}; border: 1px solid {self.mgr["border_light"]}; }}
-                QPushButton:pressed {{ background-color: {self.mgr["bg_control_prs"]}; }}
-
-                QPushButton#accent_btn {{
-                    background: {self.mgr["accent"]};
-                    color: {self.mgr["text_on_accent"]};
-                    border: none;
-                    font-size: 12px;
-                }}
-                QPushButton#accent_btn:hover {{ background: {self.mgr["accent_hover"]}; }}
-
-                QPushButton#danger_btn {{
-                    background-color: {self.mgr["bg_overlay"]};
-                    color: {self.mgr["danger"]};
-                    border: 1px solid {self.mgr["danger"]};
-                }}
-
-                QListWidget {{
-                    background-color: transparent;
-                    border: none;
-                    outline: none;
-                }}
-                QListWidget::item {{
-                    background-color: {self.mgr["bg_overlay"]};
-                    padding: 6px 10px;
-                    border-radius: 5px;
-                    margin-bottom: 3px;
-                    border: 1px solid transparent;
-                }}
-                QListWidget::item:hover {{ background-color: {self.mgr["bg_control_hov"]}; border: 1px solid {self.mgr["border"]}; }}
-                QListWidget::item:selected {{ background-color: {self.mgr["bg_elevated"]}; color: {self.mgr["accent"]}; border: 1px solid {self.mgr["accent"]}; }}
-
-                QTabWidget::pane {{ border: 1px solid {self.mgr["border"]}; top: -1px; background-color: {self.mgr["bg_base"]}; }}
-                QTabBar::tab {{ background: {self.mgr["bg_elevated"]}; border: 1px solid {self.mgr["border"]}; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: {self.mgr["text_secondary"]}; font-weight: bold; margin-right: 2px; }}
-                QTabBar::tab:selected {{ background: {self.mgr["bg_base"]}; color: {self.mgr["accent"]}; border-bottom: 2px solid {self.mgr["accent"]}; }}
-                QTabBar::tab:hover {{ background: {self.mgr["bg_overlay"]}; }}
-
-                QTableWidget {{ background-color: {self.mgr["bg_overlay"]}; border: 1px solid {self.mgr["border"]}; border-radius: 8px; color: {self.mgr["text_primary"]}; gridline-color: transparent; outline: none; }}
-                QHeaderView::section {{ background-color: {self.mgr["bg_elevated"]}; padding: 8px; border: none; font-weight: bold; color: {self.mgr["text_secondary"]}; border-bottom: 1px solid {self.mgr["border"]}; }}
-                QTableWidget::item {{ padding: 5px; }}
-                QTableWidget::item:selected {{ background-color: {self.mgr["accent"]}; color: {self.mgr["text_on_accent"]}; }}
-
-                QProgressBar {{ background-color: {self.mgr["bg_overlay"]}; border: none; border-radius: 2px; }}
-                QProgressBar::chunk {{ background-color: {self.mgr["accent"]}; border-radius: 2px; }}
-
-                QScrollBar:vertical {{
-                    border: none; background: transparent;
-                    width: 4px; margin: 0px;
-                }}
-                QScrollBar::handle:vertical {{
-                    background: {self.mgr["border_light"]}; border-radius: 2px; min-height: 40px;
-                }}
-        """
-        self.setStyleSheet(style)
-        self.highlight_bg = self.mgr["accent"]
-        self.highlight_fg = self.mgr["text_on_accent"]
-
-    # --- REGEX EVALUATION ---
     def trigger_evaluation(self):
-        # Debounce the text change so it doesn't freeze on massive logs
         self.eval_timer.start(250)
 
     def get_compiled_pattern_string(self):
-        """Converts the user input into a valid regex string based on the selected mode"""
-        raw_pattern = self.regex_input.text()
+        raw = self.regex_input.text()
         mode = self.mode_combo.currentText()
-
         if mode == "Wildcard (*, ?)":
-            # Escape regex specials, then unescape the wildcards to regex equivalents
-            return re.escape(raw_pattern).replace(r"\*", ".*").replace(r"\?", ".")
-        elif mode == "Exact Match":
-            # Escape everything so it matches exactly
-            return re.escape(raw_pattern)
-
-        # Default Regex mode
-        return raw_pattern
-
-    def evaluate_regex(self):
-        raw_pattern = self.regex_input.text()
-        test_str = self.text_input.toPlainText()
-
-        # Save user's cursor position and scrollbar to prevent jumping
-        cursor = self.text_input.textCursor()
-        v_scroll = self.text_input.verticalScrollBar().value()
-
-        # Block signals to prevent infinite recursive loop from formatting changes
-        self.text_input.blockSignals(True)
-
-        # Reset formatting based on current theme
-        clear_cursor = self.text_input.textCursor()
-        clear_cursor.select(QTextCursor.SelectionType.Document)
-        default_format = QTextCharFormat()
-
-        text_color = "#e2e8f0" if self.mgr.is_dark else "#1e293b"
-        muted_color = "#94a3b8" if self.mgr.is_dark else "#64748b"
-        success_color = "#22c55e"
-        danger_color = "#ef4444"
-
-        default_format.setForeground(QColor(text_color))
-        default_format.setBackground(Qt.GlobalColor.transparent)
-        clear_cursor.setCharFormat(default_format)
-
-        if not raw_pattern:
-            self.status_label.setText("Ready")
-            self.status_label.setStyleSheet(f"color: {muted_color};")
-            self.restore_cursor(cursor, v_scroll)
-            return
-
-        flags = self.get_active_flags()
-        compiled_str = self.get_compiled_pattern_string()
-
-        try:
-            compiled_pattern = re.compile(compiled_str, flags)
-            matches = list(compiled_pattern.finditer(test_str))
-
-            # --- Update Table & Highlighting ---
-            self.group_table.setRowCount(0)
-            highlight_format = QTextCharFormat()
-            highlight_format.setBackground(QColor(self.highlight_bg))
-            highlight_format.setForeground(QColor(self.highlight_fg))
-
-            MAX_DISPLAY_MATCHES = 200
-            for i, match in enumerate(matches):
-                if i >= MAX_DISPLAY_MATCHES:
-                    break
-
-                # Highlighting
-                if match.start() != match.end():
-                    hc = self.text_input.textCursor()
-                    hc.setPosition(match.start())
-                    hc.setPosition(match.end(), QTextCursor.MoveMode.KeepAnchor)
-                    hc.setCharFormat(highlight_format)
-
-                # Add main match to table
-                row = self.group_table.rowCount()
-                self.group_table.insertRow(row)
-                self.group_table.setItem(row, 0, QTableWidgetItem(f"Match {i + 1}"))
-                self.group_table.setItem(row, 1, QTableWidgetItem(match.group()))
-                self.group_table.setItem(
-                    row, 2, QTableWidgetItem(f"{match.start()}-{match.end()}")
-                )
-
-                # Add groups to table
-                for g_idx, group in enumerate(match.groups(), 1):
-                    row = self.group_table.rowCount()
-                    self.group_table.insertRow(row)
-                    self.group_table.setItem(
-                        row, 0, QTableWidgetItem(f"  └ Group {g_idx}")
-                    )
-                    self.group_table.setItem(
-                        row,
-                        1,
-                        QTableWidgetItem(str(group) if group is not None else "None"),
-                    )
-                    self.group_table.setItem(
-                        row,
-                        2,
-                        QTableWidgetItem(f"{match.start(g_idx)}-{match.end(g_idx)}"),
-                    )
-
-            match_count = len(matches)
-            if match_count > MAX_DISPLAY_MATCHES:
-                row = self.group_table.rowCount()
-                self.group_table.insertRow(row)
-                item = QTableWidgetItem(
-                    f"... and {match_count - MAX_DISPLAY_MATCHES} more"
-                )
-                item.setForeground(QColor("#94a3b8"))
-                self.group_table.setItem(row, 0, item)
-
-            # --- Replacement Preview ---
-            replace_str = self.replace_input.text()
-            if replace_str:
-                try:
-                    res = compiled_pattern.sub(replace_str, test_str)
-                    self.replace_preview.setPlainText(res)
-                    self.replace_preview.setVisible(True)
-                except re.error as re_err:
-                    self.replace_preview.setPlainText(f"Replacement Error: {re_err}")
-                    self.replace_preview.setVisible(True)
-            else:
-                self.replace_preview.setVisible(False)
-
-            match_count = len(matches)
-            if match_count > 0:
-                self.status_label.setText(
-                    f"✅ Found {match_count} match{'es' if match_count > 1 else ''}!"
-                )
-                self.status_label.setStyleSheet(f"color: {success_color};")
-            else:
-                self.status_label.setText("❌ No matches found.")
-                self.status_label.setStyleSheet(f"color: {muted_color};")
-
-        except re.error as e:
-            self.status_label.setText(f"⚠ Regex Error: {e.msg}")
-            self.status_label.setStyleSheet(f"color: {danger_color};")
-            self.group_table.setRowCount(0)
-            self.replace_preview.setVisible(False)
-
-        self.restore_cursor(cursor, v_scroll)
-
-    def restore_cursor(self, cursor, v_scroll):
-        self.text_input.setTextCursor(cursor)
-        self.text_input.verticalScrollBar().setValue(v_scroll)
-        self.text_input.blockSignals(False)
-
-    def highlight_match_from_table(self, item):
-        row = item.row()
-        range_item = self.group_table.item(row, 2)
-        if not range_item:
-            return
-        range_text = range_item.text()
-        if "-" in range_text:
-            try:
-                start, end = map(int, range_text.split("-"))
-                cursor = self.text_input.textCursor()
-                cursor.setPosition(start)
-                cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
-                self.text_input.setTextCursor(cursor)
-                self.text_input.setFocus()
-            except ValueError:
-                pass
+            return re.escape(raw).replace(r"\*", ".*").replace(r"\?", ".")
+        if mode == "Exact Match":
+            return re.escape(raw)
+        return raw
 
     def get_active_flags(self):
         flags = 0
@@ -802,11 +512,115 @@ class RegexSandbox(QMainWindow):
             flags |= re.DOTALL
         return flags
 
-    # --- CODE GENERATION ---
+    def evaluate_regex(self):
+        raw_pattern = self.regex_input.text()
+        test_str = self.text_input.toPlainText()
+
+        saved_cursor = self.text_input.textCursor()
+        saved_scroll = self.text_input.verticalScrollBar().value()
+        self.text_input.blockSignals(True)
+
+        # Reset formatting
+        clear_cursor = self.text_input.textCursor()
+        clear_cursor.select(QTextCursor.SelectionType.Document)
+        default_fmt = QTextCharFormat()
+        text_color  = "#e2e8f0" if self.mgr.is_dark else "#1e293b"
+        muted_color = "#94a3b8" if self.mgr.is_dark else "#64748b"
+        default_fmt.setForeground(QColor(text_color))
+        default_fmt.setBackground(Qt.GlobalColor.transparent)
+        clear_cursor.setCharFormat(default_fmt)
+
+        if not raw_pattern:
+            self.status_label.setText("Ready")
+            self.status_label.setStyleSheet(f"color: {muted_color};")
+            self._restore_cursor(saved_cursor, saved_scroll)
+            return
+
+        try:
+            pattern = re.compile(self.get_compiled_pattern_string(), self.get_active_flags())
+            matches = list(pattern.finditer(test_str))
+
+            self.group_table.setRowCount(0)
+            highlight_fmt = QTextCharFormat()
+            highlight_fmt.setBackground(QColor(self.highlight_bg))
+            highlight_fmt.setForeground(QColor(self.highlight_fg))
+
+            MAX_DISPLAY = 200
+            for i, match in enumerate(matches[:MAX_DISPLAY]):
+                if match.start() != match.end():
+                    hc = self.text_input.textCursor()
+                    hc.setPosition(match.start())
+                    hc.setPosition(match.end(), QTextCursor.MoveMode.KeepAnchor)
+                    hc.setCharFormat(highlight_fmt)
+
+                row = self.group_table.rowCount()
+                self.group_table.insertRow(row)
+                self.group_table.setItem(row, 0, QTableWidgetItem(f"Match {i + 1}"))
+                self.group_table.setItem(row, 1, QTableWidgetItem(match.group()))
+                self.group_table.setItem(row, 2, QTableWidgetItem(f"{match.start()}-{match.end()}"))
+
+                for g_idx, group in enumerate(match.groups(), 1):
+                    row = self.group_table.rowCount()
+                    self.group_table.insertRow(row)
+                    self.group_table.setItem(row, 0, QTableWidgetItem(f"  └ Group {g_idx}"))
+                    self.group_table.setItem(row, 1, QTableWidgetItem(str(group) if group is not None else "None"))
+                    self.group_table.setItem(row, 2, QTableWidgetItem(f"{match.start(g_idx)}-{match.end(g_idx)}"))
+
+            if len(matches) > MAX_DISPLAY:
+                row = self.group_table.rowCount()
+                self.group_table.insertRow(row)
+                item = QTableWidgetItem(f"... and {len(matches) - MAX_DISPLAY} more")
+                item.setForeground(QColor("#94a3b8"))
+                self.group_table.setItem(row, 0, item)
+
+            replace_str = self.replace_input.text()
+            if replace_str:
+                try:
+                    self.replace_preview.setPlainText(pattern.sub(replace_str, test_str))
+                    self.replace_preview.setVisible(True)
+                except re.error as e:
+                    self.replace_preview.setPlainText(f"Replacement Error: {e}")
+                    self.replace_preview.setVisible(True)
+            else:
+                self.replace_preview.setVisible(False)
+
+            count = len(matches)
+            if count:
+                self.status_label.setText(f"✅ Found {count} match{'es' if count > 1 else ''}!")
+                self.status_label.setStyleSheet("color: #22c55e;")
+            else:
+                self.status_label.setText("❌ No matches found.")
+                self.status_label.setStyleSheet(f"color: {muted_color};")
+
+        except re.error as e:
+            self.status_label.setText(f"⚠ Regex Error: {e.msg}")
+            self.status_label.setStyleSheet("color: #ef4444;")
+            self.group_table.setRowCount(0)
+            self.replace_preview.setVisible(False)
+
+        self._restore_cursor(saved_cursor, saved_scroll)
+
+    def _restore_cursor(self, cursor, scroll):
+        self.text_input.setTextCursor(cursor)
+        self.text_input.verticalScrollBar().setValue(scroll)
+        self.text_input.blockSignals(False)
+
+    def highlight_match_from_table(self, item):
+        range_item = self.group_table.item(item.row(), 2)
+        if not range_item or "-" not in range_item.text():
+            return
+        try:
+            start, end = map(int, range_item.text().split("-"))
+            cursor = self.text_input.textCursor()
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+            self.text_input.setTextCursor(cursor)
+            self.text_input.setFocus()
+        except ValueError:
+            pass
+
     def generate_python(self):
-        pattern_str = (
-            self.get_compiled_pattern_string().replace("\\", "\\\\").replace('"', '\\"')
-        )
+        pattern_str = self.get_compiled_pattern_string().replace("\\", "\\\\").replace('"', '\\"')
         raw_pattern = self.regex_input.text().replace('"', '\\"')
         mode = self.mode_combo.currentText()
 
@@ -817,17 +631,18 @@ class RegexSandbox(QMainWindow):
             flags_list.append("re.MULTILINE")
         if self.chk_dotall.isChecked():
             flags_list.append("re.DOTALL")
-        flag_str = ", " + " | ".join(flags_list) if flags_list else ""
+        flag_str = (", " + " | ".join(flags_list)) if flags_list else ""
 
-        comment = "# Your Regex Pattern"
         if mode == "Wildcard (*, ?)":
             comment = f"# Converted to Regex from Wildcard: {raw_pattern}"
         elif mode == "Exact Match":
             comment = f"# Escaped Literal Match for: {raw_pattern}"
+        else:
+            comment = "# Your Regex Pattern"
 
-        test_str_content = self.text_input.toPlainText()[:150]
-        ellipsis = "..." if len(self.text_input.toPlainText()) > 150 else ""
-        triple_quote = '"""'
+        body = self.text_input.toPlainText()
+        snippet = body[:150] + ("..." if len(body) > 150 else "")
+        tq = '"""'
 
         code = f"""import re
 
@@ -835,21 +650,18 @@ class RegexSandbox(QMainWindow):
 regex = r"{pattern_str}"
 
 # Your Target String
-test_str = {triple_quote}{test_str_content}{ellipsis}{triple_quote}
+test_str = {tq}{snippet}{tq}
 
 # Find Matches
 matches = re.finditer(regex, test_str{flag_str})
 
 for matchNum, match in enumerate(matches, start=1):
     print(f"Match {{matchNum}} found at {{match.start()}}-{{match.end()}}: {{match.group()}}")
-
-    # Iterate through capture groups
     for groupNum in range(0, len(match.groups())):
         groupNum = groupNum + 1
         print(f"  Group {{groupNum}}: {{match.group(groupNum)}}")
 """
-        dialog = CodeGenDialog(self, code, "Python")
-        dialog.exec()
+        CodeGenDialog(self, code, "Python").exec()
 
     def generate_javascript(self):
         pattern_str = self.get_compiled_pattern_string().replace("/", "\\/")
@@ -864,39 +676,34 @@ for matchNum, match in enumerate(matches, start=1):
         if self.chk_dotall.isChecked():
             js_flags += "s"
 
-        comment = "// Your Regex Pattern"
         if mode == "Wildcard (*, ?)":
             comment = f"// Converted to Regex from Wildcard: {raw_pattern}"
         elif mode == "Exact Match":
             comment = f"// Escaped Literal Match for: {raw_pattern}"
+        else:
+            comment = "// Your Regex Pattern"
 
-        test_str_content = self.text_input.toPlainText()[:150].replace("`", "\\`")
-        ellipsis = "..." if len(self.text_input.toPlainText()) > 150 else ""
+        body = self.text_input.toPlainText()
+        snippet = body[:150].replace("`", "\\`") + ("..." if len(body) > 150 else "")
 
         code = f"""{comment}
 const regex = /{pattern_str}/{js_flags};
 
 // Your Target String
-const str = `{test_str_content}{ellipsis}`;
+const str = `{snippet}`;
 
 let m;
-
 while ((m = regex.exec(str)) !== null) {{
-    // Prevent infinite loops with zero-width matches
     if (m.index === regex.lastIndex) {{
         regex.lastIndex++;
     }}
-
-    // The result can be accessed through the `m`-variable.
     m.forEach((match, groupIndex) => {{
         console.log(`Found match, group ${{groupIndex}}: ${{match}}`);
     }});
 }}
 """
-        dialog = CodeGenDialog(self, code, "JavaScript")
-        dialog.exec()
+        CodeGenDialog(self, code, "JavaScript").exec()
 
-    # --- FILE SEARCH LOGIC ---
     def browse_directory(self):
         path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if path:
@@ -910,15 +717,10 @@ while ((m = regex.exec(str)) !== null) {{
 
         dir_path = self.dir_input.text()
         pattern = self.get_compiled_pattern_string()
-        exts = self.ext_input.text()
-        flags = self.get_active_flags()
 
         if not dir_path or not os.path.exists(dir_path):
-            QMessageBox.warning(
-                self, "Invalid Path", "Please select a valid directory."
-            )
+            QMessageBox.warning(self, "Invalid Path", "Please select a valid directory.")
             return
-
         if not pattern:
             QMessageBox.warning(self, "No Pattern", "Please enter a regex pattern.")
             return
@@ -929,7 +731,7 @@ while ((m = regex.exec(str)) !== null) {{
         self.btn_run_search.setText("🛑 Stop")
         self.search_status.setText("Searching...")
 
-        self.search_thread = FileSearchWorker(dir_path, pattern, exts, flags)
+        self.search_thread = FileSearchWorker(dir_path, pattern, self.ext_input.text(), self.get_active_flags())
         self.search_thread.progress.connect(self.search_progress.setValue)
         self.search_thread.results_found.connect(self.add_search_results)
         self.search_thread.finished.connect(self.search_finished)
@@ -937,9 +739,7 @@ while ((m = regex.exec(str)) !== null) {{
 
     def add_search_results(self, results):
         for file_path, line_num, content in results:
-            item = QListWidgetItem(
-                f"{os.path.basename(file_path)}:{line_num} | {content}"
-            )
+            item = QListWidgetItem(f"{os.path.basename(file_path)}:{line_num} | {content}")
             item.setData(Qt.ItemDataRole.UserRole, file_path)
             item.setToolTip(file_path)
             self.file_results.addItem(item)
@@ -954,38 +754,25 @@ while ((m = regex.exec(str)) !== null) {{
         if os.path.exists(file_path):
             os.startfile(file_path)
 
-    # --- DATABASE/LIBRARY LOGIC ---
     def load_patterns(self):
         self.pattern_list.clear()
         with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            # Fetch mode safely if it exists
-            for row in cursor.execute(
-                "SELECT id, name, pattern, flags, test_string, mode FROM patterns ORDER BY name ASC"
-            ):
+            for row in conn.execute("SELECT id, name, pattern, flags, test_string, mode FROM patterns ORDER BY name ASC"):
                 item = QListWidgetItem(row[1])
-                item.setData(
-                    Qt.ItemDataRole.UserRole,
-                    {
-                        "id": row[0],
-                        "pattern": row[2],
-                        "flags": row[3],
-                        "test_string": row[4],
-                        "mode": row[5] or "Regex",
-                    },
-                )
+                item.setData(Qt.ItemDataRole.UserRole, {
+                    "id": row[0], "pattern": row[2],
+                    "flags": row[3], "test_string": row[4],
+                    "mode": row[5] or "Regex",
+                })
                 self.pattern_list.addItem(item)
 
     def select_pattern(self, item):
         data = item.data(Qt.ItemDataRole.UserRole)
         self.current_pattern_id = data["id"]
 
-        # Block signals temporarily to prevent early evaluations before UI sets up
-        self.regex_input.blockSignals(True)
-        self.mode_combo.blockSignals(True)
-        self.chk_ignorecase.blockSignals(True)
-        self.chk_multiline.blockSignals(True)
-        self.chk_dotall.blockSignals(True)
+        widgets = [self.regex_input, self.mode_combo, self.chk_ignorecase, self.chk_multiline, self.chk_dotall]
+        for w in widgets:
+            w.blockSignals(True)
 
         self.mode_combo.setCurrentText(data.get("mode", "Regex"))
         self.regex_input.setText(data["pattern"])
@@ -997,59 +784,37 @@ while ((m = regex.exec(str)) !== null) {{
         self.chk_multiline.setChecked(bool(flags & re.MULTILINE))
         self.chk_dotall.setChecked(bool(flags & re.DOTALL))
 
-        self.regex_input.blockSignals(False)
-        self.mode_combo.blockSignals(False)
-        self.chk_ignorecase.blockSignals(False)
-        self.chk_multiline.blockSignals(False)
-        self.chk_dotall.blockSignals(False)
+        for w in widgets:
+            w.blockSignals(False)
 
         self.trigger_evaluation()
 
     def save_pattern(self):
-        name, ok = QInputDialog.getText(
-            self, "Save Pattern", "Enter a name for this regex pattern:"
-        )
+        name, ok = QInputDialog.getText(self, "Save Pattern", "Enter a name for this regex pattern:")
         if not ok or not name.strip():
             return
-
-        pattern = self.regex_input.text()
-        test_str = self.text_input.toPlainText()
-        flags = self.get_active_flags()
-        mode = self.mode_combo.currentText()
-
         with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO patterns (name, pattern, flags, test_string, mode)
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                (name.strip(), pattern, flags, test_str, mode),
+            conn.execute(
+                "INSERT INTO patterns (name, pattern, flags, test_string, mode) VALUES (?, ?, ?, ?, ?)",
+                (name.strip(), self.regex_input.text(), self.get_active_flags(),
+                 self.text_input.toPlainText(), self.mode_combo.currentText()),
             )
             conn.commit()
-
         self.load_patterns()
-        QMessageBox.information(
-            self, "Saved", "Pattern saved to local library successfully."
-        )
+        QMessageBox.information(self, "Saved", "Pattern saved to local library successfully.")
 
     def delete_pattern(self):
         item = self.pattern_list.currentItem()
         if not item:
             return
-
         data = item.data(Qt.ItemDataRole.UserRole)
         reply = QMessageBox.question(
-            self,
-            "Confirm Delete",
-            f"Delete '{item.text()}'?",
+            self, "Confirm Delete", f"Delete '{item.text()}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-
         if reply == QMessageBox.StandardButton.Yes:
             with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM patterns WHERE id=?", (data["id"],))
+                conn.execute("DELETE FROM patterns WHERE id=?", (data["id"],))
                 conn.commit()
             self.load_patterns()
 
@@ -1063,10 +828,7 @@ while ((m = regex.exec(str)) !== null) {{
 def main():
     if sys.platform == "win32":
         import ctypes
-
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "nexus.regexhelper"
-        )
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.regexhelper")
     app = QApplication(sys.argv)
     window = RegexSandbox()
     window.show()

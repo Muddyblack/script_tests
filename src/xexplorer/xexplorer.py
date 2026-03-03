@@ -14,7 +14,7 @@ from src.common.config import ASSETS_DIR
 from src.common.theme import ThemeManager, WebThemeBridge
 from src.xexplorer.bridge import XExplorerBridge
 
-# Keep references so windows aren’t garbage-collected
+# Keep references so windows aint garbage-collected
 _open_windows: list = []
 
 

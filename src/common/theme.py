@@ -34,11 +34,6 @@ def ThemeManager() -> "_ThemeManager":
     return _instance
 
 
-# ---------------------------------------------------------------------------
-# The real class
-# ---------------------------------------------------------------------------
-
-
 class _ThemeManager(QObject):
     """Singleton theme manager — do NOT instantiate directly; use ThemeManager()."""
 
@@ -110,9 +105,6 @@ class _ThemeManager(QObject):
     # ------------------------------------------------------------------
     def load_theme(self, name: str, save: bool = True):
         theme_file = os.path.join(self.themes_dir, name, "theme.json")
-        if not os.path.exists(theme_file):
-            self.theme_data = self._default_dark()
-            return
         try:
             with open(theme_file) as f:
                 self.theme_data = json.load(f)
@@ -122,32 +114,6 @@ class _ThemeManager(QObject):
             self._update_watcher()
         except Exception as e:
             print(f"[ThemeManager] Error loading theme '{name}': {e}")
-            self.theme_data = self._default_dark()
-
-    def _default_dark(self) -> dict:
-        return {
-            "name": "Classic Dark",
-            "dark": True,
-            "colors": {
-                "bg_base": "#1c1c1c",
-                "bg_elevated": "#252525",
-                "bg_overlay": "#1a1a1a",
-                "bg_control": "#333333",
-                "row_alt": "#222222",
-                "accent": "#0078d4",
-                "accent_subtle": "rgba(0,120,212,0.12)",
-                "accent_pressed": "#0063b1",
-                "border": "#404040",
-                "border_light": "#505050",
-                "text_primary": "#f3f3f3",
-                "text_secondary": "#ababab",
-                "text_disabled": "#6b7280",
-                "text_on_accent": "#ffffff",
-                "success": "#44ffb1",
-                "danger": "#ff4466",
-                "warning": "#ffe073",
-            },
-        }
 
     # ------------------------------------------------------------------
     # Available themes
@@ -174,7 +140,7 @@ class _ThemeManager(QObject):
     # ------------------------------------------------------------------
     def cycle_theme(self, step: int = 1) -> str:
         """Switch to the next (+1) or previous (-1) theme and return its display name."""
-        themes = self.get_available_themes()  # list of (folder, display_name)
+        themes = self.get_available_themes()
         if not themes:
             return self.current_theme_name
         names = [t[0] for t in themes]
@@ -312,7 +278,6 @@ def apply_win32_titlebar(win_id: int, bg_hex: str, is_dark: bool) -> None:
         hwnd = ctypes.wintypes.HWND(win_id)
 
         # Ensure the window is shown and handled by the OS
-        # Sometimes a tiny delay helps for initial window creation
         def _apply():
             # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
             dark = ctypes.c_int(1 if is_dark else 0)
@@ -334,10 +299,6 @@ def apply_win32_titlebar(win_id: int, bg_hex: str, is_dark: bool) -> None:
     except Exception:
         pass
 
-
-# ---------------------------------------------------------------------------
-# Private helper (used by build_web_css)
-# ---------------------------------------------------------------------------
 def _hex_to_rgb(h: str) -> tuple[int, int, int] | None:
     """Convert '#RRGGBB' string to (r, g, b). Returns None on failure."""
     if not h or not isinstance(h, str):
@@ -436,7 +397,6 @@ class WebThemeBridge:
         # Set Qt background color to match theme (prevents white flash)
         view.page().setBackgroundColor(QColor(mgr["bg_base"]))
 
-        # Inject script
         self._inject_script()
 
         # Re-apply on every page load and on theme change

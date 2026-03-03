@@ -3,72 +3,23 @@
 import os
 import sys
 
-from PyQt6.QtCore import QUrl
-from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
-from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEngineSettings
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtWidgets import QApplication
 
-try:
-    from src.common.config import ASSETS_DIR
-except ImportError:
-    ASSETS_DIR = ""
-
-from src.common.theme import ThemeManager, WebThemeBridge
+from src.common.web_app_window import BaseWebApp
 from src.hash_tool.bridge import HashToolBridge
 
 
-class HashTool(QMainWindow):
-    def __init__(self) -> None:
-        super().__init__()
-        self.mgr = ThemeManager()
-        self.setWindowTitle("Hash Tool")
+class HashTool(BaseWebApp):
+    WINDOW_TITLE = "Hash Tool"
+    ICON_NAME = "hash_tool"
+    DEFAULT_SIZE = (780, 680)
+    MIN_SIZE = (620, 520)
 
-        try:
-            icon_path = os.path.join(ASSETS_DIR, "hash_tool.png")
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
-        except Exception:
-            pass
+    def create_bridge(self) -> HashToolBridge:
+        return HashToolBridge(self)
 
-        self.resize(780, 680)
-        self.setMinimumSize(620, 520)
-
-        self.view = QWebEngineView()
-        settings = self.view.settings()
-        for attr_name in (
-            "DeveloperExtrasEnabled",
-            "LocalContentCanAccessFileUrls",
-            "LocalContentCanAccessRemoteUrls",
-        ):
-            attr = getattr(QWebEngineSettings.WebAttribute, attr_name, None)
-            if attr:
-                settings.setAttribute(attr, True)
-
-        self.setCentralWidget(self.view)
-
-        self.bridge = HashToolBridge(self)
-        self.channel = QWebChannel(self)
-        self.channel.registerObject("pyBridge", self.bridge)
-        self.view.page().setWebChannel(self.channel)
-
-        # Live theme injection
-        self._theme_bridge = WebThemeBridge(self.mgr, self.view)
-
-        self.shortcut_devtools = QShortcut(QKeySequence("F12"), self)
-        self.shortcut_devtools.activated.connect(self._open_devtools)
-
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        html_path = os.path.join(script_dir, "hash_tool.html")
-        self.view.setUrl(QUrl.fromLocalFile(html_path))
-
-    def _open_devtools(self) -> None:
-        self._devtools = QWebEngineView()
-        self._devtools.setWindowTitle("Hash Tool DevTools")
-        self._devtools.resize(1100, 750)
-        self.view.page().setDevToolsPage(self._devtools.page())
-        self._devtools.show()
+    def html_path(self) -> str:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "hash_tool.html")
 
 
 def launch() -> "HashTool":

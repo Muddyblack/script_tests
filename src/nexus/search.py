@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.archiver.archiver import is_archive
+from src.archiver.backend import is_archive
 from src.common.config import (
     APPS_CACHE_FILE,
     DB_PATH,
@@ -103,9 +103,6 @@ from .system_commands import (
 )
 from .system_commands import (
     launch_regex_helper as _launch_regex,
-)
-from .system_commands import (
-    launch_workspace_manager as _launch_workspace_manager,
 )
 from .system_commands import (
     launch_xexplorer as _launch_xexplorer,
@@ -1578,13 +1575,6 @@ class NexusSearch(QWidget):
                     "#a3e635",
                 ),
                 (
-                    "Workspace Manager",
-                    "Capture · organize · launch desktop layouts",
-                    "workspace_manager",
-                    "workspace_manager.png",
-                    "#fb923c",
-                ),
-                (
                     "Ghost Typist",
                     "Text expansion · snippets · macros",
                     "ghost_typist",
@@ -2405,8 +2395,6 @@ class NexusSearch(QWidget):
                     _launch_port_inspector(self)
                 elif data["cmd"] == "hash_tool":
                     _launch_hash_tool(self)
-                elif data["cmd"] == "workspace_manager":
-                    _launch_workspace_manager(self)
                 elif data["cmd"] == "ghost_typist":
                     _launch_ghost_typist(self)
                 elif (

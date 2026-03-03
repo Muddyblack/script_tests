@@ -1,4 +1,4 @@
-"""Allow running as ``python -m src.archiver``.
+"""
 
 Launches the combined File Tools window (FILE OPS + ARCHIVER tabs),
 opening directly on the ARCHIVER tab.
