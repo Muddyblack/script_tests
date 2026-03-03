@@ -29,7 +29,7 @@ from src.common.theme import ThemeManager, WindowThemeBridge
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "color_config.json")
 try:
-    from src.common.config import ICON_PATH
+    from src.common.config import COLOR_PICKER_ICON_PATH as ICON_PATH
 except ImportError:
     ICON_PATH = ""
 MAX_SAVED_COLORS = 32
