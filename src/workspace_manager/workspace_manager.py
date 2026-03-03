@@ -11,9 +11,9 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
 try:
-    from src.common.config import ASSETS_DIR
+    from src.common.config import WORKSPACE_MANAGER_ICON_PATH
 except ImportError:
-    ASSETS_DIR = ""
+    WORKSPACE_MANAGER_ICON_PATH = ""
 
 from src.common.theme import ThemeManager, WebThemeBridge
 from src.workspace_manager.bridge import WorkspaceBridge
@@ -25,9 +25,8 @@ class WorkspaceManager(QMainWindow):
         self.mgr = ThemeManager()
         self.setWindowTitle("Workspace Manager")
         try:
-            icon_path = os.path.join(ASSETS_DIR, "workspace_manager.png")
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
+            if os.path.exists(WORKSPACE_MANAGER_ICON_PATH):
+                self.setWindowIcon(QIcon(WORKSPACE_MANAGER_ICON_PATH))
         except Exception:
             pass
         self.resize(880, 640)

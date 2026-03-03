@@ -1579,9 +1579,9 @@ class NexusSearch(QWidget):
                 ),
                 (
                     "Workspace Manager",
-                    "Open · organize · launch VS Code workspaces",
+                    "Capture · organize · launch desktop layouts",
                     "workspace_manager",
-                    "menu.svg",
+                    "workspace_manager.png",
                     "#fb923c",
                 ),
                 (

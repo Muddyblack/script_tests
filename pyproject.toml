@@ -28,7 +28,6 @@ archiver = "src.archiver.archiver:main"
 clipboard-manager = "src.clipboard_manager.clipboard_manager:main"
 port-inspector = "src.port_inspector.port_inspector:main"
 hash-tool = "src.hash_tool.hash_tool:main"
-window-manager = "src.window_manager.window_manager:main"
 ghost-typist = "src.ghost_typist.ghost_typist:main"
 xexplorer = "src.xexplorer.xexplorer:main"
 
