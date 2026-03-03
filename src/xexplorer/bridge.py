@@ -204,7 +204,9 @@ class XExplorerBridge(QObject):
         spawned.
         """
         import json
+
         from PyQt6.QtGui import QCursor
+
         from src.xexplorer.xexplorer import _open_windows  # lazy to avoid circular
         cursor = QCursor.pos()
         candidates: list = []
@@ -760,6 +762,7 @@ class XExplorerBridge(QObject):
                     try:
                         import hashlib
                         import tempfile
+
                         import pythoncom
                         import win32com.client
 

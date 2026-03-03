@@ -46,7 +46,8 @@ class ClipboardBridge(QObject):
                    ORDER BY pinned DESC, ts DESC LIMIT 300"""
             ).fetchall()
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif"}
-        import os, urllib.parse
+        import os
+        import urllib.parse
 
         def _row_type(clip_type, content):
             if clip_type == "image":

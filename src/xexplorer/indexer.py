@@ -38,13 +38,13 @@ class IndexerWorker(QThread):
 
             # Purge stale entries under this root before re-scanning.
             try:
-                norm = root_path.replace('/', '\\')
+                norm = root_path.replace("/", "\\")
                 c.execute("DELETE FROM files WHERE path = ? OR path LIKE ?",
-                          (norm, norm.rstrip('\\') + '\\%'))
+                          (norm, norm.rstrip("\\") + "\\%"))
                 # Also handle forward-slash variants
-                norm_fwd = root_path.replace('\\', '/')
+                norm_fwd = root_path.replace("\\", "/")
                 c.execute("DELETE FROM files WHERE path = ? OR path LIKE ?",
-                          (norm_fwd, norm_fwd.rstrip('/') + '/%'))
+                          (norm_fwd, norm_fwd.rstrip("/") + "/%"))
                 conn.commit()
             except Exception:
                 pass

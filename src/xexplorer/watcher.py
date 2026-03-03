@@ -26,7 +26,7 @@ class LiveCacheUpdater(FileSystemEventHandler):
         return any(ig in nl or ig in pl for ig in self.ignore_list)
 
     def _notify(self):
-        cb = getattr(self, 'file_changed', None)
+        cb = getattr(self, "file_changed", None)
         if callable(cb):
             cb()
 

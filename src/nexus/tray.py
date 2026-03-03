@@ -5,7 +5,12 @@ import os
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
-from src.common.config import CHRONOS_ICON_PATH, GHOST_TYPIST_ICON_PATH, ICON_PATH, OCR_ICON_PATH
+from src.common.config import (
+    CHRONOS_ICON_PATH,
+    GHOST_TYPIST_ICON_PATH,
+    ICON_PATH,
+    OCR_ICON_PATH,
+)
 from src.common.theme import ThemeManager
 
 

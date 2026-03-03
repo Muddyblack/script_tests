@@ -19,8 +19,8 @@ try:
 except ImportError:
     ASSETS_DIR = ""
 
-from src.common.theme import ThemeManager, WebThemeBridge
 from src.clipboard_manager.bridge import ClipboardBridge
+from src.common.theme import ThemeManager, WebThemeBridge
 
 
 class ClipboardManager(QMainWindow):

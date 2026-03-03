@@ -48,7 +48,6 @@ from PyQt6.QtWidgets import (
 
 from src.archiver.archiver import is_archive
 from src.common.config import (
-    APPDATA,
     APPS_CACHE_FILE,
     DB_PATH,
     ICON_PATH,

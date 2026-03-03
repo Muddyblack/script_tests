@@ -9,7 +9,6 @@ Images are stored as PNG bytes in the image_data BLOB column.
 """
 
 import hashlib
-import io
 import sqlite3
 import time
 

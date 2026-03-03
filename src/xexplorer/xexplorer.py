@@ -67,7 +67,7 @@ class xexplorer(QMainWindow):
         _open_windows.append(win)
 
     def closeEvent(self, event):  # type: ignore[override]
-        with __import__('contextlib').suppress(ValueError):
+        with __import__("contextlib").suppress(ValueError):
             _open_windows.remove(self)
         super().closeEvent(event)
 
