@@ -11,6 +11,10 @@ dependencies = [
     "keyboard",
     "watchdog",
     "easyocr",
+    "pymupdf",
+    "python-pptx",
+    "python-docx",
+    "openpyxl",
     "pynput; sys_platform != \"win32\"",
 ]
 readme = "README.md"
@@ -18,7 +22,6 @@ requires-python = ">=3.9"
 
 [project.scripts]
 nexus = "src.nexus.app:main"
-xexplorer = "src.xexplorer.xexplorer:main"
 regex-helper = "src.regex_helper.regex_helper:main"
 file-ops = "src.file_ops.file_ops:main"
 archiver = "src.archiver.archiver:main"
@@ -26,6 +29,8 @@ clipboard-manager = "src.clipboard_manager.clipboard_manager:main"
 port-inspector = "src.port_inspector.port_inspector:main"
 hash-tool = "src.hash_tool.hash_tool:main"
 window-manager = "src.window_manager.window_manager:main"
+ghost-typist = "src.ghost_typist.ghost_typist:main"
+xexplorer = "src.xexplorer.xexplorer:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

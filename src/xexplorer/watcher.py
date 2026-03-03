@@ -19,26 +19,40 @@ class LiveCacheUpdater(FileSystemEventHandler):
         self.ignore_list = [i.lower() for i in ignore_list]
         self._conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self._c = self._conn.cursor()
+        self._c.execute("PRAGMA journal_mode=WAL")
 
     def _skip(self, path):
         pl, nl = path.lower(), os.path.basename(path).lower()
         return any(ig in nl or ig in pl for ig in self.ignore_list)
 
+    def _notify(self):
+        cb = getattr(self, 'file_changed', None)
+        if callable(cb):
+            cb()
+
     def on_created(self, event):
         if self._skip(event.src_path):
             return
+        size = 0
+        if not event.is_directory:
+            try:
+                size = os.path.getsize(event.src_path)
+            except OSError:
+                pass
         try:
             self._c.execute(
-                "INSERT OR REPLACE INTO files VALUES(?,?,?,?,?)",
+                "INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)",
                 (
                     event.src_path,
                     os.path.basename(event.src_path),
                     os.path.dirname(event.src_path),
                     1 if event.is_directory else 0,
                     int(time.time()),
+                    size,
                 ),
             )
             self._conn.commit()
+            self._notify()
         except sqlite3.OperationalError:
             pass
 
@@ -46,15 +60,31 @@ class LiveCacheUpdater(FileSystemEventHandler):
         try:
             self._c.execute("DELETE FROM files WHERE path=?", (event.src_path,))
             self._conn.commit()
+            self._notify()
         except sqlite3.OperationalError:
             pass
 
     def on_moved(self, event):
-        self.on_deleted(event)
-
-        class FE:
-            def __init__(s, p, d):
-                s.src_path = p
-                s.is_directory = d
-
-        self.on_created(FE(event.dest_path, event.is_directory))
+        size = 0
+        if not event.is_directory:
+            try:
+                size = os.path.getsize(event.dest_path)
+            except OSError:
+                pass
+        try:
+            self._c.execute("DELETE FROM files WHERE path=?", (event.src_path,))
+            self._c.execute(
+                "INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)",
+                (
+                    event.dest_path,
+                    os.path.basename(event.dest_path),
+                    os.path.dirname(event.dest_path),
+                    1 if event.is_directory else 0,
+                    int(time.time()),
+                    size,
+                ),
+            )
+            self._conn.commit()
+            self._notify()
+        except sqlite3.OperationalError:
+            pass

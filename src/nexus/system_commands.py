@@ -208,16 +208,8 @@ def update_process_cache(nexus, force: bool = False) -> None:
     except Exception as e:
         print(f"Error in update_process_cache: {e}")
 
-
-def trigger_reindex(nexus) -> None:
-    """Launch X-Explorer in indexing mode."""
-    nexus.status_lbl.setText("📡 Triggering File Indexer...")
-    # Run in index-only mode
-    subprocess.Popen([sys.executable, "-m", "src.xexplorer.xexplorer", "--index"])
-
-
 def launch_xexplorer(nexus) -> None:
-    """Launch the X-Explorer File Manager UI."""
+    """Launch the XExplorer HTML-based File Manager."""
     nexus.status_lbl.setText("🧭 Launching X-Explorer...")
     subprocess.Popen([sys.executable, "-m", "src.xexplorer.xexplorer"])
 
@@ -285,6 +277,11 @@ def launch_window_manager(nexus) -> None:
     nexus.status_lbl.setText("🪟 Launching Window Manager...")
     subprocess.Popen([sys.executable, "-m", "src.window_manager.window_manager"])
 
+
+def launch_ghost_typist(nexus) -> None:
+    """Launch Ghost Typist text-expander UI."""
+    nexus.status_lbl.setText("⌨️ Launching Ghost Typist...")
+    subprocess.Popen([sys.executable, "-m", "src.ghost_typist"])
 
 
 def run_macro(nexus, macro_id: int) -> None:

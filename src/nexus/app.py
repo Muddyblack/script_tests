@@ -50,6 +50,19 @@ def main():
 
     _ocr_prewarm()
 
+    # Start Ghost Typist watcher in background (no UI required)
+    try:
+        from src.ghost_typist.db import get_setting, init_db
+        from src.ghost_typist.watcher import get_watcher
+
+        init_db()
+        nexus.ghost_watcher = get_watcher()
+        if get_setting("watcher_enabled", "1") == "1":
+            nexus.ghost_watcher.start()
+    except Exception:
+        # Best-effort: if watcher can't start, don't crash the app
+        pass
+
     # Global input redirect (Best effort, usually requires sudo/root on Linux)
     if sys.platform == "win32":
         try:

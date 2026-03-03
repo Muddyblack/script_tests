@@ -97,6 +97,9 @@ from .system_commands import (
     launch_file_ops as _launch_file_ops,
 )
 from .system_commands import (
+    launch_ghost_typist as _launch_ghost_typist,
+)
+from .system_commands import (
     launch_hash_tool as _launch_hash_tool,
 )
 from .system_commands import (
@@ -113,9 +116,6 @@ from .system_commands import (
 )
 from .system_commands import (
     log_to_chronos as _log_to_chronos,
-)
-from .system_commands import (
-    trigger_reindex as _trigger_reindex,
 )
 from .system_commands import (
     update_process_cache as _update_procs,
@@ -327,7 +327,6 @@ class NexusSearch(QWidget):
             "apps": True,
             "bookmarks": True,
             "files": False,
-            "scripts": True,
             "processes": False,
             "toggles": True,
             "ssh": True,
@@ -766,7 +765,6 @@ class NexusSearch(QWidget):
             ("apps", "Apps", "package.svg"),
             ("bookmarks", "Bookmarks", "star.svg"),
             ("files", "Files", "folder.svg"),
-            ("scripts", "Scripts", "code.svg"),
             ("ssh", "SSH", "server.svg"),
             ("processes", "Processes", "zap.svg"),
             ("toggles", "System", "settings.svg"),
@@ -888,7 +886,7 @@ class NexusSearch(QWidget):
         self.search_input = NexusInput(self)
         self.search_input.setObjectName("nexus_search")
         self.search_input.setPlaceholderText(
-            "Search apps, files, scripts, workspaces …"
+            "Search apps, files, workspaces …"
         )
         self.search_input.textChanged.connect(lambda: self.search_timer.start(30))
         self.rainbow_frame._content_layout.addWidget(self.search_input)
@@ -1286,6 +1284,32 @@ class NexusSearch(QWidget):
         """Launch the Chronos app."""
         _launch_chronos(self)
 
+    def start_ghost_typist(self) -> None:
+        """Launch Ghost Typist text-expander."""
+        _launch_ghost_typist(self)
+
+    def start_xexplorer(self) -> None:
+        """Launch XExplorer HTML file manager."""
+        _launch_xexplorer(self)
+
+    def toggle_ghost_watcher(self, enabled: bool) -> None:
+        """Enable or disable the background Ghost Typist keyboard listener."""
+        if not hasattr(self, "ghost_watcher"):
+            return
+
+        from src.ghost_typist.db import set_setting
+
+        set_setting("watcher_enabled", "1" if enabled else "0")
+
+        if enabled:
+            self.ghost_watcher.start()
+            self.status_lbl.setText("⌨️ Ghost Typist Listener Started")
+        else:
+            self.ghost_watcher.stop()
+            self.status_lbl.setText("⌨️ Ghost Typist Listener Stopped")
+
+        self.status_lbl.setStyleSheet("color: #a855f7; font-weight: bold;")
+
     # ------------------------------------------------------------------
     # Search engine
     # ------------------------------------------------------------------
@@ -1408,7 +1432,6 @@ class NexusSearch(QWidget):
         prefixes = {
             ":b": "bookmarks",
             ":f": "files",
-            ":s": "scripts",
             ":p": "processes",
             ":t": "toggles",
             ":ssh": "ssh",
@@ -1476,7 +1499,7 @@ class NexusSearch(QWidget):
             mgmt_cmds = [
                 (
                     "xexplorer - File Manager",
-                    "Modern explorer with blazing-fast search",
+                    "Modern explorer with fast search",
                     "xexplorer",
                     "folder.svg",
                     "#3b82f6",
@@ -1571,6 +1594,13 @@ class NexusSearch(QWidget):
                     "window_manager",
                     "menu.svg",
                     "#fb923c",
+                ),
+                (
+                    "Ghost Typist",
+                    "Text expansion · snippets · macros",
+                    "ghost_typist",
+                    "keyboard.svg",
+                    "#a855f7",
                 ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
@@ -1731,50 +1761,6 @@ class NexusSearch(QWidget):
                             "data": {"type": "url", "url": b["url"]},
                         }
                     )
-
-        # 4. Local Scripts
-        if active_modes.get("scripts"):
-            # Include project root, core packages, and user scripts
-            script_paths = [
-                PROJECT_ROOT,
-                os.path.join(PROJECT_ROOT, "src", "xexplorer"),
-                os.path.join(PROJECT_ROOT, "src", "regex_helper"),
-                os.path.join(PROJECT_ROOT, "src", "file_ops"),
-                os.path.join(PROJECT_ROOT, "src", "archiver"),
-                os.path.join(PROJECT_ROOT, "src", "color_picker"),
-                os.path.join(PROJECT_ROOT, "src", "base64_tool"),
-                os.path.join(PROJECT_ROOT, "src", "chronos"),
-                os.path.join(APPDATA, "scripts"),
-            ]
-            for spath in script_paths:
-                if not os.path.exists(spath):
-                    continue
-                for f in os.listdir(spath):
-                    if f.endswith(".py") and f not in [
-                        "nexus_launcher.py",
-                        "nexus_app.py",
-                        "__init__.py",
-                        "__main__.py",
-                    ]:
-                        display_name = f[:-3].replace("_", " ").title()
-                        if matches_all_terms(display_name, terms) or matches_all_terms(
-                            f, terms
-                        ):
-                            score = 800
-                            if search_term and f.lower().startswith(search_term):
-                                score += 500
-                            f_path = os.path.join(spath, f)
-                            score += self.get_usage_boost(f"script_{f_path}")
-                            candidates.append(
-                                {
-                                    "score": score,
-                                    "title": display_name,
-                                    "path": f"Python Script • {f}",
-                                    "file_path": f_path,
-                                    "icon": "code.svg",
-                                    "data": {"type": "script", "path": f_path},
-                                }
-                            )
 
         # 6. File Search (Centralized Engine)
         if active_modes.get("files"):
@@ -2385,8 +2371,6 @@ class NexusSearch(QWidget):
             elif data["type"] == "cmd":
                 if data["cmd"] == "xexplorer":
                     _launch_xexplorer(self)
-                elif data["cmd"] == "reindex_files":
-                    _trigger_reindex(self)
                 elif data["cmd"] == "regex_helper":
                     _launch_regex(self)
                 elif data["cmd"] == "file_ops":
@@ -2411,6 +2395,8 @@ class NexusSearch(QWidget):
                     _launch_hash_tool(self)
                 elif data["cmd"] == "window_manager":
                     _launch_window_manager(self)
+                elif data["cmd"] == "ghost_typist":
+                    _launch_ghost_typist(self)
                 elif (
                     data["cmd"].startswith("toggle_")
                     or data["cmd"].startswith("cmd_")
@@ -2467,9 +2453,6 @@ class NexusSearch(QWidget):
 
     def kill_process(self, pid, name):
         _kill_proc(self, pid, name)
-
-    def trigger_reindex(self):
-        _trigger_reindex(self)
 
     def update_process_cache(self, force=False):
         _update_procs(self, force)

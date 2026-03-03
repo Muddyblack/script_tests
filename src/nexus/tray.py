@@ -5,7 +5,7 @@ import os
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
-from src.common.config import CHRONOS_ICON_PATH, ICON_PATH, OCR_ICON_PATH
+from src.common.config import CHRONOS_ICON_PATH, GHOST_TYPIST_ICON_PATH, ICON_PATH, OCR_ICON_PATH
 from src.common.theme import ThemeManager
 
 
@@ -54,6 +54,26 @@ def create_tray_icon(app, nexus) -> QSystemTrayIcon:
         chronos_action.setIcon(QIcon(CHRONOS_ICON_PATH))
     chronos_action.triggered.connect(nexus.start_chronos)
     menu.addAction(chronos_action)
+
+    ghost_action = QAction("⌨️  Ghost Typist", menu)
+    if os.path.exists(GHOST_TYPIST_ICON_PATH):
+        ghost_action.setIcon(QIcon(GHOST_TYPIST_ICON_PATH))
+    ghost_action.triggered.connect(nexus.start_ghost_typist)
+    menu.addAction(ghost_action)
+
+    xexplorer_action = QAction("🧭  X-Explorer", menu)
+    xexplorer_action.triggered.connect(nexus.start_xexplorer)
+    menu.addAction(xexplorer_action)
+
+    menu.addSeparator()
+
+    # -- Background Services --
+    has_watcher = hasattr(nexus, "ghost_watcher")
+    is_running = nexus.ghost_watcher.is_running if has_watcher else False
+    gt_service_action = QAction("⌨️  Ghost Typist Listener", menu, checkable=True)
+    gt_service_action.setChecked(is_running)
+    gt_service_action.triggered.connect(nexus.toggle_ghost_watcher)
+    menu.addAction(gt_service_action)
 
     menu.addSeparator()
 

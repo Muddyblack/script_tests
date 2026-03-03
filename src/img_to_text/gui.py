@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import time
+import urllib.parse
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from PyQt6.QtCore import (
     Qt,
     QThreadPool,
     QTimer,
+    QUrl,
     pyqtSignal,
 )
 from PyQt6.QtGui import (
@@ -45,6 +47,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QTextEdit,
@@ -1654,12 +1657,98 @@ class ImageOcrDialog(QWidget):
         self._img_area._open_file_dialog()
 
     def _paste_image(self) -> None:
-        img = QApplication.clipboard().image()
+        clipboard = QApplication.clipboard()
+        md = clipboard.mimeData()
+        img: QImage | None = None
+
+        # 1. Try direct image data (Snipping tool / web copy image)
+        if md.hasImage():
+            cand = clipboard.image()
+            if cand and not cand.isNull():
+                img = cand
+
+        # 2. Try file URLs / URI-list (Explorer copy-file)
+        if (not img or img.isNull()) and (
+            md.hasUrls() or md.hasFormat("text/uri-list")
+        ):
+            urls = list(md.urls())
+            if not urls and md.hasFormat("text/uri-list"):
+                # Manual fallback for weirdly formatted uri-lists
+                raw_uris = bytes(md.data("text/uri-list")).decode("utf-8", "ignore")
+                for line in raw_uris.splitlines():
+                    if line.strip():
+                        urls.append(QUrl(line.strip()))
+
+            for url in urls:
+                # Try toLocalFile first
+                path = url.toLocalFile()
+                if not path or not os.path.exists(path):
+                    # Manual decode if toLocalFile failed
+                    raw = url.toString()
+                    if raw.lower().startswith("file:///"):
+                        raw = raw[8:]
+                    elif raw.lower().startswith("file://"):
+                        raw = raw[7:]
+                    elif raw.lower().startswith("file:"):
+                        raw = raw[5:]
+                    path = urllib.parse.unquote(raw)
+
+                if path and os.path.exists(path) and os.path.isfile(path):
+                    cand = QImage(path)
+                    if not cand.isNull():
+                        img = cand
+                        break
+
+        # 3. Try plain text as path (Copy as path / URL string / multiline)
+        if (not img or img.isNull()) and md.hasText():
+            for line in md.text().splitlines():
+                text = line.strip().strip('"').strip("'")
+                if not text:
+                    continue
+
+                # A. Try as a direct local path (C:\path\to\file.png)
+                if os.path.exists(text) and os.path.isfile(text):
+                    cand = QImage(text)
+                    if not cand.isNull():
+                        img = cand
+                        break
+
+                # B. Try as a file URI (file:///C:/path...)
+                if text.lower().startswith("file:"):
+                    raw = text
+                    if raw.lower().startswith("file:///"):
+                        raw = raw[8:]
+                    elif raw.lower().startswith("file://"):
+                        raw = raw[7:]
+                    elif raw.lower().startswith("file:"):
+                        raw = raw[5:]
+                    path = urllib.parse.unquote(raw)
+
+                    if path and os.path.exists(path) and os.path.isfile(path):
+                        cand = QImage(path)
+                        if not cand.isNull():
+                            img = cand
+                            break
+
         if img and not img.isNull():
+            if self._current_image is not None:
+                # User complained it "always replaces directly" - now we ask.
+                res = QMessageBox.question(
+                    self,
+                    "Replace Image?",
+                    "An image is already loaded. Do you want to replace it and clear the current OCR result?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if res != QMessageBox.StandardButton.Yes:
+                    return
+
             self._img_area.set_image(img)
             self._on_image_loaded(img)
         else:
-            Toast.show_toast("No image in clipboard", "⚠️", C.WARNING)
+            Toast.show_toast(
+                "No image or valid file path in clipboard", "⚠️", C.WARNING
+            )
 
     def _on_image_loaded(self, img: QImage) -> None:
         self._current_image = img
