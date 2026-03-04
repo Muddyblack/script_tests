@@ -6,7 +6,7 @@ import json
 import os
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
-from PyQt6.QtWidgets import QApplication, QFileDialog
+from PyQt6.QtWidgets import QFileDialog
 
 CHUNK = 8 * 1024 * 1024  # 8 MB
 

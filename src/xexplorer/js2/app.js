@@ -180,7 +180,6 @@ const App = () => {
                 br.live_changed.connect(() => {
                     setLiveOn(true);
                     // Debounce: wait 1.5s after the last event before refreshing
-                    // (avoids hammering on bulk copies / renames)
                     clearTimeout(liveTickRef.current);
                     liveTickRef.current = setTimeout(() => setLiveRefreshTick(t => t + 1), 1500);
                 });

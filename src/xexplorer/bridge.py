@@ -170,10 +170,10 @@ class XExplorerBridge(QObject):
             while True:
                 item = self._op_emit_queue.get_nowait()
                 kind = item[0]
-                if kind == 'progress':
+                if kind == "progress":
                     _, op_id, done, total, current = item
                     self.file_op_progress.emit(op_id, done, total, current)
-                elif kind == 'done':
+                elif kind == "done":
                     _, op_id, json_str = item
                     self.file_op_done.emit(op_id, json_str)
                     self.live_changed.emit()
@@ -212,7 +212,7 @@ class XExplorerBridge(QObject):
     def get_initial_path(self) -> str:
         """Return the path this window should navigate to on startup (or empty)."""
         p = self._initial_path
-        self._initial_path = ""   # consume once
+        self._initial_path = ""
         return p
 
     @pyqtSlot(str)
@@ -664,7 +664,7 @@ class XExplorerBridge(QObject):
                     errors.append("Cancelled")
                     break
                 name = os.path.basename(src.rstrip("/\\"))
-                self._op_emit_queue.put(('progress', op_id, i, total, name))
+                self._op_emit_queue.put(("progress", op_id, i, total, name))
                 try:
                     dst = os.path.join(dest_dir, name)
                     os.makedirs(dest_dir, exist_ok=True)
@@ -674,8 +674,8 @@ class XExplorerBridge(QObject):
                         shutil.copy2(src, dst)
                 except Exception as exc:
                     errors.append(f"{name}: {exc}")
-            self._op_emit_queue.put(('progress', op_id, total, total, ''))
-            self._op_emit_queue.put(('done', op_id, json.dumps({"errors": errors})))
+            self._op_emit_queue.put(("progress", op_id, total, total, ""))
+            self._op_emit_queue.put(("done", op_id, json.dumps({"errors": errors})))
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -697,15 +697,15 @@ class XExplorerBridge(QObject):
                     errors.append("Cancelled")
                     break
                 name = os.path.basename(src.rstrip("/\\"))
-                self._op_emit_queue.put(('progress', op_id, i, total, name))
+                self._op_emit_queue.put(("progress", op_id, i, total, name))
                 try:
                     dst = os.path.join(dest_dir, name)
                     os.makedirs(dest_dir, exist_ok=True)
                     shutil.move(src, dst)
                 except Exception as exc:
                     errors.append(f"{name}: {exc}")
-            self._op_emit_queue.put(('progress', op_id, total, total, ''))
-            self._op_emit_queue.put(('done', op_id, json.dumps({"errors": errors})))
+            self._op_emit_queue.put(("progress", op_id, total, total, ""))
+            self._op_emit_queue.put(("done", op_id, json.dumps({"errors": errors})))
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -724,7 +724,7 @@ class XExplorerBridge(QObject):
                     errors.append("Cancelled")
                     break
                 name = os.path.basename(path)
-                self._op_emit_queue.put(('progress', op_id, i, total, name))
+                self._op_emit_queue.put(("progress", op_id, i, total, name))
                 try:
                     try:
                         import send2trash  # type: ignore
@@ -736,8 +736,8 @@ class XExplorerBridge(QObject):
                             os.unlink(path)
                 except Exception as exc:
                     errors.append(f"{name}: {exc}")
-            self._op_emit_queue.put(('progress', op_id, total, total, ''))
-            self._op_emit_queue.put(('done', op_id, json.dumps({"errors": errors})))
+            self._op_emit_queue.put(("progress", op_id, total, total, ""))
+            self._op_emit_queue.put(("done", op_id, json.dumps({"errors": errors})))
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -833,7 +833,7 @@ class XExplorerBridge(QObject):
         if cache_key in self._icon_cache:
             return self._icon_cache[cache_key]
         try:
-            from PyQt6.QtCore import QByteArray, QBuffer, QIODevice
+            from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 
             fi = QFileInfo(path) if os.path.exists(path) else None
             icon = self._icon_provider.icon(fi) if fi else (
@@ -921,17 +921,14 @@ class XExplorerBridge(QObject):
         }
         PDF_EXTS    = {".pdf"}
         OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
-        
         if ext in IMAGE_EXTS or ext in TEXT_EXTS or ext in PDF_EXTS or ext in OFFICE_EXTS:
             return True
-        
         # Check size for generic text preview
         try:
             if os.path.getsize(path) < 256 * 1024:
                 return True
         except OSError:
             pass
-            
         return False
 
     @pyqtSlot(str, int, result=str)
