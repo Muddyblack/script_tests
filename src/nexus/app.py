@@ -26,11 +26,6 @@ def main():
     nexus = NexusSearch()
     bridge = NexusBridge()
 
-    # Always-on clipboard history tracker (writes to nexus_clipboard.db)
-    from src.clipboard_manager.watcher import ClipboardWatcher
-
-    _clipboard_watcher = ClipboardWatcher(app)  # noqa: F841 — keep alive
-
     # Thread-safe toggle: hotkey thread -> Qt main thread
     bridge.toggle_signal.connect(
         lambda: nexus.summon() if not nexus.isVisible() else nexus.hide()

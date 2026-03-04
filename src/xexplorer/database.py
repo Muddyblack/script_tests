@@ -1,5 +1,6 @@
 """Auto-split module."""
 
+import contextlib
 import sqlite3
 
 from src.common.config import X_EXPLORER_DB as DB_PATH
@@ -16,9 +17,7 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS folder_stats (
         path TEXT PRIMARY KEY, last_indexed TEXT)""")
     # Migrate existing DBs that lack the size column
-    try:
+    with contextlib.suppress(Exception):
         c.execute("ALTER TABLE files ADD COLUMN size INTEGER DEFAULT 0")
-    except Exception:
-        pass  # column already exists
     conn.commit()
     conn.close()

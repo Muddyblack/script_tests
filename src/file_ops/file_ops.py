@@ -8,7 +8,11 @@ Auto-detects what can be done when files are dropped (archives → extract,
 regular files → compress). Requires 7-Zip for .7z / .rar / .iso / .zst etc.
 """
 
+import argparse
+import ctypes
 import gzip
+import json
+import math
 import os
 import re
 import shutil
@@ -54,6 +58,10 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from src.common.config import ARCHIVER_SETTINGS, FILE_OPS_SETTINGS, ICON_PATH
+from src.common.theme import ThemeManager, WindowThemeBridge
+from src.common.theme_template import TOOL_SHEET
 
 # ──────────────────────────────────────────────────────────────────────
 # Archive backend (formerly src/archiver/backend.py)
@@ -492,9 +500,7 @@ def create_archive(
         solid=solid,
     )
     return BACKEND.create_archive(sources, output_path, options, on_progress)
-from src.common.config import ARCHIVER_SETTINGS, FILE_OPS_SETTINGS, ICON_PATH
-from src.common.theme import ThemeManager, WindowThemeBridge
-from src.common.theme_template import TOOL_SHEET
+
 
 COPY_BUFFER = 8 * 1024 * 1024
 
@@ -537,14 +543,10 @@ class GlowProgressBar(QProgressBar):
         self._timer.start(30)
 
     def _pulse(self):
-        import math
-
         self._glow = (self._glow + 0.04) % (2 * math.pi)
         self.update()
 
     def paintEvent(self, _):
-        import math
-
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = self.rect()
@@ -681,8 +683,6 @@ class FileToolsWindow(QMainWindow):
     # ── Settings ──────────────────────────────────────────────────────
 
     def _load_settings(self):
-        import json
-
         for path, widget in [
             (FILE_OPS_SETTINGS, self.fo_dst_input),
             (ARCHIVER_SETTINGS, self.arc_dst_input),
@@ -695,8 +695,6 @@ class FileToolsWindow(QMainWindow):
                     pass
 
     def _save_settings(self):
-        import json
-
         for path, widget in [
             (FILE_OPS_SETTINGS, self.fo_dst_input),
             (ARCHIVER_SETTINGS, self.arc_dst_input),
@@ -1457,10 +1455,7 @@ class FileToolsWindow(QMainWindow):
 
 def main():
     if sys.platform == "win32":
-        import ctypes
-
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.filetools")
-    import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
