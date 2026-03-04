@@ -20,6 +20,7 @@ _WORKER = Path(__file__).parent / "ocr_worker.py"
 
 _proc: subprocess.Popen | None = None
 _proc_languages: list[str] = []
+_proc_lock = threading.Lock()
 
 
 def _bbox_stats(bbox: list[list[int]]) -> tuple[float, float, float, float]:
@@ -156,6 +157,14 @@ def _format_results_text(
 
 
 def _get_proc(languages: list[str]) -> subprocess.Popen:
+    global _proc, _proc_languages
+
+    with _proc_lock:
+        return _get_proc_locked(languages)
+
+
+def _get_proc_locked(languages: list[str]) -> subprocess.Popen:
+    """Must be called with _proc_lock held."""
     global _proc, _proc_languages
 
     if _proc is not None and _proc.poll() is not None:
@@ -321,9 +330,12 @@ def set_languages(languages: list[str]) -> None:
 
 def pre_warm(languages: list[str] | None = None) -> None:
     """Start the OCR worker process in the background so the model is ready before first use."""
+    from . import _settings as S  # import here to avoid circular imports at module level
+
+    _langs = languages if languages is not None else list(S.ocr_langs)
 
     def _warm():
         with contextlib.suppress(Exception):
-            _get_proc(languages or ["en", "de"])
+            _get_proc(_langs)
 
     threading.Thread(target=_warm, daemon=True, name="ocr-prewarm").start()

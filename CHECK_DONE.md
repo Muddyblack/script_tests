@@ -6,8 +6,8 @@ themes/
 regex_helper/
 port_inspector/
 nexus/
-
+img_to_text
 hashtool/
 
 common/
-color_picker
+color_picker/
