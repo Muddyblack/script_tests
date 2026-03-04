@@ -110,7 +110,8 @@ class SqliteViewerBridge(QObject):
                 file_size = os.path.getsize(path)
 
             self._db_path = path
-            return json.dumps({
+
+            res = {
                 "ok": True,
                 "path": path,
                 "name": os.path.basename(path),
@@ -119,7 +120,10 @@ class SqliteViewerBridge(QObject):
                 "page_size": page_size_b,
                 "tables": tables,
                 "views": views,
-            })
+            }
+            # Emit signal so JS listeners update even if they didn't initiate the call
+            self.db_opened.emit(json.dumps(res))
+            return json.dumps(res)
         except Exception as exc:
             return json.dumps({"ok": False, "error": str(exc)})
 

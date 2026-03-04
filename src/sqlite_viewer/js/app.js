@@ -54,6 +54,95 @@ function copyText(text) {
   document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
 }
 
+function normalizeFilePath(candidate) {
+  if (!candidate) return null;
+  const trimmed = candidate.trim();
+  if (!trimmed) return null;
+
+  // 1. Direct Windows path (e.g. C:\path or \\server\path)
+  if (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(trimmed)) return trimmed;
+
+  const lower = trimmed.toLowerCase();
+
+  // 2. Try to extract URL if embedded (common in some drag sources)
+  let maybeUri = trimmed;
+  const schemeIdx = lower.indexOf("file://");
+  if (schemeIdx >= 0) {
+    maybeUri = trimmed.slice(schemeIdx);
+  }
+
+  // 3. Robust URL parsing
+  try {
+    const url = new URL(maybeUri);
+    if (url.protocol === "file:") {
+      let pathname = decodeURIComponent(url.pathname);
+      // Standardize Windows path from URI: /C:/path -> C:/path
+      if (/^\/[A-Za-z]:/.test(pathname)) pathname = pathname.slice(1);
+      return pathname;
+    }
+  } catch (e) {
+    // 4. Manual fallback for malformed file:// URIs
+    if (lower.startsWith("file://")) {
+      let stripped = trimmed.replace(/^file:\/\/+/, "");
+      // Handle leading slash if present after host: /C:/path -> C:/path
+      if (/^\/[A-Za-z]:/.test(stripped)) stripped = stripped.slice(1);
+      // Convert backslashes to forward slashes for validation
+      const normalized = stripped.replace(/\\/g, "/");
+      if (/^[A-Za-z]:\//.test(normalized)) return stripped;
+    }
+  }
+
+  return null;
+}
+
+function extractPathFromData(value) {
+  if (!value) return null;
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const path = normalizeFilePath(trimmed);
+    if (path) return path;
+  }
+  return null;
+}
+
+function resolveDroppedFilePath(event) {
+  const dt = event.dataTransfer;
+  if (!dt) return null;
+
+  // 1. Try modern DataTransferItemList (often more reliable in Chromium)
+  if (dt.items) {
+    for (let i = 0; i < dt.items.length; i++) {
+      if (dt.items[i].kind === 'file') {
+        const file = dt.items[i].getAsFile();
+        if (file && file.path) return file.path;
+      }
+    }
+  }
+
+  // 2. Try various MIME types that might contain the path/URI
+  const sources = [
+    dt.getData("text/uri-list"),
+    dt.getData("URL"),
+    dt.getData("text/plain"),
+    dt.getData("DownloadURL"),
+  ];
+
+  for (const source of sources) {
+    if (!source) continue;
+    const path = extractPathFromData(source);
+    if (path) return path;
+  }
+
+  // 3. Fallback: check if the environment provides a .path property on File
+  const file = dt.files?.[0];
+  if (file && file.path) {
+    return file.path;
+  }
+
+  return null;
+}
+
 // Classify SQLite type for styling
 function typeClass(t) {
   if (!t) return "type-default";
@@ -541,7 +630,7 @@ function SqlTab({ onQueryResult, queryResult, queryLoading }) {
                 colTypes={null}
                 sortCol=""
                 sortDir="asc"
-                onSort={() => {}}
+                onSort={() => { }}
                 offsetStart={0}
               />
             </div>
@@ -574,7 +663,7 @@ function Sidebar({ tables, views, selectedTable, onSelect, isOpen }) {
   }, [allItems, filter]);
 
   const tableItems = filtered.filter(t => !t.is_view);
-  const viewItems  = filtered.filter(t => t.is_view);
+  const viewItems = filtered.filter(t => t.is_view);
 
   if (!isOpen) return null;
 
@@ -684,13 +773,40 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dragOver, setDragOver] = useState(false);
 
-  // Connect query_result signal
+  // Connect signals
   useEffect(() => {
     getBridge(b => {
-      b.query_result.connect((json) => {
+      // Background query results
+      const onQueryResult = (json) => {
         setQueryLoading(false);
         try { setQueryResult(JSON.parse(json)); } catch { setQueryResult({ ok: false, error: json }); }
-      });
+      };
+
+      // External DB open (e.g. from Python-side drop)
+      const onDbOpened = (json) => {
+        try {
+          const data = JSON.parse(json);
+          if (!data.ok) { setError(data.error); return; }
+          setDbInfo(data);
+          setTables(data.tables || []);
+          setViews(data.views || []);
+          const first = (data.tables || [])[0]?.name || (data.views || [])[0]?.name || null;
+          setSelectedTable(first);
+          setActiveTab("data");
+          setSchema(null);
+          setQueryResult(null);
+          setError(null);
+          setDragOver(false); // Reset drag state if Python-side drop happened
+        } catch (e) { console.error("Signal error:", e); }
+      };
+
+      b.query_result.connect(onQueryResult);
+      b.db_opened.connect(onDbOpened);
+
+      return () => {
+        b.query_result.disconnect(onQueryResult);
+        b.db_opened.disconnect(onDbOpened);
+      };
     });
   }, []);
 
@@ -732,7 +848,7 @@ function App() {
             setSchema(data);
             setColTypes(data.columns.map(c => c.type));
           }
-        } catch {}
+        } catch { }
       });
     });
   }, [selectedTable]);
@@ -743,8 +859,17 @@ function App() {
   const handleDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) openDb(f.path || f.name);
+
+    const dropPath = resolveDroppedFilePath(e);
+    if (dropPath) {
+      openDb(dropPath);
+    } else {
+      // If we couldn't resolve a full path, explain why instead of passing a raw filename
+      const hasFile = e.dataTransfer.files?.length > 0;
+      if (hasFile) {
+        setError("Could not resolve the absolute path of the dropped file. This is often due to browser security restrictions. Please use the 'Open' button instead.");
+      }
+    }
   };
 
   const handleRunQuery = (sql) => {
@@ -758,9 +883,9 @@ function App() {
   };
 
   const TABS = [
-    { id: "data",      label: "Data",      icon: Icons.Table2 },
+    { id: "data", label: "Data", icon: Icons.Table2 },
     { id: "structure", label: "Structure", icon: Icons.Columns3 },
-    { id: "sql",       label: "SQL",       icon: Icons.Terminal },
+    { id: "sql", label: "SQL", icon: Icons.Terminal },
   ];
 
   return (

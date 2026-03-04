@@ -185,8 +185,15 @@ def _get_proc_locked(languages: list[str]) -> subprocess.Popen:
         _extra: dict = {}
         if sys.platform == "win32":
             _extra["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        # When frozen (PyInstaller onefile), sys.executable is the exe itself.
+        # Re-invoke it with --ocr-worker so nexus_app.py routes to ocr_worker.main().
+        # In dev mode, invoke the worker script directly with Python.
+        if getattr(sys, "frozen", False):
+            worker_cmd = [sys.executable, "--ocr-worker"]
+        else:
+            worker_cmd = [sys.executable, "-u", str(_WORKER)]
         _proc = subprocess.Popen(
-            [sys.executable, "-u", str(_WORKER)],
+            worker_cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=None,   # let worker's terminal output flow through to the console
