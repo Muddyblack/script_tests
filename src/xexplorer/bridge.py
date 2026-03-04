@@ -61,33 +61,6 @@ def _is_network_path(path: str) -> bool:
             pass
     return False
 
-
-def _resolve_unc(path: str) -> str:
-    if sys.platform != "win32" or not path:
-        return path
-    norm = path.replace("/", "\\")
-    if norm.startswith("\\\\") or len(norm) < 2 or norm[1] != ":":
-        return path
-    drive_letter = norm[0].upper()
-    drive_root = f"{drive_letter}:\\"
-    try:
-        import ctypes
-        DRIVE_REMOTE = 4
-        if ctypes.windll.kernel32.GetDriveTypeW(drive_root) != DRIVE_REMOTE:
-            return path
-        mpr = ctypes.WinDLL("mpr")
-        buf_size = ctypes.c_ulong(1024)
-        buf = ctypes.create_unicode_buffer(1024)
-        ret = mpr.WNetGetUniversalNameW(f"{drive_letter}:", ctypes.c_ulong(1), buf, ctypes.byref(buf_size))
-        if ret == 0:
-            unc_ptr = ctypes.cast(buf, ctypes.POINTER(ctypes.c_wchar_p))[0]
-            if unc_ptr:
-                return unc_ptr + norm[2:]
-    except Exception:
-        pass
-    return path
-
-
 def _fmt_size(path: str, is_dir: bool) -> str:
     if is_dir:
         return ""
@@ -214,14 +187,19 @@ class XExplorerBridge(QObject):
         if not path:
             return
         # Skip polling for UNC/network locations — the PollingObserver in
-        # _restart_watchers already covers them, and os.stat on a slow share
-        # would stall the main thread every 750 ms.
+        # _restart_watchers already covers them, and os.stat on a slow/gone
+        # share would stall the main thread every 750 ms.
         if _is_network_path(path):
             return
         try:
             mtime = os.stat(path).st_mtime
         except OSError:
-            mtime = 0.0
+            # Drive removed (e.g. USB unplugged) — stop polling this path so
+            # we don't spam live_changed, and clear it so the UI doesn't freeze.
+            self._browse_poll_path = ""
+            self._browse_poll_mtime = 0.0
+            self.live_changed.emit()  # let UI know the listing is now stale
+            return
         if mtime != self._browse_poll_mtime:
             self._browse_poll_mtime = mtime
             self.live_changed.emit()
@@ -312,7 +290,7 @@ class XExplorerBridge(QObject):
             if res:
                 try:
                     for f in json.loads(res[0]):
-                        path  = _resolve_unc(f.get("path", ""))
+                        path  = f.get("path", "")
                         label = f.get("label", path)
                         folders.append({"path": path, "label": label})
                 except (json.JSONDecodeError, TypeError):
@@ -371,13 +349,7 @@ class XExplorerBridge(QObject):
     def pick_folder(self) -> str:
         path = QFileDialog.getExistingDirectory(None, "Select Folder to Index")
         if path:
-            path = path.replace("/", "\\")
-            # Skip _resolve_unc for paths that are already on a network location
-            # (it calls WNetGetUniversalNameW which can stall on a slow/unreachable share).
-            # Local mapped-drive → UNC conversion is a nicety; skip it to stay responsive.
-            if not _is_network_path(path):
-                path = _resolve_unc(path)
-            return path
+            return path.replace("/", "\\")
         return ""
 
     @pyqtSlot(result=str)
@@ -389,8 +361,7 @@ class XExplorerBridge(QObject):
                 bitmask = ctypes.windll.kernel32.GetLogicalDrives()
                 for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
                     if bitmask & (1 << (ord(letter) - 65)):
-                        d = f"{letter}:\\"
-                        drives.append(_resolve_unc(d))
+                        drives.append(f"{letter}:\\")
             except Exception:
                 drives = []
         else:
@@ -532,7 +503,11 @@ class XExplorerBridge(QObject):
 
         results = []
         for path, is_dir in pairs[:3000]:
-            if not os.path.exists(path):
+            # Skip os.path.exists() for network paths — it blocks the main
+            # thread while the OS waits for the share (10 s+ on a gone drive).
+            # Index results from network roots are trusted as-is; stale entries
+            # will be cleaned up on the next scheduled re-index.
+            if not _is_network_path(path) and not os.path.exists(path):
                 continue
             name = os.path.basename(path) or path
             _, ext = os.path.splitext(name)
