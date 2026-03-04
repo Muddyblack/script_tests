@@ -1,13 +1,15 @@
 ﻿"""Nexus Search main UI widget.
 """
 
-import contextlib
 import ctypes
 import os
 import sys
 import threading
 
-import keyboard
+try:
+    from pynput import keyboard as _pynput_kb  # type: ignore
+except ImportError:
+    _pynput_kb = None
 from PyQt6.QtCore import (
     QEasingCurve,
     QPropertyAnimation,
@@ -15,9 +17,10 @@ from PyQt6.QtCore import (
     QThreadPool,
     QTimer,
     QUrl,
+    pyqtSignal,
 )
 from PyQt6.QtGui import QCursor, QDesktopServices, QGuiApplication
-from PyQt6.QtWidgets import QApplication, QFileIconProvider, QWidget
+from PyQt6.QtWidgets import QFileIconProvider, QWidget
 
 from src.common.config import DB_PATH, SETTINGS_FILE, X_EXPLORER_DB
 from src.common.search_engine import SearchEngine
@@ -60,6 +63,9 @@ from .themes import get_nexus_theme
 
 class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixin, QWidget):
     """Nexus Search launcher — thin core, logic delegated to mixins."""
+
+    # Signal emitted from pynput thread, handled on the Qt main thread.
+    _global_key_signal = pyqtSignal(str, bool)  # (key_name, has_modifier)
 
     # ------------------------------------------------------------------
     # Initialisation
@@ -141,53 +147,90 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
         self.update_clock()
         self.current_candidates = []
 
-        # Global input redirect
-        if sys.platform == "win32":
-            keyboard.on_press(self.on_global_key)
-        else:
-            # Best effort local focus handling instead of global keyboard hook
-            pass
+        # Global input redirect via pynput (no sudo required on any platform)
+        self._held_modifiers: set[str] = set()  # currently-held modifier names
+        self._global_listener = None
+        self._global_key_signal.connect(self._handle_global_key)
+        self._start_global_listener()
 
     # ------------------------------------------------------------------
     # Global key redirect
     # ------------------------------------------------------------------
-    def on_global_key(self, event):
-        """Redirect keys to Nexus when it is visible but not focused."""
+    def _start_global_listener(self) -> None:
+        """Attach a pynput global keyboard listener for input redirect."""
+        if _pynput_kb is None:
+            return
+        self._global_listener = _pynput_kb.Listener(
+            on_press=self._on_global_key_press,
+            on_release=self._on_global_key_release,
+            daemon=True,
+        )
+        self._global_listener.start()
+
+    @staticmethod
+    def _resolve_pynput_key_name(key) -> str:
+        """Convert a pynput key object to a normalised lowercase name string."""
+        if _pynput_kb is None:
+            return ""
+        if isinstance(key, _pynput_kb.Key):
+            # e.g. Key.page_up → "page up", Key.esc → "esc"
+            return key.name.replace("_", " ")
+        if hasattr(key, "char") and key.char:
+            return key.char.lower()
+        return ""
+
+    def _on_global_key_release(self, key) -> None:
+        """Track which modifier keys are currently held (pynput thread)."""
+        try:
+            if _pynput_kb is None or not isinstance(key, _pynput_kb.Key):
+                return
+            base = key.name.split("_")[0]
+            self._held_modifiers.discard(base)
+        except Exception:
+            pass
+
+    def _on_global_key_press(self, key) -> None:
+        """Capture key on pynput thread and emit signal to Qt main thread."""
+        try:
+            # Update modifier tracking (pure Python set, safe on any thread)
+            if _pynput_kb is not None and isinstance(key, _pynput_kb.Key):
+                base = key.name.split("_")[0]
+                if base in ("ctrl", "alt", "cmd", "shift"):
+                    self._held_modifiers.add(base)
+
+            key_name = self._resolve_pynput_key_name(key)
+            if not key_name:
+                return
+
+            has_modifier = bool(self._held_modifiers & {"ctrl", "alt", "cmd"})
+            # Thread-safe: pyqtSignal.emit() → slot runs on the main thread
+            self._global_key_signal.emit(key_name, has_modifier)
+        except Exception:
+            pass
+
+    def _handle_global_key(self, key_name: str, has_modifier: bool) -> None:
+        """Process redirected keypress — runs on the Qt main thread (slot)."""
         if not self.isVisible():
             return
-        if QApplication.activeWindow():
+        if self.isActiveWindow():
             return
 
-        key_name = event.name.lower()
         navigation_keys = {
             "up": -1,
             "down": 1,
-            "arrow up": -1,
-            "arrow down": 1,
             "page up": -10,
             "page down": 10,
         }
 
         if key_name in navigation_keys:
             self.navigate_results(navigation_keys[key_name])
-            return
-        elif key_name in ["enter", "return"]:
+        elif key_name == "enter":
             self.launch_selected()
-            return
-        elif key_name in ("esc", "escape"):
+        elif key_name == "esc":
             self.hide()
-            return
-
-        if len(key_name) == 1:
-            if (
-                keyboard.is_pressed("ctrl")
-                or keyboard.is_pressed("alt")
-                or keyboard.is_pressed("windows")
-            ):
-                return
-            self.search_input.setText(self.search_input.text() + event.name)
-            QTimer.singleShot(0, self.summon_and_focus)
-            return
+        elif len(key_name) == 1 and not has_modifier:
+            self.search_input.setText(self.search_input.text() + key_name)
+            self.summon_and_focus()
 
     # ------------------------------------------------------------------
     # Focus management
@@ -299,9 +342,6 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
         self.move(x, y)
 
     def hide(self):
-        for hk in ["esc", "up", "down", "enter"]:
-            with contextlib.suppress(Exception):
-                keyboard.remove_hotkey(hk)
         super().hide()
 
     def summon(self):

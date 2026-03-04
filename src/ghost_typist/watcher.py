@@ -1,8 +1,9 @@
 """Ghost Typist — global keyboard watcher.
 
-Uses the ``keyboard`` library (already a project dependency) to intercept
-every keystroke system-wide, maintain a rolling text buffer and fire text
-replacements when a snippet trigger is detected.
+Uses ``pynput`` to intercept every keystroke system-wide, maintain a rolling
+text buffer and fire text replacements when a snippet trigger is detected.
+pynput works without administrator / sudo privileges on Windows and Linux
+(X11/Wayland), unlike the ``keyboard`` library.
 
 Special expansion tokens
 ------------------------
@@ -21,7 +22,7 @@ Key tokens  (can be mixed with plain text)
     {esc}           → Escape
     {del}           → Delete
     {f1} … {f12}    → function keys
-    {ctrl+a}        → Ctrl+A  (any combo the keyboard lib understands)
+    {ctrl+a}        → Ctrl+A  (any modifier+key combo)
 
     Example expansion:  John{tab}Doe{tab}jdoe@example.com{enter}
 """
@@ -33,7 +34,15 @@ import re
 import threading
 import time
 
-import keyboard  # type: ignore
+try:
+    from pynput import keyboard as _kb  # type: ignore
+
+    _controller = _kb.Controller()
+    _PYNPUT_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _kb = None  # type: ignore
+    _controller = None
+    _PYNPUT_AVAILABLE = False
 
 from src.ghost_typist.db import get_all_snippets, increment_use
 
@@ -58,6 +67,45 @@ _KEY_ALIASES: dict[str, str] = {
     "return": "enter",
     "cr": "enter",
 }
+
+# Modifier key names — used to distinguish "hold this" from "tap this".
+_MOD_NAMES = {"ctrl", "shift", "alt", "cmd"}
+
+
+def _pynput_press_and_release(combo: str) -> None:
+    """Press and release a key or modifier+key combo (e.g. 'ctrl+a', 'enter').
+
+    Splits on '+' so 'ctrl+shift+z' → hold ctrl, hold shift, tap z, release.
+    Multi-word names like 'page up' are converted to the underscore form
+    pynput uses internally ('page_up').
+    """
+    if not _PYNPUT_AVAILABLE or _controller is None:
+        return
+    parts = [p.strip() for p in combo.lower().split("+")]
+    modifiers: list = []
+    key = None
+    for part in parts:
+        # Normalise aliases before lookup
+        if part in ("control", "win", "windows"):
+            part = "ctrl" if part == "control" else "cmd"
+        if part in _MOD_NAMES:
+            mod = getattr(_kb.Key, part, None)
+            if mod is not None:
+                modifiers.append(mod)
+        else:
+            # Try Key enum by name, then underscore form ("page up" → "page_up")
+            pynput_key = getattr(_kb.Key, part, None) or getattr(_kb.Key, part.replace(" ", "_"), None)
+            if pynput_key is None and len(part) == 1:
+                pynput_key = _kb.KeyCode.from_char(part)
+            if pynput_key is not None:
+                key = pynput_key
+    if key is None:
+        return
+    for mod in modifiers:
+        _controller.press(mod)
+    _controller.tap(key)
+    for mod in reversed(modifiers):
+        _controller.release(mod)
 
 
 def _parse_expansion(text: str) -> list[tuple[str, str]]:
@@ -111,7 +159,7 @@ class SnippetWatcher:
         self._snippets: dict[str, str] = {}   # trigger → expansion
         self._lock = threading.Lock()
         self._running = False
-        self._hook_handle = None
+        self._listener = None                 # pynput Listener
         self._suppressing = False             # avoid reacting to own keystrokes
         self._reload_thread: threading.Thread | None = None
         self._last_db_mtime: float = 0.0
@@ -131,12 +179,16 @@ class SnippetWatcher:
             pass
 
     def start(self) -> None:
-        """Attach global keyboard hook + start background DB-change watcher."""
+        """Attach global keyboard listener + start background DB-change watcher."""
         if self._running:
+            return
+        if not _PYNPUT_AVAILABLE:
+            print("[GhostTypist] pynput not available — watcher disabled.")
             return
         self.reload_snippets()
         self._buffer = ""
-        self._hook_handle = keyboard.hook(self._on_key_event, suppress=False)
+        self._listener = _kb.Listener(on_press=self._on_key_press)
+        self._listener.start()
         self._running = True
         # Background thread: reload snippets automatically when DB file changes
         self._reload_thread = threading.Thread(
@@ -145,12 +197,12 @@ class SnippetWatcher:
         self._reload_thread.start()
 
     def stop(self) -> None:
-        """Detach global keyboard hook."""
+        """Stop the global keyboard listener."""
         if not self._running:
             return
-        if self._hook_handle is not None:
-            keyboard.unhook(self._hook_handle)
-            self._hook_handle = None
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
         self._running = False
         self._buffer = ""
 
@@ -175,23 +227,28 @@ class SnippetWatcher:
             except Exception:
                 pass
 
-    def _on_key_event(self, event: keyboard.KeyboardEvent) -> None:
-        """Called for every key press/release system-wide."""
-        if event.event_type != keyboard.KEY_DOWN:
-            return
+    def _on_key_press(self, key) -> None:
+        """Called by pynput for every key-down event system-wide."""
         if self._suppressing:
             return
 
-        name: str = event.name or ""
+        # Resolve a normalised name: special Key enum → string, char → string
+        if isinstance(key, _kb.Key):
+            # key.name is e.g. "page_up", "esc", "ctrl_l" — normalise to spaced form
+            name: str = key.name.replace("_", " ")
+        elif hasattr(key, "char") and key.char:
+            name = key.char
+        else:
+            return  # dead key or unresolvable
 
         if name == "backspace":
             with self._lock:
                 self._buffer = self._buffer[:-1]
             return
 
-        if name in _RESET_KEYS or len(name) > 1:
-            # Multi-char names like "ctrl", "alt", "f1", "enter" etc.
-            # "enter" / "tab" / "space" → reset buffer (word boundary)
+        if not name or name in _RESET_KEYS or len(name) > 1:
+            # Special / multi-char names (ctrl, alt, f1, enter …)
+            # "enter" / "tab" / "space" → word boundary → reset buffer
             if name in ("enter", "tab", "space"):
                 with self._lock:
                     self._buffer = ""
@@ -221,9 +278,11 @@ class SnippetWatcher:
     def _fire_replacement(self, trigger: str, expansion: str) -> None:
         """Delete typed trigger characters and type the expansion.
 
-        Plain text segments are sent via ``keyboard.write``; ``{key}`` tokens
-        are sent via ``keyboard.press_and_release`` so any key or combo works.
+        Plain text segments are sent via ``_controller.type()``; ``{key}``
+        tokens are sent via ``_pynput_press_and_release()``.
         """
+        if not _PYNPUT_AVAILABLE or _controller is None:
+            return
         expansion = _resolve_expansion(expansion)
         parts = _parse_expansion(expansion)
 
@@ -231,15 +290,17 @@ class SnippetWatcher:
         try:
             # Erase the trigger (it was already typed into whatever app is focused)
             for _ in range(len(trigger)):
-                keyboard.press_and_release("backspace")
+                _controller.tap(_kb.Key.backspace)
 
             # Type the replacement, honouring {key} tokens
             for kind, value in parts:
                 if kind == "key":
-                    keyboard.press_and_release(value)
+                    _pynput_press_and_release(value)
                 else:
                     if value:
-                        keyboard.write(value, delay=0.004)
+                        for char in value:
+                            _controller.type(char)
+                            time.sleep(0.004)
         finally:
             self._suppressing = False
 

@@ -59,15 +59,6 @@ def main():
         # Best-effort: if watcher can't start, don't crash the app
         pass
 
-    # Global input redirect (Best effort, usually requires sudo/root on Linux)
-    if sys.platform == "win32":
-        try:
-            import keyboard
-
-            keyboard.on_press(nexus.on_global_key)
-        except Exception:
-            pass
-
     # System tray icon
     tray = create_tray_icon(app, nexus)  # noqa: F841 — prevent GC
     nexus.tray = tray
