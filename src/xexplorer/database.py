@@ -11,7 +11,8 @@ def init_db():
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS files (
         path TEXT PRIMARY KEY, name TEXT, parent TEXT,
-        is_dir INTEGER, last_seen INTEGER, size INTEGER DEFAULT 0)""")
+        is_dir INTEGER, last_seen INTEGER, size INTEGER DEFAULT 0,
+        mtime REAL DEFAULT 0)""")
     c.execute("""CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS folder_stats (
@@ -19,5 +20,8 @@ def init_db():
     # Migrate existing DBs that lack the size column
     with contextlib.suppress(Exception):
         c.execute("ALTER TABLE files ADD COLUMN size INTEGER DEFAULT 0")
+    # Migrate existing DBs that lack the mtime column
+    with contextlib.suppress(Exception):
+        c.execute("ALTER TABLE files ADD COLUMN mtime REAL DEFAULT 0")
     conn.commit()
     conn.close()

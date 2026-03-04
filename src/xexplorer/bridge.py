@@ -550,14 +550,14 @@ class XExplorerBridge(QObject):
 
         results = []
         for r in raw[:3000]:
-            path, is_dir, name, size = r[0], r[1], r[2], r[3]
+            path, is_dir, name, size, mtime = r[0], r[1], r[2], r[3], r[4]
             _, ext = os.path.splitext(name)
             results.append({
                 "path":   path,
                 "name":   name,
                 "is_dir": bool(is_dir),
                 "size":   _fmt_size_stat(size or 0, bool(is_dir)),
-                "mtime":  "",  # not stored in DB; avoids per-file stat
+                "mtime":  _fmt_mtime_stat(mtime) if mtime else "",
                 "ext":    ext.lower().lstrip("."),
             })
         return json.dumps(results)
@@ -937,10 +937,13 @@ class XExplorerBridge(QObject):
 
     @pyqtSlot(str, result=str)
     def get_preview(self, path: str) -> str:
-        """Return JSON {type, content, ...} for the preview pane (first page/slide/sheet)."""
-        if not os.path.exists(path) or os.path.isdir(path):
-            return json.dumps({"type": "unsupported", "content": ""})
+        """Return JSON {type, content, ...} for the preview pane (first page/slide/sheet).
 
+        For network paths all file I/O is offloaded to a background thread so
+        the main/Qt thread never blocks.  The JS UI receives an immediate
+        {type:'loading'} response and the real result arrives via the existing
+        preview_ready signal.
+        """
         ext = os.path.splitext(path)[1].lower()
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
         TEXT_EXTS  = {
@@ -957,6 +960,48 @@ class XExplorerBridge(QObject):
         if ext in PDF_EXTS or ext in OFFICE_EXTS or ext in VISIO_EXTS:
             return self.get_preview_page(path, 0)
 
+        # ── Network path: offload to background thread ──────────────────────
+        if _is_network_path(path):
+            async_key = f"{path}|preview"
+            # Cached?
+            if async_key in self._preview_cache:
+                return self._preview_cache[async_key]
+            # Already in flight?
+            if async_key in self._preview_in_flight:
+                return json.dumps({"type": "loading", "key": async_key, "content": "Loading preview\u2026"})
+            self._preview_in_flight.add(async_key)
+
+            def _bg(_path=path, _ext=ext, _key=async_key) -> None:
+                result: str
+                try:
+                    if not os.path.exists(_path) or os.path.isdir(_path):
+                        result = json.dumps({"type": "unsupported", "key": _key, "content": ""})
+                    else:
+                        size = os.path.getsize(_path)
+                        if _ext in IMAGE_EXTS:
+                            if size > 8 * 1024 * 1024:
+                                result = json.dumps({"type": "unsupported", "key": _key, "content": "Image too large to preview."})
+                            else:
+                                with open(_path, "rb") as f:
+                                    data = base64.b64encode(f.read()).decode()
+                                mime = {".svg": "image/svg+xml", ".gif": "image/gif"}.get(_ext, "image/png")
+                                result = json.dumps({"type": "image", "key": _key, "content": f"data:{mime};base64,{data}", "ext": _ext})
+                        elif _ext in TEXT_EXTS or size < 256 * 1024:
+                            with open(_path, encoding="utf-8", errors="replace") as f:
+                                content = f.read(64 * 1024)
+                            result = json.dumps({"type": "text", "key": _key, "content": content, "ext": _ext.lstrip(".")})
+                        else:
+                            result = json.dumps({"type": "unsupported", "key": _key, "content": ""})
+                except Exception as exc:
+                    result = json.dumps({"type": "error", "key": _key, "content": str(exc)})
+                self._op_emit_queue.put(("preview", _key, result))
+
+            threading.Thread(target=_bg, daemon=True, name="xex-preview").start()
+            return json.dumps({"type": "loading", "key": async_key, "content": "Loading preview\u2026"})
+
+        # ── Local path: fast synchronous read ───────────────────────────────
+        if not os.path.exists(path) or os.path.isdir(path):
+            return json.dumps({"type": "unsupported", "content": ""})
         try:
             size = os.path.getsize(path)
             if ext in IMAGE_EXTS:
@@ -977,7 +1022,7 @@ class XExplorerBridge(QObject):
     @pyqtSlot(str, result=bool)
     def can_preview(self, path: str) -> bool:
         """Return True if we have a previewer for this path."""
-        if not path or not os.path.isfile(path):
+        if not path:
             return False
         ext = os.path.splitext(path)[1].lower()
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
@@ -992,9 +1037,13 @@ class XExplorerBridge(QObject):
         VISIO_EXTS  = {".vsd", ".vsdx", ".vsdm"}
         if ext in IMAGE_EXTS or ext in TEXT_EXTS or ext in PDF_EXTS or ext in OFFICE_EXTS or ext in VISIO_EXTS:
             return True
-        # Check size for generic text preview
+        # For network paths, decide by extension only — os.path.isfile/getsize
+        # block the main thread on slow/unreachable shares.
+        if _is_network_path(path):
+            return False  # unknown ext on a network path → skip preview
+        # Local: check if small-enough for generic text preview
         try:
-            if os.path.getsize(path) < 256 * 1024:
+            if os.path.isfile(path) and os.path.getsize(path) < 256 * 1024:
                 return True
         except OSError:
             pass
@@ -1007,7 +1056,9 @@ class XExplorerBridge(QObject):
         Handles: PDF (.pdf), PowerPoint (.pptx/.ppt), Excel (.xlsx/.xls/.xlsm), Word (.docx),
         Visio (.vsd/.vsdx/.vsdm).
         """
-        if not os.path.exists(path) or os.path.isdir(path):
+        # Skip the existence guard for network paths — it blocks on slow shares.
+        # The actual readers below will raise if the file is missing anyway.
+        if not _is_network_path(path) and (not os.path.exists(path) or os.path.isdir(path)):
             return json.dumps({"type": "unsupported", "content": ""})
 
         ext = os.path.splitext(path)[1].lower()

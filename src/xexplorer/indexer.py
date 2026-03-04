@@ -72,7 +72,7 @@ class IndexerWorker(QThread):
 
                         if is_dir:
                             if name_lower not in IL and path_lower not in IL:
-                                batch.append((full_path, name, current, 1, now, 0))
+                                batch.append((full_path, name, current, 1, now, 0, 0))
                                 subdirs.append(full_path)
                         else:
                             _, ext = os.path.splitext(name)
@@ -80,10 +80,12 @@ class IndexerWorker(QThread):
                             if name_lower not in IL and path_lower not in IL and ext_lower not in IL:
                                 # entry.stat() on Windows reuses FindNextFile data — no extra syscall
                                 try:
-                                    size = entry.stat(follow_symlinks=False).st_size
+                                    st = entry.stat(follow_symlinks=False)
+                                    size = st.st_size
+                                    mtime = st.st_mtime
                                 except (OSError, PermissionError):
-                                    size = 0
-                                batch.append((full_path, name, current, 0, now, size))
+                                    size, mtime = 0, 0
+                                batch.append((full_path, name, current, 0, now, size, mtime))
                     except (OSError, PermissionError):
                         continue
 
@@ -91,7 +93,7 @@ class IndexerWorker(QThread):
 
                 if len(batch) >= BATCH:
                     c.executemany(
-                        "INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)", batch
+                        "INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?,?)", batch
                     )
                     total += len(batch)
                     self.progress.emit(total, current[:70])
@@ -99,7 +101,7 @@ class IndexerWorker(QThread):
                     conn.commit()
 
         if batch:
-            c.executemany("INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)", batch)
+            c.executemany("INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?,?)", batch)
             total += len(batch)
             conn.commit()
         conn.close()
