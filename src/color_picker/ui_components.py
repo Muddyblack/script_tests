@@ -20,9 +20,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.color_picker.theme_template import (
-    make_stylesheet,  # noqa: F401 – re-exported for compat
-)
 from src.common.theme import ThemeManager
 
 

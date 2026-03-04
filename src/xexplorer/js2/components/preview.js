@@ -2,16 +2,39 @@
 const PreviewPane = ({ file, onClose }) => {
     const [preview, setPreview] = useState(null);
     const [page, setPage] = useState(0);
+    // Tracks the async key of a background win32com render so we can match
+    // the preview_ready event when it fires.
+    const loadingKeyRef = useRef(null);
 
     function fetchPage(path, pageNum) {
         setPreview(null);
+        loadingKeyRef.current = null;
         getBridge(async b => {
             const raw = pageNum === 0
                 ? await b.get_preview(path)
                 : await b.get_preview_page(path, pageNum);
-            setPreview(JSON.parse(raw));
+            const parsed = JSON.parse(raw);
+            if (parsed.type === 'loading') {
+                // Background render in progress — show spinner and wait for signal
+                loadingKeyRef.current = parsed.key || null;
+            } else {
+                loadingKeyRef.current = null;
+            }
+            setPreview(parsed);
         });
     }
+
+    // Resolve spinner when the background render completes
+    useEffect(() => {
+        function onReady(e) {
+            const data = e.detail;
+            if (!loadingKeyRef.current || data.key !== loadingKeyRef.current) return;
+            loadingKeyRef.current = null;
+            setPreview(data);
+        }
+        window.addEventListener('xex:preview_ready', onReady);
+        return () => window.removeEventListener('xex:preview_ready', onReady);
+    }, []);
 
     useEffect(() => {
         if (!file) return;
@@ -75,6 +98,12 @@ const PreviewPane = ({ file, onClose }) => {
                         <div className="preview-meta">{file.path}</div>
                         <pre className="preview-code">{preview.content}</pre>
                     </>
+                )}
+                {preview?.type === 'loading' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingTop: 40, color: 'var(--text-disabled)', fontSize: 12 }}>
+                        <div className="spin-ring" />
+                        <span>{preview.content || 'Rendering…'}</span>
+                    </div>
                 )}
                 {preview?.type === 'error' && (
                     <div style={{ color: 'var(--error,#ef4444)', fontSize: 12 }}>Error: {preview.content}</div>

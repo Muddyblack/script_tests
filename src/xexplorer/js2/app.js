@@ -212,6 +212,11 @@ const App = () => {
                     else showToast(`\u26a0\ufe0f ${errors.length} error(s)`);
                 });
             }
+            if (br.preview_ready?.connect) {
+                br.preview_ready.connect(raw => {
+                    window.dispatchEvent(new CustomEvent('xex:preview_ready', { detail: JSON.parse(raw) }));
+                });
+            }
 
             const watchdog = await br.is_watchdog_available();
             setLiveOn(!!watchdog);

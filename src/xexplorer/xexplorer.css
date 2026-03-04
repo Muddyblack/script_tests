@@ -1273,3 +1273,13 @@ input, textarea, select, button { font-family: inherit; outline: none; }
 /* Cut items — dimmed */
 .file-row.cut-item { opacity: 0.42; }
 .icon-item.cut-item { opacity: 0.42; }
+
+/* ── Async preview loading spinner ────────────────────────────── */
+@keyframes xex-spin { to { transform: rotate(360deg); } }
+.spin-ring {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border, #3a3a3a);
+    border-top-color: var(--accent, #60a5fa);
+    border-radius: 50%;
+    animation: xex-spin .75s linear infinite;
+}

@@ -1,4 +1,6 @@
-"""Port Inspector — real-time network port viewer for Windows.
+"""Port Inspector — cross-platform real-time network port viewer.
+
+Works on Windows, macOS, and Linux via psutil.
 
 Shows all active TCP/UDP connections with:
 • Local address & port   • Remote address      • State (ESTABLISHED, LISTEN…)
@@ -7,12 +9,12 @@ Shows all active TCP/UDP connections with:
 • Search / filter by port, PID or process name
 """
 
-import csv
 import os
-import subprocess
+import signal
 import sys
-from io import StringIO
+from concurrent.futures import ThreadPoolExecutor
 
+import psutil
 from PyQt6.QtCore import (
     QEasingCurve,
     QPropertyAnimation,
@@ -47,109 +49,81 @@ try:
 except ImportError:
     ICON_PATH = ""
 
-from src.common.theme import ThemeManager, WindowThemeBridge
-from src.common.theme_template import TOOL_SHEET
+try:
+    from src.common.theme import ThemeManager, WindowThemeBridge
+    from src.common.theme_template import TOOL_SHEET
+    _HAS_THEME = True
+except ImportError:
+    _HAS_THEME = False
+    ThemeManager = None
+    WindowThemeBridge = None
+    TOOL_SHEET = ""
 
 REFRESH_MS = 3000  # auto-refresh interval
 
-_EXTRA = """
-QTableWidget {
-    background: {{bg_overlay}};
-    border: 1px solid {{border}};
-    border-radius: 12px;
-    gridline-color: {{border}};
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 11px;
-    color: {{text_primary}};
-    selection-background-color: {{accent_subtle}};
-    selection-color: {{accent}};
-}
-QTableWidget::item { padding: 6px 10px; border: none; }
-QTableWidget::item:selected { background: {{accent_subtle}}; color: {{accent}}; }
-QTableWidget::item:hover:!selected { background: rgba(255,255,255,0.03); }
-QHeaderView::section {
-    background: {{bg_elevated}};
-    color: {{text_secondary}};
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New';
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    padding: 8px 10px;
-    border: none;
-    border-right: 1px solid {{border}};
-    border-bottom: 1px solid {{border}};
-}
-QHeaderView::section:hover { color: {{accent}}; }
-QComboBox {
-    background: {{bg_control}};
-    color: {{text_primary}};
-    border: 1px solid {{border}};
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-family: 'JetBrains Mono','Consolas','Courier New';
-    font-size: 11px;
-    min-width: 110px;
-}
-QComboBox:hover { border: 1px solid {{border_focus}}; }
-QComboBox::drop-down { border: none; width: 20px; }
-QComboBox QAbstractItemView {
-    background: {{bg_elevated}};
-    color: {{text_primary}};
-    border: 1px solid {{border}};
-    selection-background-color: {{accent_subtle}};
-    selection-color: {{accent}};
-}
-QPushButton#action_btn {
-    background: {{bg_control}};
-    color: {{text_primary}};
-    border: 1px solid {{border}};
-    border-radius: 8px;
-    padding: 6px 16px;
-    font-family: 'JetBrains Mono','Consolas','Courier New';
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-}
-QPushButton#action_btn:hover {
-    background: {{bg_control_hov}};
-    border: 1px solid {{border_focus}};
-    color: {{accent}};
-}
-QPushButton#danger_btn {
-    background: {{bg_control}};
-    color: {{danger}};
-    border: 1px solid {{danger_border}};
-    border-radius: 8px;
-    padding: 6px 16px;
-    font-family: 'JetBrains Mono','Consolas','Courier New';
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-}
-QPushButton#danger_btn:hover {
-    background: {{danger_glow}};
-    border: 1px solid {{danger}};
-}
-QLabel#state_LISTEN    { color: {{success}}; font-weight: 600; }
-QLabel#state_ESTAB     { color: {{accent}};  font-weight: 600; }
-QLabel#state_CLOSE     { color: {{danger}};  font-weight: 600; }
-QCheckBox {
-    color: {{text_secondary}};
-    font-family: 'JetBrains Mono','Consolas','Courier New';
-    font-size: 10px;
-    spacing: 6px;
-}
-QCheckBox::indicator {
-    width: 14px; height: 14px;
-    border-radius: 3px;
-    border: 1px solid {{border_focus}};
-    background: {{bg_control}};
-}
-QCheckBox::indicator:checked { background: {{accent}}; border: 1px solid {{accent}}; }
-"""
+# ── Data fetching ─────────────────────────────────────────────────────────────
+
+# Shared executor for parallel process-info lookups — avoids spawning threads per row
+_EXECUTOR = ThreadPoolExecutor(max_workers=6)
+
+
+def _resolve_proc(pid: int) -> tuple[str, str]:
+    """Return (name, exe_path) for a PID. Runs in thread pool."""
+    try:
+        p = psutil.Process(pid)
+        with p.oneshot():           # batch all syscalls into one round-trip
+            name = p.name()
+            try:
+                path = p.exe()
+            except (psutil.AccessDenied, psutil.ZombieProcess):
+                path = ""
+        return name, path
+    except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+        return "?", ""
+
+
+def _fetch_ports() -> list[dict]:
+    """Return list of port dicts using psutil — works on Windows, macOS, Linux."""
+    try:
+        conns = psutil.net_connections(kind="inet")
+    except psutil.AccessDenied:
+        # macOS / Linux without root — fall back; fewer entries but won't crash
+        try:
+            conns = psutil.net_connections(kind="inet4")
+        except Exception:
+            return []
+
+    # Resolve all unique PIDs in parallel so we don't block per-row
+    pids = {c.pid for c in conns if c.pid}
+    futures = {pid: _EXECUTOR.submit(_resolve_proc, pid) for pid in pids}
+    pid_info: dict[int, tuple[str, str]] = {}
+    for pid, fut in futures.items():
+        try:
+            pid_info[pid] = fut.result(timeout=3)
+        except Exception:
+            pid_info[pid] = ("?", "")
+
+    rows = []
+    for conn in conns:
+        la = conn.laddr
+        ra = conn.raddr
+        name, path = pid_info.get(conn.pid, ("?", "")) if conn.pid else ("?", "")
+        state = conn.status if conn.status and conn.status != psutil.CONN_NONE else "NONE"
+        rows.append({
+            "proto":  "TCP" if conn.type == psutil.socket.SOCK_STREAM else "UDP",
+            "local":  la.ip        if la else "",
+            "lport":  str(la.port) if la else "",
+            "remote": ra.ip        if ra else "",
+            "rport":  str(ra.port) if ra else "",
+            "state":  state,
+            "pid":    str(conn.pid) if conn.pid else "",
+            "name":   name,
+            "path":   path,
+        })
+    return rows
+
 
 # ── Worker thread ─────────────────────────────────────────────────────────────
-
 
 class PortWorker(QThread):
     data_ready = pyqtSignal(list)
@@ -159,91 +133,35 @@ class PortWorker(QThread):
         self.data_ready.emit(rows)
 
 
-def _fetch_ports() -> list[dict]:
-    """Return list of port dicts using PowerShell Get-NetTCPConnection + process info."""
-    try:
-        cmd = [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            """
-$tcp = Get-NetTCPConnection | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State,OwningProcess
-$procs = @{}
-Get-Process | ForEach-Object { $procs[$_.Id] = @{Name=$_.Name; Path=$_.Path} }
-$out = foreach ($c in $tcp) {
-    $pid_ = $c.OwningProcess
-    $proc = $procs[$pid_]
-    [PSCustomObject]@{
-        Proto='TCP'
-        LocalAddr=$c.LocalAddress
-        LocalPort=$c.LocalPort
-        RemoteAddr=$c.RemoteAddress
-        RemotePort=$c.RemotePort
-        State=$c.State
-        PID=$pid_
-        ProcessName=if($proc){$proc.Name}else{'?'}
-        Path=if($proc -and $proc.Path){$proc.Path}else{''}
-    }
-}
-$out | ConvertTo-Csv -NoTypeInformation
-""",
-        ]
-        raw = subprocess.check_output(cmd, timeout=8, stderr=subprocess.DEVNULL)
-        text = raw.decode("utf-8", errors="ignore")
-        reader = csv.DictReader(StringIO(text))
-        rows = []
-        for r in reader:
-            rows.append(
-                {
-                    "proto": r.get("Proto", "TCP"),
-                    "local": r.get("LocalAddr", ""),
-                    "lport": r.get("LocalPort", ""),
-                    "remote": r.get("RemoteAddr", ""),
-                    "rport": r.get("RemotePort", ""),
-                    "state": r.get("State", ""),
-                    "pid": r.get("PID", ""),
-                    "name": r.get("ProcessName", "?"),
-                    "path": r.get("Path", ""),
-                }
-            )
-        return rows
-    except Exception as e:
-        print(f"[PortInspector] fetch error: {e}")
-        return []
-
-
 # ── Main window ───────────────────────────────────────────────────────────────
 
-COLS = [
-    "Proto",
-    "Local Port",
-    "Local Addr",
-    "Remote",
-    "State",
-    "PID",
-    "Process",
-    "Path",
-]
+COLS = ["Proto", "Local Port", "Local Addr", "Remote", "State", "PID", "Process", "Path"]
 
 _STATE_COLORS = {
-    "Established": "#0EADCF",
-    "Listen": "#44FFB1",
-    "TimeWait": "#FFE073",
-    "CloseWait": "#D95C5C",
-    "SynSent": "#FFE073",
-    "SynReceived": "#FFE073",
-    "FinWait1": "#D95C5C",
-    "FinWait2": "#D95C5C",
-    "Closed": "#8295A0",
+    "ESTABLISHED":  "#0EADCF",
+    "LISTEN":       "#44FFB1",
+    "TIME_WAIT":    "#FFE073",
+    "CLOSE_WAIT":   "#D95C5C",
+    "SYN_SENT":     "#FFE073",
+    "SYN_RECEIVED": "#FFE073",
+    "FIN_WAIT1":    "#D95C5C",
+    "FIN_WAIT2":    "#D95C5C",
+    "CLOSED":       "#8295A0",
+    "NONE":         "#8295A0",
 }
 
 
 class PortInspector(QMainWindow):
     def __init__(self):
         super().__init__()
-        self._mgr = ThemeManager()
         self._all_rows: list[dict] = []
         self._worker: PortWorker | None = None
+        self._busy: bool = False
+
+        if _HAS_THEME:
+            self._mgr = ThemeManager()
+        else:
+            self._mgr = None
 
         self.setWindowTitle("Port Inspector")
         if ICON_PATH and os.path.exists(ICON_PATH):
@@ -253,13 +171,13 @@ class PortInspector(QMainWindow):
 
         self._build_ui()
         self._apply_theme()
-        self._mgr.theme_changed.connect(self._apply_theme)
-        self._theme_bridge = WindowThemeBridge(self._mgr, self)  # Win32 titlebar + palette
 
-        # Initial load
+        if _HAS_THEME:
+            self._mgr.theme_changed.connect(self._apply_theme)
+            self._theme_bridge = WindowThemeBridge(self._mgr, self)
+
         self._refresh()
 
-        # Auto-refresh timer
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_MS)
         self._timer.timeout.connect(self._refresh)
@@ -304,7 +222,7 @@ class PortInspector(QMainWindow):
 
         self.state_combo = QComboBox()
         self.state_combo.addItems(
-            ["All States", "Listen", "Established", "TimeWait", "CloseWait"]
+            ["All States", "LISTEN", "ESTABLISHED", "TIME_WAIT", "CLOSE_WAIT"]
         )
         self.state_combo.currentTextChanged.connect(self._apply_filter)
         bar.addWidget(self.state_combo)
@@ -330,24 +248,11 @@ class PortInspector(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(len(COLS))
         self.table.setHorizontalHeaderLabels(COLS)
-        self.table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            6, QHeaderView.ResizeMode.ResizeToContents
-        )
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        for col in (0, 1, 4, 5, 6):
+            self.table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeMode.ResizeToContents
+            )
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -360,18 +265,36 @@ class PortInspector(QMainWindow):
         out.addWidget(self.status_bar_lbl)
 
     def _apply_theme(self):
-        self._mgr.apply_to_widget(self, TOOL_SHEET + _EXTRA)
+        if _HAS_THEME and self._mgr:
+            self._mgr.apply_to_widget(self, TOOL_SHEET)
+        else:
+            Exception("ThemeManager not available; skipping theme application")
         self._populate_table(self._all_rows)
 
     # ── Refresh ───────────────────────────────────────────────────────────────
 
     def _refresh(self):
+        # Guard: don't stack workers if previous fetch is still running.
+        # Check _busy flag instead of calling isRunning() on a potentially
+        # deleted C++ object (which raises RuntimeError after deleteLater).
+        if self._busy:
+            return
+        self._busy = True
         self.count_lbl.setText("Loading…")
         w = PortWorker(self)
         w.data_ready.connect(self._on_data)
-        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._on_worker_done)
         self._worker = w
         w.start()
+
+    def _on_worker_done(self):
+        self._busy = False
+        # Disconnect and schedule deletion safely; clear our ref first so
+        # _refresh never touches the (soon-to-be-deleted) C++ object again.
+        w = self._worker
+        self._worker = None
+        if w is not None:
+            w.deleteLater()
 
     def _on_data(self, rows: list[dict]):
         self._all_rows = rows
@@ -384,8 +307,7 @@ class PortInspector(QMainWindow):
         filtered = self._all_rows
         if q:
             filtered = [
-                r
-                for r in filtered
+                r for r in filtered
                 if q in r["lport"]
                 or q in r["name"].lower()
                 or q in r["pid"]
@@ -393,38 +315,30 @@ class PortInspector(QMainWindow):
                 or q in r["remote"].lower()
             ]
         if state_filter != "All States":
-            filtered = [
-                r for r in filtered if state_filter.lower() in r["state"].lower()
-            ]
+            filtered = [r for r in filtered if state_filter in r["state"]]
 
         self._populate_table(filtered)
 
     def _populate_table(self, rows: list[dict]):
-        mgr = self._mgr
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         self.table.setRowCount(len(rows))
 
         for i, r in enumerate(rows):
-            vals = [
-                r["proto"],
-                r["lport"],
-                r["local"],
+            remote = (
                 f"{r['remote']}:{r['rport']}"
                 if r["rport"] and r["rport"] != "0"
-                else r["remote"],
-                r["state"],
-                r["pid"],
-                r["name"],
-                r["path"],
+                else r["remote"]
+            )
+            vals = [
+                r["proto"], r["lport"], r["local"], remote,
+                r["state"], r["pid"], r["name"], r["path"],
             ]
             for j, val in enumerate(vals):
                 item = QTableWidgetItem(str(val))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                # Colour the State cell
                 if j == 4:
-                    color = _STATE_COLORS.get(val, mgr["text_secondary"])
-                    item.setForeground(QColor(color))
+                    item.setForeground(QColor(_STATE_COLORS.get(val, "#8295A0")))
                 self.table.setItem(i, j, item)
 
         self.table.setSortingEnabled(True)
@@ -449,19 +363,25 @@ class PortInspector(QMainWindow):
         row = self.table.currentRow()
         if row < 0:
             return
-        pid_item = self.table.item(row, 5)
+        pid_item  = self.table.item(row, 5)
         name_item = self.table.item(row, 6)
-        if not pid_item:
+        if not pid_item or not pid_item.text():
             return
-        pid = pid_item.text()
-        name = name_item.text() if name_item else "?"
+        pid_str = pid_item.text()
+        name    = name_item.text() if name_item else "?"
         try:
-            subprocess.run(
-                ["taskkill", "/F", "/PID", pid], check=True, capture_output=True
-            )
+            pid = int(pid_str)
+            if sys.platform == "win32":
+                import subprocess
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", pid_str],
+                    check=True, capture_output=True
+                )
+            else:
+                os.kill(pid, signal.SIGTERM)
             self.status_bar_lbl.setText(f"✓  Killed {name} (PID {pid})")
-        except subprocess.CalledProcessError as e:
-            self.status_bar_lbl.setText(f"✗  Kill failed: {e.stderr.decode().strip()}")
+        except Exception as e:
+            self.status_bar_lbl.setText(f"✗  Kill failed: {e}")
         QTimer.singleShot(3000, lambda: self.status_bar_lbl.setText(""))
         self._refresh()
 

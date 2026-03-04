@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
 
 from src.common.config import APPDATA, ASSETS_DIR
 from src.common.theme import ThemeManager, WindowThemeBridge
+from src.common.theme_template import TOOL_SHEET
 
 DB_PATH = os.path.join(APPDATA, "regex_sandbox.db")
 
@@ -194,9 +195,8 @@ class RegexSandbox(QMainWindow):
 
         self.setup_ui()
         self.mgr.theme_changed.connect(self.apply_theme)
-        self.apply_theme()
         self.load_patterns()
-        self._theme_bridge = WindowThemeBridge(self.mgr, self)
+        self._theme_bridge = WindowThemeBridge(self.mgr, self, TOOL_SHEET)
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -451,44 +451,6 @@ class RegexSandbox(QMainWindow):
 
     def apply_theme(self):
         self.trigger_evaluation()
-        m = self.mgr
-        self.setStyleSheet(f"""
-            QMainWindow {{ background-color: {m["bg_base"]}; }}
-            QWidget {{ background-color: {m["bg_base"]}; color: {m["text_primary"]}; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; }}
-            QFrame#sidebar {{ background-color: {m["bg_elevated"]}; border-right: 1px solid {m["border"]}; }}
-            QLabel#section_title {{ color: {m["text_secondary"]}; font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 10px; }}
-            QLabel#mode_label {{ color: {m["text_secondary"]}; }}
-            QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{ background-color: {m["bg_overlay"]}; border: 1px solid {m["border"]}; padding: 12px; border-radius: 8px; color: {m["text_primary"]}; font-size: 13px; }}
-            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 1px solid {m["accent"]}; background-color: {m["bg_base"]}; }}
-            QComboBox::drop-down {{ border: none; }}
-            QCheckBox {{ color: {m["text_secondary"]}; spacing: 8px; }}
-            QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {m["border"]}; background-color: {m["bg_base"]}; }}
-            QCheckBox::indicator:checked {{ background-color: {m["accent"]}; border: 1.5px solid {m["accent"]}; }}
-            QPushButton {{ background-color: {m["bg_elevated"]}; border: 1px solid {m["border"]}; padding: 8px 12px; border-radius: 6px; font-weight: 600; color: {m["text_primary"]}; font-size: 11px; }}
-            QPushButton:hover {{ background-color: {m["bg_control_hov"]}; border: 1px solid {m["border_light"]}; }}
-            QPushButton:pressed {{ background-color: {m["bg_control_prs"]}; }}
-            QPushButton#accent_btn {{ background: {m["accent"]}; color: {m["text_on_accent"]}; border: none; font-size: 12px; }}
-            QPushButton#accent_btn:hover {{ background: {m["accent_hover"]}; }}
-            QPushButton#danger_btn {{ background-color: {m["bg_overlay"]}; color: {m["danger"]}; border: 1px solid {m["danger"]}; }}
-            QListWidget {{ background-color: transparent; border: none; outline: none; }}
-            QListWidget::item {{ background-color: {m["bg_overlay"]}; padding: 6px 10px; border-radius: 5px; margin-bottom: 3px; border: 1px solid transparent; }}
-            QListWidget::item:hover {{ background-color: {m["bg_control_hov"]}; border: 1px solid {m["border"]}; }}
-            QListWidget::item:selected {{ background-color: {m["bg_elevated"]}; color: {m["accent"]}; border: 1px solid {m["accent"]}; }}
-            QTabWidget::pane {{ border: 1px solid {m["border"]}; top: -1px; background-color: {m["bg_base"]}; }}
-            QTabBar::tab {{ background: {m["bg_elevated"]}; border: 1px solid {m["border"]}; padding: 10px 25px; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: {m["text_secondary"]}; font-weight: bold; margin-right: 2px; }}
-            QTabBar::tab:selected {{ background: {m["bg_base"]}; color: {m["accent"]}; border-bottom: 2px solid {m["accent"]}; }}
-            QTabBar::tab:hover {{ background: {m["bg_overlay"]}; }}
-            QTableWidget {{ background-color: {m["bg_overlay"]}; border: 1px solid {m["border"]}; border-radius: 8px; color: {m["text_primary"]}; gridline-color: transparent; outline: none; }}
-            QHeaderView::section {{ background-color: {m["bg_elevated"]}; padding: 8px; border: none; font-weight: bold; color: {m["text_secondary"]}; border-bottom: 1px solid {m["border"]}; }}
-            QTableWidget::item {{ padding: 5px; }}
-            QTableWidget::item:selected {{ background-color: {m["accent"]}; color: {m["text_on_accent"]}; }}
-            QProgressBar {{ background-color: {m["bg_overlay"]}; border: none; border-radius: 2px; }}
-            QProgressBar::chunk {{ background-color: {m["accent"]}; border-radius: 2px; }}
-            QScrollBar:vertical {{ border: none; background: transparent; width: 4px; margin: 0px; }}
-            QScrollBar::handle:vertical {{ background: {m["border_light"]}; border-radius: 2px; min-height: 40px; }}
-        """)
-        self.highlight_bg = m["accent"]
-        self.highlight_fg = m["text_on_accent"]
 
     def trigger_evaluation(self):
         self.eval_timer.start(250)
@@ -524,15 +486,13 @@ class RegexSandbox(QMainWindow):
         clear_cursor = self.text_input.textCursor()
         clear_cursor.select(QTextCursor.SelectionType.Document)
         default_fmt = QTextCharFormat()
-        text_color  = "#e2e8f0" if self.mgr.is_dark else "#1e293b"
-        muted_color = "#94a3b8" if self.mgr.is_dark else "#64748b"
-        default_fmt.setForeground(QColor(text_color))
+        default_fmt.setForeground(QColor(self.mgr["text_primary"]))
         default_fmt.setBackground(Qt.GlobalColor.transparent)
         clear_cursor.setCharFormat(default_fmt)
 
         if not raw_pattern:
             self.status_label.setText("Ready")
-            self.status_label.setStyleSheet(f"color: {muted_color};")
+            self.status_label.setStyleSheet(f"color: {self.mgr['text_secondary']};")
             self._restore_cursor(saved_cursor, saved_scroll)
             return
 
@@ -542,8 +502,8 @@ class RegexSandbox(QMainWindow):
 
             self.group_table.setRowCount(0)
             highlight_fmt = QTextCharFormat()
-            highlight_fmt.setBackground(QColor(self.highlight_bg))
-            highlight_fmt.setForeground(QColor(self.highlight_fg))
+            highlight_fmt.setBackground(QColor(self.mgr["accent"]))
+            highlight_fmt.setForeground(QColor(self.mgr["text_on_accent"]))
 
             MAX_DISPLAY = 200
             for i, match in enumerate(matches[:MAX_DISPLAY]):
@@ -587,14 +547,14 @@ class RegexSandbox(QMainWindow):
             count = len(matches)
             if count:
                 self.status_label.setText(f"✅ Found {count} match{'es' if count > 1 else ''}!")
-                self.status_label.setStyleSheet("color: #22c55e;")
+                self.status_label.setStyleSheet(f"color: {self.mgr['success']};")
             else:
                 self.status_label.setText("❌ No matches found.")
-                self.status_label.setStyleSheet(f"color: {muted_color};")
+                self.status_label.setStyleSheet(f"color: {self.mgr['text_secondary']};")
 
         except re.error as e:
             self.status_label.setText(f"⚠ Regex Error: {e.msg}")
-            self.status_label.setStyleSheet("color: #ef4444;")
+            self.status_label.setStyleSheet(f"color: {self.mgr['danger']};")
             self.group_table.setRowCount(0)
             self.replace_preview.setVisible(False)
 

@@ -1,4 +1,4 @@
-"""Hash Tool — PyQt/JS bridge exposed to the WebEngine page."""
+"""Hash Tool."""
 
 import hashlib
 import hmac as _hmac

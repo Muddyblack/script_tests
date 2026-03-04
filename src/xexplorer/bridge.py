@@ -131,6 +131,8 @@ class XExplorerBridge(QObject):
     # Async file-op progress/done
     file_op_progress      = pyqtSignal(str, int, int, str)  # op_id, done, total, current_name
     file_op_done          = pyqtSignal(str, str)            # op_id, JSON {errors:[]}
+    # Async preview (heavy renderers like win32com PPT)
+    preview_ready         = pyqtSignal(str)                 # JSON blob (same schema as get_preview_page)
 
     def __init__(self, initial_path: str = "") -> None:
         super().__init__()
@@ -157,6 +159,9 @@ class XExplorerBridge(QObject):
         # WebEngine bridge is unreliable from plain Python threads).
         self._op_emit_queue: _queue.Queue = _queue.Queue()
         self._cancel_flags: dict[str, threading.Event] = {}
+        # Preview async state (key = "<abs_path>|<page>")
+        self._preview_cache: dict[str, str] = {}
+        self._preview_in_flight: set[str] = set()
         self._op_flush_timer = QTimer(self)
         self._op_flush_timer.setInterval(50)  # flush 20×/s
         self._op_flush_timer.timeout.connect(self._flush_op_queue)
@@ -179,6 +184,11 @@ class XExplorerBridge(QObject):
                     self.live_changed.emit()
                     # Clean up cancel flag
                     self._cancel_flags.pop(op_id, None)
+                elif kind == "preview":
+                    _, key, json_str = item
+                    self._preview_cache[key] = json_str
+                    self._preview_in_flight.discard(key)
+                    self.preview_ready.emit(json_str)
         except _queue.Empty:
             pass
 
@@ -884,9 +894,10 @@ class XExplorerBridge(QObject):
         }
         PDF_EXTS    = {".pdf"}
         OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
+        VISIO_EXTS  = {".vsd", ".vsdx", ".vsdm"}
 
         # Delegate paginated types to get_preview_page(path, 0)
-        if ext in PDF_EXTS or ext in OFFICE_EXTS:
+        if ext in PDF_EXTS or ext in OFFICE_EXTS or ext in VISIO_EXTS:
             return self.get_preview_page(path, 0)
 
         try:
@@ -921,7 +932,8 @@ class XExplorerBridge(QObject):
         }
         PDF_EXTS    = {".pdf"}
         OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
-        if ext in IMAGE_EXTS or ext in TEXT_EXTS or ext in PDF_EXTS or ext in OFFICE_EXTS:
+        VISIO_EXTS  = {".vsd", ".vsdx", ".vsdm"}
+        if ext in IMAGE_EXTS or ext in TEXT_EXTS or ext in PDF_EXTS or ext in OFFICE_EXTS or ext in VISIO_EXTS:
             return True
         # Check size for generic text preview
         try:
@@ -935,7 +947,8 @@ class XExplorerBridge(QObject):
     def get_preview_page(self, path: str, page: int) -> str:
         """Return preview for a specific page/slide/sheet (0-based).
 
-        Handles: PDF (.pdf), PowerPoint (.pptx/.ppt), Excel (.xlsx/.xls/.xlsm), Word (.docx).
+        Handles: PDF (.pdf), PowerPoint (.pptx/.ppt), Excel (.xlsx/.xls/.xlsm), Word (.docx),
+        Visio (.vsd/.vsdx/.vsdm).
         """
         if not os.path.exists(path) or os.path.isdir(path):
             return json.dumps({"type": "unsupported", "content": ""})
@@ -967,61 +980,110 @@ class XExplorerBridge(QObject):
             if ext in {".pptx", ".ppt"}:
                 # Preferred path on Windows: export real slide images via
                 # PowerPoint COM so the user sees actual slides (layout/colors).
+                # Runs in a background thread so the UI never freezes.
                 if sys.platform == "win32":
                     try:
-                        import hashlib
-                        import tempfile
+                        import importlib
+                        importlib.import_module("pythoncom")
+                        importlib.import_module("win32com.client")
+                    except ImportError:
+                        pass  # COM not available — fall through to python-pptx
+                    else:
+                        abs_path = os.path.abspath(path)
+                        async_key = f"{abs_path}|{page}"
 
-                        import pythoncom
-                        import win32com.client
+                        # Return cached result instantly if available
+                        if async_key in self._preview_cache:
+                            return self._preview_cache[async_key]
 
-                        pythoncom.CoInitialize()
-                        app = None
-                        prs = None
-                        try:
-                            app = win32com.client.DispatchEx("PowerPoint.Application")
-                            prs = app.Presentations.Open(path, WithWindow=False, ReadOnly=True)
-                            n = int(prs.Slides.Count)
-                            idx = max(0, min(page, n - 1))
-
-                            st = os.stat(path)
-                            key_src = f"{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}"
-                            key = hashlib.sha1(key_src.encode("utf-8", errors="replace")).hexdigest()
-                            cache_dir = os.path.join(tempfile.gettempdir(), "xexplorer_ppt_cache", key)
-                            os.makedirs(cache_dir, exist_ok=True)
-
-                            img_path = os.path.join(cache_dir, f"slide_{idx + 1:04d}.png")
-                            if not os.path.exists(img_path):
-                                prs.Slides(idx + 1).Export(img_path, "PNG", 1600, 900)
-
-                            with open(img_path, "rb") as f:
-                                data = base64.b64encode(f.read()).decode()
-
-                            title_text = ""
-                            with contextlib.suppress(Exception):
-                                title_shape = prs.Slides(idx + 1).Shapes.Title
-                                if title_shape and title_shape.TextFrame and title_shape.TextFrame.HasText:
-                                    title_text = str(title_shape.TextFrame.TextRange.Text or "").strip()
-
+                        # Already rendering — tell the caller to wait
+                        if async_key in self._preview_in_flight:
                             return json.dumps({
-                                "type": "slide_image",
-                                "content": f"data:image/png;base64,{data}",
-                                "page_count": n,
-                                "page": idx,
-                                "label": f"Slide {idx + 1}/{n}: {title_text}" if title_text else f"Slide {idx + 1}/{n}",
+                                "type": "loading",
+                                "key": async_key,
+                                "content": "Rendering slide…",
                             })
-                        finally:
-                            with contextlib.suppress(Exception):
-                                if prs is not None:
-                                    prs.Close()
-                            with contextlib.suppress(Exception):
-                                if app is not None:
-                                    app.Quit()
-                            with contextlib.suppress(Exception):
-                                pythoncom.CoUninitialize()
-                    except Exception:
-                        # Fall through to text-based fallback below.
-                        pass
+
+                        # Kick off background render
+                        self._preview_in_flight.add(async_key)
+
+                        def _run_ppt_com(
+                            _path=abs_path, _page=page, _key=async_key
+                        ) -> None:
+                            import hashlib
+                            import tempfile
+
+                            import pythoncom
+                            import win32com.client
+
+                            pythoncom.CoInitialize()
+                            app = None
+                            prs = None
+                            result: str
+                            try:
+                                app = win32com.client.DispatchEx("PowerPoint.Application")
+                                prs = app.Presentations.Open(_path, WithWindow=False, ReadOnly=True)
+                                n = int(prs.Slides.Count)
+                                idx = max(0, min(_page, n - 1))
+
+                                st = os.stat(_path)
+                                file_key_src = f"{_path}|{st.st_size}|{st.st_mtime_ns}"
+                                file_key = hashlib.sha1(
+                                    file_key_src.encode("utf-8", errors="replace")
+                                ).hexdigest()
+                                cache_dir = os.path.join(
+                                    tempfile.gettempdir(), "xexplorer_ppt_cache", file_key
+                                )
+                                os.makedirs(cache_dir, exist_ok=True)
+
+                                img_path = os.path.join(cache_dir, f"slide_{idx + 1:04d}.png")
+                                if not os.path.exists(img_path):
+                                    prs.Slides(idx + 1).Export(img_path, "PNG", 1600, 900)
+
+                                with open(img_path, "rb") as f:
+                                    data = base64.b64encode(f.read()).decode()
+
+                                title_text = ""
+                                with contextlib.suppress(Exception):
+                                    title_shape = prs.Slides(idx + 1).Shapes.Title
+                                    if title_shape and title_shape.TextFrame and title_shape.TextFrame.HasText:
+                                        title_text = str(title_shape.TextFrame.TextRange.Text or "").strip()
+
+                                result = json.dumps({
+                                    "type": "slide_image",
+                                    "key": _key,
+                                    "content": f"data:image/png;base64,{data}",
+                                    "page_count": n,
+                                    "page": idx,
+                                    "label": (
+                                        f"Slide {idx + 1}/{n}: {title_text}"
+                                        if title_text else f"Slide {idx + 1}/{n}"
+                                    ),
+                                })
+                            except Exception as exc:
+                                result = json.dumps({
+                                    "type": "error",
+                                    "key": _key,
+                                    "content": str(exc),
+                                })
+                            finally:
+                                with contextlib.suppress(Exception):
+                                    if prs is not None:
+                                        prs.Close()
+                                with contextlib.suppress(Exception):
+                                    if app is not None:
+                                        app.Quit()
+                                with contextlib.suppress(Exception):
+                                    pythoncom.CoUninitialize()
+
+                            self._op_emit_queue.put(("preview", _key, result))
+
+                        threading.Thread(target=_run_ppt_com, daemon=True).start()
+                        return json.dumps({
+                            "type": "loading",
+                            "key": async_key,
+                            "content": "Rendering slide…",
+                        })
 
                 try:
                     from pptx import Presentation  # python-pptx
@@ -1154,6 +1216,82 @@ class XExplorerBridge(QObject):
                     })
                 except ImportError:
                     return json.dumps({"type": "unsupported", "content": "Install python-docx:\npip install python-docx"})
+
+            # ── Visio ─────────────────────────────────────────────────────────
+            if ext in {".vsd", ".vsdx", ".vsdm"}:
+                if sys.platform != "win32":
+                    return json.dumps({"type": "unsupported", "content": "Visio preview requires Windows + Visio installed."})
+                import importlib as _ilv
+                try:
+                    _ilv.import_module("pythoncom")
+                    _ilv.import_module("win32com.client")
+                except ImportError:
+                    return json.dumps({"type": "unsupported", "content": "Visio preview requires pywin32:\npip install pywin32"})
+
+                abs_path  = os.path.abspath(path)
+                async_key = f"{abs_path}|{page}"
+                if async_key in self._preview_cache:
+                    return self._preview_cache[async_key]
+                if async_key in self._preview_in_flight:
+                    return json.dumps({"type": "loading", "key": async_key, "content": "Rendering diagram\u2026"})
+                self._preview_in_flight.add(async_key)
+
+                def _run_visio(_path=abs_path, _page=page, _key=async_key) -> None:
+                    import hashlib
+                    import tempfile
+
+                    import pythoncom
+                    import win32com.client
+
+                    pythoncom.CoInitialize()
+                    app = None
+                    doc = None
+                    result: str
+                    try:
+                        app = win32com.client.DispatchEx("Visio.Application")
+                        app.Visible = False
+                        doc = app.Documents.OpenEx(_path, 64)  # 64 = visOpenRO
+                        n   = int(doc.Pages.Count)
+                        idx = max(0, min(_page, n - 1))
+                        pg  = doc.Pages.Item(idx + 1)
+                        pg_name = str(pg.Name) if pg.Name else ""
+
+                        st       = os.stat(_path)
+                        key_src  = f"{_path}|{st.st_size}|{st.st_mtime_ns}|p{idx}"
+                        file_key = hashlib.sha1(key_src.encode("utf-8", errors="replace")).hexdigest()
+                        cache_dir = os.path.join(
+                            tempfile.gettempdir(), "xexplorer_visio_cache", file_key
+                        )
+                        os.makedirs(cache_dir, exist_ok=True)
+                        img_path = os.path.join(cache_dir, f"page_{idx + 1:04d}.png")
+                        if not os.path.exists(img_path):
+                            pg.Export(img_path)
+
+                        with open(img_path, "rb") as f:
+                            data = base64.b64encode(f.read()).decode()
+                        result = json.dumps({
+                            "type":       "slide_image",
+                            "key":        _key,
+                            "content":    f"data:image/png;base64,{data}",
+                            "page_count": n,
+                            "page":       idx,
+                            "label":      f"{pg_name} ({idx + 1}/{n})" if pg_name else f"Page {idx + 1}/{n}",
+                        })
+                    except Exception as exc:
+                        result = json.dumps({"type": "error", "key": _key, "content": str(exc)})
+                    finally:
+                        with contextlib.suppress(Exception):
+                            if doc is not None:
+                                doc.Close()
+                        with contextlib.suppress(Exception):
+                            if app is not None:
+                                app.Quit()
+                        with contextlib.suppress(Exception):
+                            pythoncom.CoUninitialize()
+                    self._op_emit_queue.put(("preview", _key, result))
+
+                threading.Thread(target=_run_visio, daemon=True).start()
+                return json.dumps({"type": "loading", "key": async_key, "content": "Rendering diagram\u2026"})
 
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})

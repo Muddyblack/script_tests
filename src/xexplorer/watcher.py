@@ -11,6 +11,7 @@ Usage (see bridge.py _restart_watchers):
     obs.start()
 """
 
+import contextlib
 import os
 import sqlite3
 import threading
@@ -92,7 +93,6 @@ class LiveCacheUpdater(FileSystemEventHandler):
     def _enqueue(self, op: tuple) -> None:
         with self._lock:
             self._pending.append(op)
-            # (Re)start the debounce timer
             if self._timer is not None:
                 self._timer.cancel()
             self._timer = threading.Timer(_DEBOUNCE_MS / 1000.0, self._flush)
@@ -132,7 +132,7 @@ class LiveCacheUpdater(FileSystemEventHandler):
                         elif kind == "move":
                             _, src, dst, is_dir = op
                             src_norm = src.replace("/", "\\")
-                            dst_norm = dst.replace("/", "\\")
+                            dst.replace("/", "\\")
                             # Remove old entries
                             c.execute(
                                 "DELETE FROM files WHERE path = ? OR path LIKE ?",
@@ -158,10 +158,8 @@ class LiveCacheUpdater(FileSystemEventHandler):
 
         # Notify UI (called from background thread — bridge uses lambda that emits signal)
         if callable(self.file_changed):
-            try:
+            with contextlib.suppress(Exception):
                 self.file_changed()
-            except Exception:
-                pass
 
     @staticmethod
     def _upsert(c: sqlite3.Cursor, path: str, is_dir: bool, now: int) -> None:

@@ -57,6 +57,7 @@ if (typeof QWebChannel !== 'undefined') {
             stats_updated:     { connect: () => {} },
             live_changed:      { connect: () => {} },
             tab_incoming:      { connect: () => {} },
+            preview_ready:     { connect: () => {} },
             close_window:      () => {},
             drop_tab:          () => {},
             get_initial_path:  () => '',

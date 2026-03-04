@@ -6,3 +6,5 @@ color_picker/
 common/
 port_inspector/
 regex_helper/
+xexplorer/
+hashtool/

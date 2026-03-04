@@ -17,7 +17,7 @@ class IndexerWorker(QThread):
     def __init__(self, roots, ignore_list):
         super().__init__()
         self.roots = roots
-        self.ignore_list = set(i.lower() for i in ignore_list)
+        self.ignore_list = {i.lower() for i in ignore_list}
         self._running = True
 
     def stop(self):

@@ -23,7 +23,7 @@ class HashTool(BaseWebApp):
 
 
 def launch() -> "HashTool":
-    """Create and show the window (for embedding inside Nexus; QApplication must exist)."""
+    """Create and show the window."""
     win = HashTool()
     win.show()
     return win

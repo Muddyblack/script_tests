@@ -26,6 +26,7 @@ Key tokens  (can be mixed with plain text)
     Example expansion:  John{tab}Doe{tab}jdoe@example.com{enter}
 """
 
+import contextlib
 import datetime
 import os
 import re
@@ -243,10 +244,8 @@ class SnippetWatcher:
             self._suppressing = False
 
         # Track usage (non-blocking)
-        try:
+        with contextlib.suppress(Exception):
             increment_use(trigger)
-        except Exception:
-            pass
 
 
 # Module-level singleton

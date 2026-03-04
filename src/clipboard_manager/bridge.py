@@ -6,6 +6,7 @@ this bridge is the viewer/editor layer.
 """
 
 import base64
+import contextlib
 import hashlib
 import json
 import sqlite3
@@ -169,7 +170,5 @@ class ClipboardBridge(QObject):
         self.clip_added.emit()
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._conn.close()
-        except Exception:
-            pass

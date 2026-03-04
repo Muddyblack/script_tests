@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.color_picker.theme_template import make_stylesheet
 from src.color_picker.ui_components import (
     ColorPreview,
     FlowWidget,
@@ -26,6 +25,7 @@ from src.color_picker.ui_components import (
     make_channel_field,
 )
 from src.common.theme import ThemeManager, WindowThemeBridge
+from src.common.theme_template import COLOR_PICKER_SHEET
 
 try:
     from src.common.config import COLOR_PICKER_CONFIG as CONFIG_PATH
@@ -53,7 +53,7 @@ class ColorPickerApp(QWidget):
         self.mgr.theme_changed.connect(self.apply_theme)
         self.apply_theme()
         self.sync_ui()
-        self._theme_bridge = WindowThemeBridge(self.mgr, self)
+        self._theme_bridge = WindowThemeBridge(self.mgr, self, COLOR_PICKER_SHEET)
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -340,7 +340,6 @@ class ColorPickerApp(QWidget):
             self.sync_ui()
 
     def apply_theme(self):
-        self.setStyleSheet(make_stylesheet(self.mgr))
         self.preview_widget.set_checker_colors(
             QColor(self.mgr["border"]), QColor(self.mgr["bg_overlay"])
         )
