@@ -3,7 +3,6 @@
 
 const { useState, useEffect } = React;
 const { motion } = window.Motion;
-const { PC } = window;
 
 // ─── CONTEXT MENU ────────────────────────────────────────────────────────────
 const CtxMenu = ({ items, pos, onClose }) => {

@@ -1,5 +1,4 @@
 // ─── WORLD CLOCK PAGE ────────────────────────────────────────────────────────
-// No shared utils needed beyond hooks.
 
 const { useState, useEffect, useRef } = React;
 

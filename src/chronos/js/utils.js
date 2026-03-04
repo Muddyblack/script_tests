@@ -1,6 +1,4 @@
 // ─── UTILS & SHARED STATE ────────────────────────────────────────────────────
-// All symbols are placed on `window` so Babel-eval'd files can access them.
-// This file uses no JSX — it can be loaded as a plain <script> or text/babel.
 
 const { useState, useEffect, useCallback, useRef } = React;
 

@@ -1,9 +1,8 @@
 // ─── TASKS PAGE COMPONENTS ───────────────────────────────────────────────────
-// Requires: utils.js, shared.js
 
 const { useState, useEffect, useCallback, useRef, useMemo, memo } = React;
 const { motion, AnimatePresence } = window.Motion;
-const { fmt, fmtHuman, fmtRelDate, fmtDate, PC, groupByDate, md, greet, parseLocal } = window;
+const { fmt, fmtRelDate, fmtDate, PC, groupByDate, md, greet, parseLocal } = window;
 const { CtxMenu, CompleteTaskModal } = window;
 
 const PAGE_SIZE = 25;

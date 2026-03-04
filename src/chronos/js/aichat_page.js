@@ -1,5 +1,4 @@
 // ─── AI CHAT PAGE ────────────────────────────────────────────────────────────
-// Requires: utils.js (window.aiListeners, window.md, window.PC)
 
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 const { motion, AnimatePresence } = window.Motion;

@@ -1,9 +1,7 @@
 // ─── HISTORY PAGE ────────────────────────────────────────────────────────────
-// Requires: utils.js (window.md, window.fmtDate, window.fmtHuman)
 
 const { useState, useMemo } = React;
-const { motion } = window.Motion;
-const { md, fmtDate, fmtHuman, PC } = window;
+const { md, fmtHuman } = window;
 
 const PAGE_SIZE = window.PAGE_SIZE || 25;
 

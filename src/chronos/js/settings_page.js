@@ -1,5 +1,4 @@
 // ─── SETTINGS PAGE ───────────────────────────────────────────────────────────
-// Requires: utils.js (window.showToast)
 
 const { useState, useEffect } = React;
 const { showToast } = window;

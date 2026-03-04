@@ -1,5 +1,4 @@
 // ─── ANALYTICS PAGE ──────────────────────────────────────────────────────────
-// Requires: utils.js (window.PC, window.fmtHuman, window.md, window.aiListeners)
 
 const { useState, useMemo } = React;
 const { md, fmtHuman, PC, aiListeners } = window;

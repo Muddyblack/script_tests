@@ -1,5 +1,4 @@
 // ─── APP ROOT (ShortcutsOverlay + Sidebar + App) ─────────────────────────────
-// Requires: utils.js (useBridge), all *_page.js files
 
 const { useState, useEffect, useCallback, useMemo } = React;
 const { motion, AnimatePresence } = window.Motion;
