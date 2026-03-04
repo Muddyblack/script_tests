@@ -510,7 +510,12 @@ class XExplorerBridge(QObject):
 
     @pyqtSlot(str, str, str, result=str)
     def search(self, query: str, filter_type: str, folders_json: str) -> str:
-        """Return JSON list of {path, name, is_dir, size, mtime, ext}."""
+        """Return JSON list of {path, name, is_dir, size, mtime, ext}.
+
+        Everything comes from the local SQLite index — **zero** filesystem I/O.
+        This keeps search instant regardless of whether the indexed folders are
+        on a local drive, a USB stick, or a slow/offline network share.
+        """
         folder_paths: list[str] = json.loads(folders_json) if folders_json else []
         if not folder_paths:
             return "[]"
@@ -520,38 +525,39 @@ class XExplorerBridge(QObject):
 
         if filter_type == "content":
             raw = self._search_engine.search_content(query_terms=terms, target_folders=folder_paths)
-            pairs = [(r[0], r[1]) for r in raw]
-        else:
-            raw = self._search_engine.search_files(
-                query_terms=terms,
-                target_folders=folder_paths,
-                files_only=(filter_type == "files"),
-                folders_only=(filter_type == "folders"),
-            )
-            pairs = [(r[0], r[1]) for r in raw]
+            # content search returns (path, is_dir, ...) — no size column
+            results = []
+            for r in raw[:3000]:
+                path, is_dir = r[0], r[1]
+                name = os.path.basename(path) or path
+                _, ext = os.path.splitext(name)
+                results.append({
+                    "path":   path,
+                    "name":   name,
+                    "is_dir": bool(is_dir),
+                    "size":   "",
+                    "mtime":  "",
+                    "ext":    ext.lower().lstrip("."),
+                })
+            return json.dumps(results)
+
+        raw = self._search_engine.search_files(
+            query_terms=terms,
+            target_folders=folder_paths,
+            files_only=(filter_type == "files"),
+            folders_only=(filter_type == "folders"),
+        )
 
         results = []
-        for path, is_dir in pairs[:3000]:
-            # Skip os.path.exists() for network paths — it blocks the main
-            # thread while the OS waits for the share (10 s+ on a gone drive).
-            # Index results from network roots are trusted as-is; stale entries
-            # will be cleaned up on the next scheduled re-index.
-            if not _is_network_path(path) and not os.path.exists(path):
-                continue
-            name = os.path.basename(path) or path
+        for r in raw[:3000]:
+            path, is_dir, name, size = r[0], r[1], r[2], r[3]
             _, ext = os.path.splitext(name)
-            # Skip per-file stat calls (getsize / getmtime) for network paths.
-            # Each call is a blocking round-trip to the share; with hundreds of
-            # results this causes multi-second freezes on the main thread.
-            # The DB is local so the query is instant — only the metadata
-            # enrichment is slow.  Return empty strings; the UI handles them.
-            net = _is_network_path(path)
             results.append({
                 "path":   path,
                 "name":   name,
                 "is_dir": bool(is_dir),
-                "size":   "" if net else _fmt_size(path, is_dir),
-                "mtime":  "" if net else _fmt_mtime(path),
+                "size":   _fmt_size_stat(size or 0, bool(is_dir)),
+                "mtime":  "",  # not stored in DB; avoids per-file stat
                 "ext":    ext.lower().lstrip("."),
             })
         return json.dumps(results)
@@ -1485,8 +1491,10 @@ class XExplorerBridge(QObject):
                     new_obs.append(obs)
 
             _make_observer(local_paths,   Observer)
-            # Poll every 10 s for network paths — fast enough without hammering the share
-            _make_observer(network_paths, lambda: PollingObserver(timeout=10))
+            # Poll every 30 s for network paths — frequent enough to notice
+            # changes without hammering the share or spamming live_changed
+            # (each live_changed triggers a full UI re-list AND re-search).
+            _make_observer(network_paths, lambda: PollingObserver(timeout=30))
 
             # Merge new observers back (list.extend is thread-safe enough here;
             # the main thread only ever reads _observers in _restart_watchers itself)

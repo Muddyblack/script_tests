@@ -63,7 +63,7 @@ class SearchEngine:
                         f_conds.append(f"({' OR '.join(path_conds)})")
 
                     sql = (
-                        "SELECT path, is_dir, name FROM files WHERE "
+                        "SELECT path, is_dir, name, size FROM files WHERE "
                         + (" AND ".join(f_conds) if f_conds else "1")
                         + f" LIMIT {limit}"
                     )
@@ -75,7 +75,7 @@ class SearchEngine:
 
         # Deduplicate candidates across databases (using path as unique key)
         unique_cands = {}
-        for path, is_dir, name in candidates:
-            unique_cands[path] = (path, is_dir, name)
+        for path, is_dir, name, size in candidates:
+            unique_cands[path] = (path, is_dir, name, size)
 
         return list(unique_cands.values())
