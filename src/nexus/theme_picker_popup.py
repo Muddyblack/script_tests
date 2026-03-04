@@ -30,7 +30,7 @@ class ThemePickerPopup(QFrame):
             parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedWidth(280)
+        self.setFixedWidth(300)
 
         self._mgr = ThemeManager()
         self._prev_theme = self._mgr.current_theme_name
@@ -50,23 +50,28 @@ class ThemePickerPopup(QFrame):
     # ------------------------------------------------------------------
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
 
         hdr = QLabel("COLOR THEME")
         hdr.setObjectName("_picker_hdr")
         layout.addWidget(hdr)
 
+        sep = QFrame()
+        sep.setObjectName("_picker_sep")
+        sep.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(sep)
+
         self._list = QListWidget()
         self._list.setObjectName("_picker_list")
         self._list.setFrameShape(QListWidget.Shape.NoFrame)
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._list.setFixedHeight(260)
+        self._list.setFixedHeight(272)
         self._list.itemClicked.connect(self._on_click)
         self._list.currentRowChanged.connect(self._on_hover)
         layout.addWidget(self._list)
 
-        hint = QLabel("↑↓ Preview  •  Enter Confirm  •  Esc Cancel")
+        hint = QLabel("↑↓  preview   ↵  confirm   Esc  cancel")
         hint.setObjectName("_picker_hint")
         layout.addWidget(hint)
 
@@ -92,7 +97,8 @@ class ThemePickerPopup(QFrame):
         self._list.clear()
         current = self._mgr.current_theme_name
         for i, (folder, name) in enumerate(self._themes):
-            item = QListWidgetItem(f"  {'●' if folder == current else '○'}  {name}")
+            mark = "✓" if folder == current else " "
+            item = QListWidgetItem(f"  {mark}   {name}")
             self._list.addItem(item)
             if folder == current:
                 self._list.setCurrentRow(i)
@@ -111,39 +117,61 @@ class ThemePickerPopup(QFrame):
             QFrame {{
                 background: {bg};
                 border: 1px solid {border};
-                border-radius: 10px;
+                border-radius: 12px;
+            }}
+            QFrame#_picker_sep {{
+                background: {border};
+                max-height: 1px;
+                border: none;
             }}
             QLabel#_picker_hdr {{
-                color: {text2}; font-size: 9px; font-weight: 700;
-                letter-spacing: 3px; padding: 2px 6px;
+                color: {text2};
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 2px;
+                padding: 2px 4px 4px 4px;
                 font-family: 'Outfit','Inter','Segoe UI';
             }}
             QLabel#_picker_hint {{
-                color: {text2}; font-size: 9px; padding: 2px 6px;
+                color: {text2};
+                font-size: 9px;
+                padding: 4px 4px 2px 4px;
+                letter-spacing: 0.5px;
                 font-family: 'Outfit','Inter','Segoe UI';
             }}
             QListWidget#_picker_list {{
-                background: {bg2}; border: none; outline: none;
-                border-radius: 6px;
+                background: {bg2};
+                border: none;
+                outline: none;
+                border-radius: 8px;
                 font-family: 'Outfit','Inter','Segoe UI';
-                font-size: 12px; color: {text};
+                font-size: 13px;
+                color: {text};
             }}
             QListWidget#_picker_list::item {{
-                padding: 7px 10px; border-radius: 6px;
+                padding: 8px 12px;
+                border-radius: 6px;
             }}
             QListWidget#_picker_list::item:selected {{
-                background: {accent_s}; color: {accent};
+                background: {accent_s};
+                color: {accent};
+                font-weight: 600;
             }}
             QListWidget#_picker_list::item:hover {{
                 background: {accent_s};
             }}
             QScrollBar:vertical {{
-                background: transparent; width: 4px; margin: 2px 0;
+                background: transparent;
+                width: 3px;
+                margin: 4px 0;
             }}
             QScrollBar::handle:vertical {{
-                background: {border}; border-radius: 2px; min-height: 20px;
+                background: {border};
+                border-radius: 2px;
+                min-height: 24px;
             }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
 
     def _on_hover(self, row: int):

@@ -38,10 +38,10 @@ class RainbowFrame(QFrame):
         self._angle = 0.0
         self._opacity = 0.0
         self._running = False
-        self._border_radius = 16
+        self._border_radius = 14
 
         self._timer = QTimer(self)
-        self._timer.setInterval(16)  # ~60 fps
+        self._timer.setInterval(14)  # ~70 fps
         self._timer.timeout.connect(self._tick)
 
         self._fade_timer = QTimer(self)
@@ -58,8 +58,9 @@ class RainbowFrame(QFrame):
         self._angle = 0.0
         self._opacity = 1.0
         self._running = True
+        self._fade_timer.stop()
         self._timer.start()
-        self._fade_timer.start(1200)  # start fading after 1.2 s
+        self._fade_timer.start(1400)  # start fading after 1.4 s
 
     # -- internals ----------------------------------------------------------
     def _tick(self):
@@ -77,7 +78,7 @@ class RainbowFrame(QFrame):
         self._fade_step.start()
 
     def _do_fade(self):
-        self._opacity -= 0.03
+        self._opacity -= 0.025
         if self._opacity <= 0:
             self._opacity = 0
             self._fade_step.stop()
@@ -99,24 +100,23 @@ class RainbowFrame(QFrame):
         cx, cy = rect.center().x(), rect.center().y()
         gradient = QConicalGradient(cx, cy, self._angle)
 
-        # Google-AI style rainbow: blue -> purple -> pink -> orange -> yellow -> green -> blue
         colors = [
-            (0.00, QColor(66, 133, 244)),  # Blue
-            (0.15, QColor(102, 102, 241)),  # Indigo
-            (0.30, QColor(171, 71, 188)),  # Purple
-            (0.45, QColor(236, 64, 122)),  # Pink
-            (0.60, QColor(255, 152, 0)),  # Orange
-            (0.75, QColor(76, 175, 80)),  # Green
-            (0.90, QColor(0, 188, 212)),  # Teal
-            (1.00, QColor(66, 133, 244)),  # Blue (wrap)
+            (0.00, QColor(56, 128, 255)),   # vivid blue
+            (0.14, QColor(110, 90, 255)),   # blue-violet
+            (0.28, QColor(180, 60, 210)),   # purple
+            (0.42, QColor(240, 55, 130)),   # hot pink
+            (0.56, QColor(255, 120, 30)),   # orange
+            (0.70, QColor(50, 200, 100)),   # green
+            (0.85, QColor(0, 200, 220)),    # cyan-teal
+            (1.00, QColor(56, 128, 255)),   # blue (wrap)
         ]
         for stop, color in colors:
             c = QColor(color)
-            c.setAlphaF(self._opacity * 0.85)
+            c.setAlphaF(self._opacity * 0.90)
             gradient.setColorAt(stop, c)
 
         pen = QPen()
-        pen.setWidthF(2.5)
+        pen.setWidthF(2.0)
         pen.setBrush(gradient)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)

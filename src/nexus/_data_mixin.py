@@ -184,6 +184,14 @@ class _DataMixin:
                 )
             )
         )
+        paths.extend(
+            glob.glob(
+                os.path.join(
+                    os.environ.get("APPDATA", ""),
+                    r"Mozilla\Firefox\Profiles\*\bookmarkbackups",
+                )
+            )
+)
 
         def extract_urls(node):
             if isinstance(node, dict):

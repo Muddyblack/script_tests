@@ -367,10 +367,10 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
 
         if enabled:
             self.ghost_watcher.start()
-            self.status_lbl.setText("âŒ¨ï¸ Ghost Typist Listener Started")
+            self.status_lbl.setText("⌨️ Ghost Typist Listener Started")
         else:
             self.ghost_watcher.stop()
-            self.status_lbl.setText("âŒ¨ï¸ Ghost Typist Listener Stopped")
+            self.status_lbl.setText("⌨️ Ghost Typist Listener Stopped")
 
         self.status_lbl.setStyleSheet("color: #a855f7; font-weight: bold;")
 
@@ -400,7 +400,7 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
         self.setStyleSheet(get_nexus_theme(mgr))
         if hasattr(self, "_theme_btn"):
             self._theme_btn.setText(
-                f"â—‘ {mgr.theme_data.get('name', mgr.current_theme_name)}"
+                f"— {mgr.theme_data.get('name', mgr.current_theme_name)}"
             )
 
         apply_win32_titlebar(int(self.winId()), mgr["bg_base"], mgr.is_dark)

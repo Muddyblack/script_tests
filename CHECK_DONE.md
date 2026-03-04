@@ -5,9 +5,9 @@ xexplorer/
 themes/
 regex_helper/
 port_inspector/
-
+nexus/
 
 hashtool/
-color_picker/
 
 common/
+color_picker

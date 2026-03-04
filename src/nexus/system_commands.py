@@ -12,6 +12,45 @@ from PyQt6.QtCore import QTimer
 from .utils import parse_chronos_input
 
 
+def _set_status(
+    nexus, text: str, color: str = "#a855f7", *, bold: bool = True
+) -> None:
+    """Update Nexus status label text and style consistently."""
+    weight = "bold" if bold else "normal"
+    nexus.status_lbl.setText(text)
+    nexus.status_lbl.setStyleSheet(f"color: {color}; font-weight: {weight};")
+
+
+def _toggle_nexus_theme() -> bool:
+    """Toggle Nexus theme and return True when dark mode is active after toggle."""
+    from src.common.theme import ThemeManager
+
+    manager = ThemeManager()
+    if manager.is_dark:
+        manager.load_theme("light")
+    else:
+        manager.load_theme("midnight-marina")
+    manager.theme_changed.emit()
+    return manager.is_dark
+
+
+def _launch_python_module(
+    nexus,
+    status_text: str,
+    module_name: str,
+    *args: str,
+    env: dict | None = None,
+) -> None:
+    """Launch a Python module as a subprocess and update status label."""
+    _set_status(nexus, status_text)
+    subprocess.Popen([sys.executable, "-m", module_name, *args], env=env)
+
+
+def _taskkill(target_args: list[str]) -> None:
+    """Run taskkill in a detached subprocess."""
+    subprocess.Popen(["taskkill", "/F", *target_args], shell=True)
+
+
 def execute_system_toggle(nexus, cmd: str) -> None:
     """Execute Windows system-level toggles and power commands.
 
@@ -22,33 +61,18 @@ def execute_system_toggle(nexus, cmd: str) -> None:
             # No registry — open Windows personalization settings for the user to toggle
             webbrowser.open("ms-settings:personalization-colors")
             # Also toggle the Nexus app theme to match intent
-            from src.common.theme import ThemeManager
-
-            _mgr = ThemeManager()
-            if _mgr.is_dark:
-                _mgr.load_theme("light")
-            else:
-                _mgr.load_theme("midnight-marina")
-            _mgr.theme_changed.emit()
-            nexus.status_lbl.setText("🌓 Opened Color Settings — toggle system theme there")
+            _toggle_nexus_theme()
+            _set_status(nexus, "🌓 Opened Color Settings — toggle system theme there")
 
         elif cmd == "toggle_nexus_theme":
-            from src.common.theme import ThemeManager
-
-            _mgr = ThemeManager()
-            # Toggle between dark (midnight-marina) and light themes
-            if _mgr.is_dark:
-                _mgr.load_theme("light")
-            else:
-                _mgr.load_theme("midnight-marina")
-            _mgr.theme_changed.emit()
-            state_name = "Light" if not _mgr.is_dark else "Dark"
-            nexus.status_lbl.setText(f"🌓 Nexus Theme set to {state_name}")
+            is_dark = _toggle_nexus_theme()
+            state_name = "Dark" if is_dark else "Light"
+            _set_status(nexus, f"🌓 Nexus Theme set to {state_name}")
 
         elif cmd == "toggle_hidden_files":
             # No registry — open Folder Options dialog where the user can toggle
             subprocess.Popen(["control", "folders"])
-            nexus.status_lbl.setText("👁️ Opened Folder Options — toggle hidden files there")
+            _set_status(nexus, "👁️ Opened Folder Options — toggle hidden files there")
 
         elif cmd == "toggle_desktop_icons":
             # Use the shell's built-in toggle command — no registry needed
@@ -58,7 +82,7 @@ def execute_system_toggle(nexus, cmd: str) -> None:
             TOGGLE_DESKTOP_ICONS = 0x7402
             progman = ctypes.windll.user32.FindWindowW("Progman", None)
             ctypes.windll.user32.SendMessageW(progman, WM_COMMAND, TOGGLE_DESKTOP_ICONS, 0)
-            nexus.status_lbl.setText("🔳 Desktop Icons Toggled")
+            _set_status(nexus, "🔳 Desktop Icons Toggled")
 
         elif cmd == "toggle_mute":
             subprocess.run(
@@ -69,16 +93,16 @@ def execute_system_toggle(nexus, cmd: str) -> None:
                 ],
                 shell=True,
             )
-            nexus.status_lbl.setText("🔇 Master Audio Toggled")
+            _set_status(nexus, "🔇 Master Audio Toggled")
 
         elif cmd == "flush_dns":
             subprocess.run(["ipconfig", "/flushdns"], shell=True)
-            nexus.status_lbl.setText("🌐 DNS Cache Flushed")
+            _set_status(nexus, "🌐 DNS Cache Flushed")
 
         elif cmd == "restart_explorer":
             subprocess.run(["taskkill", "/f", "/im", "explorer.exe"], shell=True)
             subprocess.Popen(["explorer.exe"])
-            nexus.status_lbl.setText("🔄 Windows Explorer Restarted")
+            _set_status(nexus, "🔄 Windows Explorer Restarted")
 
         elif cmd == "toggle_desktop":
             subprocess.run(
@@ -89,12 +113,12 @@ def execute_system_toggle(nexus, cmd: str) -> None:
                 ],
                 shell=True,
             )
-            nexus.status_lbl.setText("🖥️ Desktop Toggled")
+            _set_status(nexus, "🖥️ Desktop Toggled")
 
         # --- POWER CONTROLS ---
         elif cmd == "cmd_lock":
             subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"])
-            nexus.status_lbl.setText("🔒 Workstation Locked")
+            _set_status(nexus, "🔒 Workstation Locked")
 
         elif cmd == "cmd_sleep":
             subprocess.run(
@@ -107,7 +131,7 @@ def execute_system_toggle(nexus, cmd: str) -> None:
                 ],
                 shell=True,
             )
-            nexus.status_lbl.setText("💤 System Sleeping...")
+            _set_status(nexus, "💤 System Sleeping...")
 
         elif cmd == "cmd_restart":
             subprocess.run(["shutdown", "/r", "/t", "0"])
@@ -119,24 +143,20 @@ def execute_system_toggle(nexus, cmd: str) -> None:
         elif cmd.startswith("ms-settings:"):
             webbrowser.open(cmd)
             setting_name = cmd.split(":")[-1].replace("-", " ").upper()
-            nexus.status_lbl.setText(f"⚙️ Launched: {setting_name}")
-
-        nexus.status_lbl.setStyleSheet("color: #a855f7; font-weight: bold;")
+            _set_status(nexus, f"⚙️ Launched: {setting_name}")
 
     except Exception as e:
-        nexus.status_lbl.setText(f"Error executing toggle: {e}")
-        nexus.status_lbl.setStyleSheet("color: #ef4444;")
+        _set_status(nexus, f"Error executing toggle: {e}", color="#ef4444")
 
 
 def kill_process(nexus, pid: str, name: str) -> None:
     """Terminate a process by PID."""
     try:
-        subprocess.Popen(f"taskkill /F /PID {pid}", shell=True)
-        nexus.status_lbl.setText(f"💀 Terminated: {name} ({pid})")
-        nexus.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
+        _taskkill(["/PID", pid])
+        _set_status(nexus, f"💀 Terminated: {name} ({pid})", color="#ef4444")
         QTimer.singleShot(500, lambda: update_process_cache(nexus, force=True))
     except Exception as e:
-        nexus.status_lbl.setText(f"Error killing {name}: {e}")
+        _set_status(nexus, f"Error killing {name}: {e}", color="#ef4444")
 
 
 def kill_all_processes(nexus, name: str) -> None:
@@ -144,12 +164,11 @@ def kill_all_processes(nexus, name: str) -> None:
     try:
         # name might not have .exe if it comes from Get-Process
         img_name = name if name.lower().endswith(".exe") else f"{name}.exe"
-        subprocess.Popen(f"taskkill /F /IM {img_name}", shell=True)
-        nexus.status_lbl.setText(f"💀 Killed all: {name}")
-        nexus.status_lbl.setStyleSheet("color: #ef4444; font-weight: bold;")
+        _taskkill(["/IM", img_name])
+        _set_status(nexus, f"💀 Killed all: {name}", color="#ef4444")
         QTimer.singleShot(500, lambda: update_process_cache(nexus, force=True))
     except Exception as e:
-        nexus.status_lbl.setText(f"Error killing all {name}: {e}")
+        _set_status(nexus, f"Error killing all {name}: {e}", color="#ef4444")
 
 
 def update_process_cache(nexus, force: bool = False) -> None:
@@ -207,68 +226,87 @@ def update_process_cache(nexus, force: bool = False) -> None:
 
 def launch_xexplorer(nexus) -> None:
     """Launch the XExplorer HTML-based File Manager."""
-    nexus.status_lbl.setText("🧭 Launching X-Explorer...")
-    subprocess.Popen([sys.executable, "-m", "src.xexplorer.xexplorer"])
+    _launch_python_module(nexus, "🧭 Launching X-Explorer...", "src.xexplorer.xexplorer")
 
 
 def launch_regex_helper(nexus) -> None:
     """Launch the Regex Helper tool."""
-    nexus.status_lbl.setText("🔬 Launching Regex Helper...")
-    subprocess.Popen([sys.executable, "-m", "src.regex_helper.regex_helper"])
+    _launch_python_module(
+        nexus,
+        "🔬 Launching Regex Helper...",
+        "src.regex_helper.regex_helper",
+    )
 
 
 def launch_file_ops(nexus) -> None:
     """Launch the Nexus File Tools on the FILE OPS tab."""
-    nexus.status_lbl.setText("📂 Launching File Tools...")
-    subprocess.Popen(
-        [sys.executable, "-m", "src.file_ops.file_ops", "--tab", "fileops"]
+    _launch_python_module(
+        nexus,
+        "📂 Launching File Tools...",
+        "src.file_ops.file_ops",
+        "--tab",
+        "fileops",
     )
 
 
 def launch_archiver(nexus) -> None:
     """Launch the Nexus File Tools on the ARCHIVER tab."""
-    nexus.status_lbl.setText("📦 Launching Archiver...")
-    subprocess.Popen(
-        [sys.executable, "-m", "src.file_ops.file_ops", "--tab", "archiver"]
+    _launch_python_module(
+        nexus,
+        "📦 Launching Archiver...",
+        "src.file_ops.file_ops",
+        "--tab",
+        "archiver",
     )
 
 
 def launch_color_picker(nexus) -> None:
     """Launch the Nexus Color Picker tool."""
-    nexus.status_lbl.setText("🎨 Launching Color Picker...")
-    subprocess.Popen([sys.executable, "-m", "src.color_picker.color_picker"])
+    _launch_python_module(
+        nexus,
+        "🎨 Launching Color Picker...",
+        "src.color_picker.color_picker",
+    )
 
 
 def launch_chronos(nexus) -> None:
     """Launch the Chronos Hub."""
-    nexus.status_lbl.setText("⏳ Launching Chronos Hub...")
-    subprocess.Popen([sys.executable, "-m", "src.chronos.chronos"])
+    _launch_python_module(nexus, "⏳ Launching Chronos Hub...", "src.chronos.chronos")
 
 
 def launch_clipboard_manager(nexus) -> None:
     """Launch the Clipboard Manager."""
-    nexus.status_lbl.setText("📋 Launching Clipboard Manager...")
-    subprocess.Popen([sys.executable, "-m", "src.clipboard_manager.clipboard_manager"])
+    _launch_python_module(
+        nexus,
+        "📋 Launching Clipboard Manager...",
+        "src.clipboard_manager.clipboard_manager",
+    )
 
 
 def launch_port_inspector(nexus) -> None:
     """Launch the Port Inspector."""
-    nexus.status_lbl.setText("🌐 Launching Port Inspector...")
-    subprocess.Popen([sys.executable, "-m", "src.port_inspector.port_inspector"])
+    _launch_python_module(
+        nexus,
+        "🌐 Launching Port Inspector...",
+        "src.port_inspector.port_inspector",
+    )
 
 
 def launch_hash_tool(nexus) -> None:
     """Launch the Hash Tool."""
-    nexus.status_lbl.setText("🔑 Launching Hash Tool...")
-    subprocess.Popen([sys.executable, "-m", "src.hash_tool.hash_tool"])
+    _launch_python_module(nexus, "🔑 Launching Hash Tool...", "src.hash_tool.hash_tool")
 
 
 def launch_ghost_typist(nexus) -> None:
     """Launch Ghost Typist text-expander UI."""
-    nexus.status_lbl.setText("⌨️ Launching Ghost Typist...")
     env = os.environ.copy()
     env["NEXUS_OWNS_WATCHER"] = "1"
-    subprocess.Popen([sys.executable, "-m", "src.ghost_typist"], env=env)
+    _launch_python_module(
+        nexus,
+        "⌨️ Launching Ghost Typist...",
+        "src.ghost_typist",
+        env=env,
+    )
 
 def log_to_chronos(nexus, text: str) -> None:
     """Inject an achievement into the Chronos Hub."""
@@ -288,11 +326,9 @@ def log_to_chronos(nexus, text: str) -> None:
                 "INSERT INTO tasks (content, priority, tags, due_date, is_achievement, status, completed_at) VALUES (?, ?, ?, ?, 1, 'Completed', ?)",
                 (content, priority, tags_str, due_date, now.isoformat()),
             )
-        nexus.status_lbl.setText(f"🏆 Achievement Logged: {content}")
-        nexus.status_lbl.setStyleSheet("color: #fbbf24; font-weight: bold;")
+        _set_status(nexus, f"🏆 Achievement Logged: {content}", color="#fbbf24")
     except Exception as e:
-        nexus.status_lbl.setText(f"Chronos Log Error: {e}")
-        nexus.status_lbl.setStyleSheet("color: #ef4444;")
+        _set_status(nexus, f"Chronos Log Error: {e}", color="#ef4444")
 
 
 def add_task_to_chronos(nexus, text: str) -> None:
@@ -310,8 +346,6 @@ def add_task_to_chronos(nexus, text: str) -> None:
                 "INSERT INTO tasks (content, priority, tags, due_date, is_achievement, status) VALUES (?, ?, ?, ?, 0, 'Pending')",
                 (content, priority, tags_str, due_date),
             )
-        nexus.status_lbl.setText(f"📋 Task Added to Chronos: {content}")
-        nexus.status_lbl.setStyleSheet("color: #3b82f6; font-weight: bold;")
+        _set_status(nexus, f"📋 Task Added to Chronos: {content}", color="#3b82f6")
     except Exception as e:
-        nexus.status_lbl.setText(f"Chronos Task Error: {e}")
-        nexus.status_lbl.setStyleSheet("color: #ef4444;")
+        _set_status(nexus, f"Chronos Task Error: {e}", color="#ef4444")
