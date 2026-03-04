@@ -6,6 +6,8 @@ color_config.json
 win_venv/
 data/
 **/**/*artifactory*/
+build_temp/
+dist/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

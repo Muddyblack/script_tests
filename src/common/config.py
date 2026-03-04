@@ -1,16 +1,35 @@
 """Centralized configuration and path constants for Nexus Search."""
 
 import os
+import sys
 
 # ---------------------------------------------------------------------------
-# Data directory — everything lives INSIDE the project.
+# Root resolution — behaves differently when running as a frozen .exe
 # ---------------------------------------------------------------------------
-# Absolute path to the repository root (two levels up from src/common/)
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+# When bundled with PyInstaller (--onefile or --onedir):
+#   sys.frozen  = True
+#   sys._MEIPASS = temp extraction dir that holds assets / src code
+#   sys.executable = the actual .exe on disk
+#
+# We keep the ``data/`` folder NEXT TO the exe so user data survives upgrades.
+# Everything else (assets, HTML/CSS/JS) lives inside the bundle.
+# ---------------------------------------------------------------------------
 
-APPDATA = os.path.join(PROJECT_ROOT, "data")
+if getattr(sys, "frozen", False):
+    # Frozen: code/assets come from the bundle; data lives beside the exe
+    _BUNDLE_ROOT: str = sys._MEIPASS          # type: ignore[attr-defined]
+    _DATA_ROOT:   str = os.path.dirname(sys.executable)
+else:
+    # Development: everything is relative to the repo root
+    _BUNDLE_ROOT = os.path.dirname(           # repo root
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    _DATA_ROOT = _BUNDLE_ROOT
+
+# Legacy alias used by a few internal modules (keep pointing at bundle root)
+PROJECT_ROOT = _BUNDLE_ROOT
+
+APPDATA = os.path.join(_DATA_ROOT, "data")
 os.makedirs(APPDATA, exist_ok=True)
 
 # --- Per-module databases & settings ---
@@ -40,7 +59,7 @@ IMG_TO_TEXT_HOTKEY = "ctrl+shift+q"
 CHRONOS_HOTKEY = "ctrl+shift+c"
 
 # --- PROJECT PATHS ---
-ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
+ASSETS_DIR = os.path.join(_BUNDLE_ROOT, "assets")
 ICON_PATH = os.path.join(ASSETS_DIR, "nexus_icon.png")
 OCR_ICON_PATH = os.path.join(ASSETS_DIR, "ocr_icon.png")
 CHRONOS_ICON_PATH = os.path.join(ASSETS_DIR, "chronos.png")

@@ -198,6 +198,11 @@ class XExplorerBridge(QObject):
     def set_active_browse_path(self, path: str) -> None:
         """JS calls this every time the active tab navigates to a new folder."""
         self._browse_poll_path = path
+        # Never call os.stat() on a UNC/network path from the main thread —
+        # a slow/unreachable share blocks the entire Qt event loop.
+        if _is_network_path(path):
+            self._browse_poll_mtime = 0.0
+            return
         try:
             self._browse_poll_mtime = os.stat(path).st_mtime if path else 0.0
         except OSError:
@@ -207,6 +212,11 @@ class XExplorerBridge(QObject):
         """Check if the watched browse folder changed; fire live_changed if so."""
         path = self._browse_poll_path
         if not path:
+            return
+        # Skip polling for UNC/network locations — the PollingObserver in
+        # _restart_watchers already covers them, and os.stat on a slow share
+        # would stall the main thread every 750 ms.
+        if _is_network_path(path):
             return
         try:
             mtime = os.stat(path).st_mtime
@@ -384,7 +394,12 @@ class XExplorerBridge(QObject):
     @pyqtSlot(str, result=str)
     def list_folder(self, path: str) -> str:
         """Return JSON list of items in a directory (same schema as search)."""
-        if not path or not os.path.isdir(path):
+        if not path:
+            return json.dumps([])
+        # os.path.isdir() blocks the main thread on UNC/network paths that are
+        # slow or unreachable. Skip the guard for those — os.scandir() below
+        # will raise OSError if the path is not a valid directory anyway.
+        if not _is_network_path(path) and not os.path.isdir(path):
             return json.dumps([])
         items: list[dict] = []
         try:
@@ -669,21 +684,30 @@ class XExplorerBridge(QObject):
         def _run() -> None:
             errors: list[str] = []
             total = len(sources)
-            for i, src in enumerate(sources):
-                if cancel.is_set():
-                    errors.append("Cancelled")
-                    break
-                name = os.path.basename(src.rstrip("/\\"))
-                self._op_emit_queue.put(("progress", op_id, i, total, name))
-                try:
-                    dst = os.path.join(dest_dir, name)
-                    os.makedirs(dest_dir, exist_ok=True)
-                    if os.path.isdir(src):
-                        shutil.copytree(src, dst, dirs_exist_ok=True)
-                    else:
-                        shutil.copy2(src, dst)
-                except Exception as exc:
-                    errors.append(f"{name}: {exc}")
+            # Raise recursion limit for this thread so shutil.copytree doesn't
+            # hit the default ~1000 frame limit on deeply-nested trees.
+            old_limit = sys.getrecursionlimit()
+            sys.setrecursionlimit(max(old_limit, 5000))
+            try:
+                for i, src in enumerate(sources):
+                    if cancel.is_set():
+                        errors.append("Cancelled")
+                        break
+                    name = os.path.basename(src.rstrip("/\\"))
+                    self._op_emit_queue.put(("progress", op_id, i, total, name))
+                    try:
+                        dst = os.path.join(dest_dir, name)
+                        os.makedirs(dest_dir, exist_ok=True)
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(src, dst)
+                    except RecursionError:
+                        errors.append(f"{name}: directory tree is too deeply nested to copy")
+                    except Exception as exc:
+                        errors.append(f"{name}: {exc}")
+            finally:
+                sys.setrecursionlimit(old_limit)
             self._op_emit_queue.put(("progress", op_id, total, total, ""))
             self._op_emit_queue.put(("done", op_id, json.dumps({"errors": errors})))
 
@@ -729,23 +753,30 @@ class XExplorerBridge(QObject):
         def _run() -> None:
             errors: list[str] = []
             total = len(paths)
-            for i, path in enumerate(paths):
-                if cancel.is_set():
-                    errors.append("Cancelled")
-                    break
-                name = os.path.basename(path)
-                self._op_emit_queue.put(("progress", op_id, i, total, name))
-                try:
+            old_limit = sys.getrecursionlimit()
+            sys.setrecursionlimit(max(old_limit, 5000))
+            try:
+                for i, path in enumerate(paths):
+                    if cancel.is_set():
+                        errors.append("Cancelled")
+                        break
+                    name = os.path.basename(path)
+                    self._op_emit_queue.put(("progress", op_id, i, total, name))
                     try:
-                        import send2trash  # type: ignore
-                        send2trash.send2trash(path)
-                    except ImportError:
-                        if os.path.isdir(path):
-                            shutil.rmtree(path, ignore_errors=False)
-                        else:
-                            os.unlink(path)
-                except Exception as exc:
-                    errors.append(f"{name}: {exc}")
+                        try:
+                            import send2trash  # type: ignore
+                            send2trash.send2trash(path)
+                        except ImportError:
+                            if os.path.isdir(path):
+                                shutil.rmtree(path, ignore_errors=False)
+                            else:
+                                os.unlink(path)
+                    except RecursionError:
+                        errors.append(f"{name}: directory tree is too deeply nested to delete")
+                    except Exception as exc:
+                        errors.append(f"{name}: {exc}")
+            finally:
+                sys.setrecursionlimit(old_limit)
             self._op_emit_queue.put(("progress", op_id, total, total, ""))
             self._op_emit_queue.put(("done", op_id, json.dumps({"errors": errors})))
 
