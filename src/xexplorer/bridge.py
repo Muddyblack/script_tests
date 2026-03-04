@@ -75,10 +75,30 @@ def _fmt_size(path: str, is_dir: bool) -> str:
         return ""
 
 
+def _fmt_size_stat(size_bytes: int, is_dir: bool) -> str:
+    """Format size from an already-retrieved stat value (no extra I/O)."""
+    if is_dir:
+        return ""
+    b: float = size_bytes
+    for unit in ("B", "KB", "MB", "GB"):
+        if b < 1024:
+            return f"{b:.0f} {unit}"
+        b /= 1024
+    return f"{b:.1f} TB"
+
+
 def _fmt_mtime(path: str) -> str:
     try:
         return time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(path)))
     except OSError:
+        return ""
+
+
+def _fmt_mtime_stat(mtime: float) -> str:
+    """Format mtime from an already-retrieved stat value (no extra I/O)."""
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(mtime))
+    except Exception:
         return ""
 
 
@@ -386,13 +406,22 @@ class XExplorerBridge(QObject):
                 try:
                     is_dir = entry.is_dir(follow_symlinks=False)
                     ext = "" if is_dir else os.path.splitext(entry.name)[1].lstrip(".").lower()
+                    # Reuse the stat that scandir already fetched via FindNextFile
+                    # (on Windows this is free — no extra syscall, even on network shares).
+                    # Avoids a separate getsize()+getmtime() round-trip per file.
+                    try:
+                        st = entry.stat(follow_symlinks=False)
+                        size  = _fmt_size_stat(st.st_size, is_dir)
+                        mtime = _fmt_mtime_stat(st.st_mtime)
+                    except OSError:
+                        size, mtime = "", ""
                     items.append({
                         "path":   entry.path,
                         "name":   entry.name,
                         "is_dir": is_dir,
                         "ext":    ext,
-                        "size":   _fmt_size(entry.path, is_dir),
-                        "mtime":  _fmt_mtime(entry.path),
+                        "size":   size,
+                        "mtime":  mtime,
                     })
                 except (OSError, PermissionError):
                     continue
@@ -511,12 +540,18 @@ class XExplorerBridge(QObject):
                 continue
             name = os.path.basename(path) or path
             _, ext = os.path.splitext(name)
+            # Skip per-file stat calls (getsize / getmtime) for network paths.
+            # Each call is a blocking round-trip to the share; with hundreds of
+            # results this causes multi-second freezes on the main thread.
+            # The DB is local so the query is instant — only the metadata
+            # enrichment is slow.  Return empty strings; the UI handles them.
+            net = _is_network_path(path)
             results.append({
                 "path":   path,
                 "name":   name,
                 "is_dir": bool(is_dir),
-                "size":   _fmt_size(path, is_dir),
-                "mtime":  _fmt_mtime(path),
+                "size":   "" if net else _fmt_size(path, is_dir),
+                "mtime":  "" if net else _fmt_mtime(path),
                 "ext":    ext.lower().lstrip("."),
             })
         return json.dumps(results)
