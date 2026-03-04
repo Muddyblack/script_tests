@@ -1,4 +1,4 @@
-"""Allow running as ``python -m src.file_ops``.
+"""
 
 Launches the combined File Tools window (FILE OPS + ARCHIVER tabs).
 """

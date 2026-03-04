@@ -27,7 +27,6 @@ from PyQt6.QtWidgets import QApplication
 from src.common.web_app_window import BaseWebApp
 from src.file_ops.bridge import FileToolsBridge, _is_archive
 
-
 # ── Public compat re-export ───────────────────────────────────────────────────
 
 def is_archive(path: str) -> bool:
