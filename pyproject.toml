@@ -11,9 +11,6 @@ dependencies = [
     "watchdog",
     "easyocr",
     "pymupdf",
-    "python-pptx",
-    "python-docx",
-    "openpyxl",
     "psutil",
     #"pywin32; sys_platform == \"win32\"",  # disabled as pywin32 not wanted to be installed.
     "pynput",

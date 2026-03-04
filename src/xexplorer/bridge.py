@@ -988,7 +988,7 @@ class XExplorerBridge(QObject):
                         importlib.import_module("pythoncom")
                         importlib.import_module("win32com.client")
                     except ImportError:
-                        pass  # COM not available — fall through to python-pptx
+                        pass  # COM not available — fall through to stdlib XML parser
                     else:
                         abs_path = os.path.abspath(path)
                         async_key = f"{abs_path}|{page}"
@@ -1087,123 +1087,176 @@ class XExplorerBridge(QObject):
                         })
 
                 try:
-                    from pptx import Presentation  # python-pptx
-                    prs    = Presentation(path)
-                    slides = prs.slides
-                    n      = len(slides)
-                    idx    = max(0, min(page, n - 1))
-                    slide  = slides[idx]
+                    import re as _re2
+                    import xml.etree.ElementTree as _ET
+                    import zipfile as _zf
 
-                    def _slide_html(s) -> str:
-                        parts: list[str] = []
-                        for shape in s.shapes:
-                            if not shape.has_text_frame:
-                                continue
-                            for para in shape.text_frame.paragraphs:
-                                t = para.text.strip()
-                                if not t:
-                                    continue
-                                lvl   = para.level
-                                tag   = "h2" if lvl == 0 and not parts else "p"
-                                style = f"margin-left:{lvl * 16}px"
-                                parts.append(f'<{tag} class="sl-text sl-l{lvl}" style="{style}">{t}</{tag}>')
-                        return "\n".join(parts) or '<p class="sl-empty">Empty slide</p>'
-
+                    if not _zf.is_zipfile(path):
+                        raise ValueError(".ppt legacy binary format is not supported; save as .pptx first")
+                    _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+                    with _zf.ZipFile(path) as _z:
+                        _slides = sorted(
+                            (s for s in _z.namelist() if _re2.match(r"ppt/slides/slide\d+\.xml$", s)),
+                            key=lambda s: int(_re2.search(r"\d+", s.split("/")[-1]).group()),
+                        )
+                        n = len(_slides)
+                        if n == 0:
+                            return json.dumps({"type": "unsupported", "content": "No slides found in file."})
+                        idx = max(0, min(page, n - 1))
+                        _root = _ET.fromstring(_z.read(_slides[idx]))
+                    parts: list[str] = []
                     title_text = ""
-                    if slide.shapes.title:
-                        title_text = slide.shapes.title.text or ""
+                    for _para in _root.iter(f"{{{_A}}}p"):
+                        _pPr = _para.find(f"{{{_A}}}pPr")
+                        _lvl = int(_pPr.get("lvl", 0)) if _pPr is not None else 0
+                        _line = "".join(t.text or "" for t in _para.iter(f"{{{_A}}}t")).strip()
+                        if not _line:
+                            continue
+                        if not title_text and _lvl == 0:
+                            title_text = _line
+                        _tag = "h2" if _lvl == 0 and not parts else "p"
+                        _style = f"margin-left:{_lvl * 16}px"
+                        parts.append(f'<{_tag} class="sl-text sl-l{_lvl}" style="{_style}">{html.escape(_line)}</{_tag}>')
                     return json.dumps({
                         "type":       "slide",
-                        "content":    _slide_html(slide),
+                        "content":    "\n".join(parts) or '<p class="sl-empty">Empty slide</p>',
                         "page_count": n,
                         "page":       idx,
                         "label":      f"Slide {idx + 1}/{n}: {title_text}" if title_text else f"Slide {idx + 1}/{n}",
                     })
-                except ImportError:
-                    return json.dumps({"type": "unsupported", "content": "Install python-pptx:\npip install python-pptx"})
+                except Exception as _exc:
+                    return json.dumps({"type": "unsupported", "content": f"Cannot preview this presentation: {_exc}"})
 
             # ── Excel ────────────────────────────────────────────────────────
             if ext in {".xlsx", ".xls", ".xlsm"}:
                 try:
-                    import openpyxl
-                    wb     = openpyxl.load_workbook(path, read_only=True, data_only=True)
-                    sheets = wb.sheetnames
-                    n      = len(sheets)
-                    idx    = max(0, min(page, n - 1))
-                    ws     = wb[sheets[idx]]
-                    rows: list[tuple] = []
-                    for i, row in enumerate(ws.iter_rows(values_only=True)):
-                        if i >= 200:
-                            break
-                        rows.append(row)
-                    wb.close()
+                    import xml.etree.ElementTree as _ET
+                    import zipfile as _zf
 
-                    def _table_html(rows: list[tuple]) -> str:
+                    _SS  = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                    _REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+                    def _col_idx(ref: str) -> int:
+                        col = "".join(c for c in ref if c.isalpha())
+                        r = 0
+                        for ch in col.upper():
+                            r = r * 26 + (ord(ch) - 64)
+                        return r - 1
+
+                    with _zf.ZipFile(path) as _z:
+                        _names = _z.namelist()
+                        _wb    = _ET.fromstring(_z.read("xl/workbook.xml"))
+                        _sels  = _wb.findall(f".//{{{_SS}}}sheet")
+                        _sheet_names = [s.get("name", f"Sheet{i+1}") for i, s in enumerate(_sels)]
+                        _rids        = [s.get(f"{{{_REL}}}id") for s in _sels]
+                        n   = len(_sheet_names)
+                        idx = max(0, min(page, n - 1))
+                        _rels    = _ET.fromstring(_z.read("xl/_rels/workbook.xml.rels"))
+                        _rid_map = {r.get("Id"): r.get("Target") for r in _rels}
+                        _target  = _rid_map.get(_rids[idx], f"worksheets/sheet{idx + 1}.xml")
+                        _sheet_path = "xl/" + _target.lstrip("/")
+                        _sst: list[str] = []
+                        if "xl/sharedStrings.xml" in _names:
+                            for _si in _ET.fromstring(_z.read("xl/sharedStrings.xml")).findall(f"{{{_SS}}}si"):
+                                _sst.append("".join(e.text or "" for e in _si.iter(f"{{{_SS}}}t")))
+                        _ws   = _ET.fromstring(_z.read(_sheet_path))
+                        rows: list[list] = []
+                        for _row_el in _ws.findall(f".//{{{_SS}}}row"):
+                            if len(rows) >= 200:
+                                break
+                            _cs = _row_el.findall(f"{{{_SS}}}c")
+                            if not _cs:
+                                continue
+                            _max_c = max(_col_idx(_c.get("r", "A")) for _c in _cs) + 1
+                            _row: list = [None] * _max_c
+                            for _c in _cs:
+                                _ci  = _col_idx(_c.get("r", "A"))
+                                _t   = _c.get("t", "")
+                                _v_e = _c.find(f"{{{_SS}}}v")
+                                _v   = _v_e.text if _v_e is not None else None
+                                if _t == "s" and _v is not None:
+                                    _v = _sst[int(_v)] if int(_v) < len(_sst) else ""
+                                elif _t == "b":
+                                    _v = "TRUE" if _v == "1" else "FALSE"
+                                if _ci < _max_c:
+                                    _row[_ci] = _v
+                            rows.append(_row)
+
+                    def _table_html(rows: list) -> str:
                         if not rows:
                             return '<p class="sl-empty">Empty sheet</p>'
                         head = rows[0]
-                        html = '<div class="sheet-wrap"><table class="sheet-table"><thead><tr>'
+                        h = '<div class="sheet-wrap"><table class="sheet-table"><thead><tr>'
                         for cell in head:
-                            v = "" if cell is None else str(cell)
-                            html += f"<th>{v}</th>"
-                        html += "</tr></thead><tbody>"
+                            h += f"<th>{'&nbsp;' if cell is None else html.escape(str(cell))}</th>"
+                        h += "</tr></thead><tbody>"
                         for row in rows[1:]:
-                            html += "<tr>"
+                            h += "<tr>"
                             for cell in row:
-                                v = "" if cell is None else str(cell)
-                                html += f"<td>{v}</td>"
-                            html += "</tr>"
-                        html += "</tbody></table></div>"
-                        return html
+                                h += f"<td>{'&nbsp;' if cell is None else html.escape(str(cell))}</td>"
+                            h += "</tr>"
+                        h += "</tbody></table></div>"
+                        return h
 
                     return json.dumps({
                         "type":       "sheet",
                         "content":    _table_html(rows),
                         "page_count": n,
                         "page":       idx,
-                        "label":      f"{sheets[idx]} ({idx + 1}/{n})",
+                        "label":      f"{_sheet_names[idx]} ({idx + 1}/{n})",
                     })
-                except ImportError:
-                    return json.dumps({"type": "unsupported", "content": "Install openpyxl:\npip install openpyxl"})
+                except Exception as _exc:
+                    return json.dumps({"type": "unsupported", "content": f"Cannot preview this spreadsheet: {_exc}"})
 
             # ── Word (DOCX) ───────────────────────────────────────────────────
             if ext == ".docx":
                 try:
-                    from docx import Document
-                    doc = Document(path)
+                    import xml.etree.ElementTree as _ET
+                    import zipfile as _zf
+
+                    _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    with _zf.ZipFile(path) as _z:
+                        _doc = _ET.fromstring(_z.read("word/document.xml"))
                     blocks: list[str] = []
 
-                    for p in doc.paragraphs:
-                        text = (p.text or "").strip()
-                        if not text:
-                            continue
-                        style_name = (p.style.name or "").lower() if p.style else ""
-                        tag = "p"
-                        if style_name.startswith("heading 1"):
-                            tag = "h1"
-                        elif style_name.startswith("heading 2"):
-                            tag = "h2"
-                        elif style_name.startswith("heading 3"):
-                            tag = "h3"
-                        elif "title" in style_name:
-                            tag = "h1"
-                        elif "subtitle" in style_name:
-                            tag = "h2"
-                        safe = html.escape(text)
-                        blocks.append(f"<{tag}>{safe}</{tag}>")
+                    _HEADING_MAP = [
+                        ("heading1", "h1"), ("heading2", "h2"), ("heading3", "h3"), ("heading4", "h4"),
+                        ("title", "h1"), ("subtitle", "h2"),
+                    ]
 
-                    for table in doc.tables:
-                        rows_html: list[str] = []
-                        for row in table.rows:
-                            cells = [html.escape((c.text or "").strip()) for c in row.cells]
-                            row_html = "".join(f"<td>{c}</td>" for c in cells)
-                            rows_html.append(f"<tr>{row_html}</tr>")
-                        if rows_html:
-                            blocks.append(
-                                '<div class="sheet-wrap"><table class="sheet-table"><tbody>'
-                                + "".join(rows_html)
-                                + "</tbody></table></div>"
-                            )
+                    _body = _doc.find(f"{{{_W}}}body") or _doc
+                    for _child in _body:
+                        _local = _child.tag.split("}")[-1] if "}" in _child.tag else _child.tag
+                        if _local == "p":
+                            _text = "".join(t.text or "" for t in _child.iter(f"{{{_W}}}t")).strip()
+                            if not _text:
+                                continue
+                            _pPr = _child.find(f"{{{_W}}}pPr")
+                            _sid = ""
+                            if _pPr is not None:
+                                _ps = _pPr.find(f"{{{_W}}}pStyle")
+                                if _ps is not None:
+                                    _sid = (_ps.get(f"{{{_W}}}val") or "").lower()
+                            _html_tag = "p"
+                            for _key, _htag in _HEADING_MAP:
+                                if _sid.startswith(_key):
+                                    _html_tag = _htag
+                                    break
+                            blocks.append(f"<{_html_tag}>{html.escape(_text)}</{_html_tag}>")
+                        elif _local == "tbl":
+                            _rows_html: list[str] = []
+                            for _tr in _child.findall(f".//{{{_W}}}tr"):
+                                _cells = [
+                                    html.escape("".join(t.text or "" for t in _tc.iter(f"{{{_W}}}t")).strip())
+                                    for _tc in _tr.findall(f"{{{_W}}}tc")
+                                ]
+                                _rows_html.append("<tr>" + "".join(f"<td>{c}</td>" for c in _cells) + "</tr>")
+                            if _rows_html:
+                                blocks.append(
+                                    '<div class="sheet-wrap"><table class="sheet-table"><tbody>'
+                                    + "".join(_rows_html)
+                                    + "</tbody></table></div>"
+                                )
 
                     if not blocks:
                         blocks.append('<p class="sl-empty">Empty document</p>')
@@ -1215,8 +1268,8 @@ class XExplorerBridge(QObject):
                         "page": 0,
                         "label": "Word document",
                     })
-                except ImportError:
-                    return json.dumps({"type": "unsupported", "content": "Install python-docx:\npip install python-docx"})
+                except Exception as _exc:
+                    return json.dumps({"type": "unsupported", "content": f"Cannot preview this document: {_exc}"})
 
             # ── Visio ─────────────────────────────────────────────────────────
             if ext in {".vsd", ".vsdx", ".vsdm"}:
