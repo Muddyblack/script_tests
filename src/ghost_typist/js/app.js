@@ -1,7 +1,7 @@
 // Ghost Typist — single-file React app
 // Communicates with Python via QWebChannel (pyBridge)
 
-const { useState, useEffect, useCallback, useRef, useMemo } = React;
+const { useState, useEffect, useRef, useMemo } = React;
 const { motion, AnimatePresence } = window.Motion;
 
 // ── Bridge (QWebChannel) ─────────────────────────────────────────────────────
@@ -14,36 +14,12 @@ function getBridge(cb) {
     _bridgeCbs.push(cb);
 }
 
-if (typeof QWebChannel !== 'undefined') {
-    new QWebChannel(qt.webChannelTransport, ch => {
-        _bridge = ch.objects.pyBridge;
-        _bridgeReady = true;
-        _bridgeCbs.forEach(fn => fn(_bridge));
-        _bridgeCbs.length = 0;
-    });
-} else {
-    // Dev-mode mock
-    setTimeout(() => {
-        _bridge = {
-            load_snippets: () => JSON.stringify([
-                { id: 1, trigger: ';;email', expansion: 'you@example.com', label: 'My Email', category: 'Personal', use_count: 3, created_at: '2026-01-01' },
-                { id: 2, trigger: ';;br', expansion: 'Best regards,\nYour Name', label: 'Sign-off', category: 'Email', use_count: 7, created_at: '2026-01-01' },
-                { id: 3, trigger: ';;date', expansion: '__DATE__', label: "Today's Date", category: 'Utilities', use_count: 12, created_at: '2026-01-01' },
-                { id: 4, trigger: ';;lgtm', expansion: 'Looks good to me!', label: 'LGTM', category: 'Dev', use_count: 2, created_at: '2026-01-01' },
-            ]),
-            upsert_snippet: () => { },
-            delete_snippet: () => { },
-            get_watcher_status: () => true,
-            set_watcher_enabled: () => { },
-            load_settings: () => JSON.stringify({ watcher_enabled: true, trigger_prefix: ';;' }),
-            save_setting: () => { },
-            snippets_changed: { connect: () => { } },
-        };
-        _bridgeReady = true;
-        _bridgeCbs.forEach(fn => fn(_bridge));
-        _bridgeCbs.length = 0;
-    }, 100);
-}
+new QWebChannel(qt.webChannelTransport, ch => {
+    _bridge = ch.objects.pyBridge;
+    _bridgeReady = true;
+    _bridgeCbs.forEach(fn => fn(_bridge));
+    _bridgeCbs.length = 0;
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const CATEGORY_COLORS = {
@@ -303,7 +279,6 @@ const App = () => {
             setReady(true);
 
             // Poll watcher status every 2 s so tray / external changes
-            // are reflected immediately in the UI toggle.
             pollId = setInterval(async () => {
                 try {
                     const st = await bridge.get_watcher_status();

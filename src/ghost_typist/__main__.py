@@ -1,5 +1,3 @@
-"""Run Ghost Typist standalone: python -m src.ghost_typist"""
-
 import sys
 
 from PyQt6.QtWidgets import QApplication
