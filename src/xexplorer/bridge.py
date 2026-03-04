@@ -816,13 +816,14 @@ class XExplorerBridge(QObject):
 
     @pyqtSlot(str)
     def open_in_archiver(self, paths_json: str) -> None:
-        """Open Archiver window with the given paths pre-loaded."""
+        """Open File Tools window on the Archiver tab with the given paths pre-loaded."""
         try:
-            from src.archiver.archiver import ArchiverWindow
+            from src.file_ops.file_ops import FileToolsWindow
             paths = json.loads(paths_json)
-            win = ArchiverWindow()
-            win.source_paths = list(paths)
-            win._refresh_list()
+            win = FileToolsWindow()
+            win.arc_sources = list(paths)
+            win._arc_refresh()
+            win._switch_tab("archiver")
             win.show()
             self.__archiver_win = win  # keep alive
         except Exception as e:

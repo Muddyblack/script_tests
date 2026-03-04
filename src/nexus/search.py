@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.archiver.backend import is_archive
+from src.file_ops.file_ops import is_archive
 from src.common.config import (
     APPS_CACHE_FILE,
     DB_PATH,

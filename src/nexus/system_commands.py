@@ -1,17 +1,13 @@
 """System-level command execution: toggles, process management, macros."""
 
-import json
 import os
 import sqlite3
 import subprocess
 import sys
-import threading
 import time
 import webbrowser
 
 from PyQt6.QtCore import QTimer
-
-from src.common.config import GHOST_TYPIST_DB
 
 from .utils import parse_chronos_input
 
@@ -273,36 +269,6 @@ def launch_ghost_typist(nexus) -> None:
     env = os.environ.copy()
     env["NEXUS_OWNS_WATCHER"] = "1"
     subprocess.Popen([sys.executable, "-m", "src.ghost_typist"], env=env)
-
-
-def run_macro(nexus, macro_id: int) -> None:
-    """Execute a Ghost Typist macro in a background thread."""
-
-    def runner():
-        try:
-            with sqlite3.connect(GHOST_TYPIST_DB) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT actions FROM macros WHERE id=?", (macro_id,))
-                res = cursor.fetchone()
-                if res:
-                    import pyautogui
-
-                    actions = json.loads(res[0])
-                    time.sleep(0.3)
-                    for a in actions:
-                        if a["type"] == "wait":
-                            time.sleep(a["value"] / 1000.0)
-                        elif a["type"] == "type":
-                            pyautogui.write(a["value"], interval=0.01)
-                        elif a["type"] == "press":
-                            pyautogui.press(a["value"])
-                        elif a["type"] == "click":
-                            pyautogui.click(x=a["x"], y=a["y"])
-        except Exception:
-            pass
-
-    threading.Thread(target=runner, daemon=True).start()
-
 
 def log_to_chronos(nexus, text: str) -> None:
     """Inject an achievement into the Chronos Hub."""
