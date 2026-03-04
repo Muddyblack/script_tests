@@ -301,7 +301,7 @@ class _SearchMixin:
                 limit=100,
             )
 
-            for f_path, is_dir, f_name in results:
+            for f_path, is_dir, f_name, *_rest in results:
                 score = 200 + (50 if is_dir else 0)
                 if search_term and f_name.lower() == search_term:
                     score += 500
