@@ -1,0 +1,602 @@
+/* Nexus File Tools — stylesheet (follows Hash Tool / Ghost Typist conventions) */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    transition: background 0.4s, color 0.4s;
+}
+
+#root { height: 100%; display: flex; flex-direction: column; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-focus); }
+
+input, textarea, select { outline: none; font-family: inherit; }
+
+/* ── App shell ─────────────────────────────────────────────────────────────── */
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--bg-base);
+    -webkit-app-region: drag;
+    user-select: none;
+}
+
+.app-header-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.app-header-title {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+}
+
+.app-header-sub {
+    font-size: 11px;
+    color: var(--text-disabled);
+    letter-spacing: 0.04em;
+}
+
+.status-badge {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+    -webkit-app-region: no-drag;
+}
+
+.status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+.tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 20px 0;
+    flex-shrink: 0;
+}
+
+.tab-btn {
+    padding: 7px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    -webkit-app-region: no-drag;
+}
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Content area ─────────────────────────────────────────────────────────── */
+.tab-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px 20px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+.card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 13px 15px;
+}
+
+.section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: 8px;
+}
+
+/* ── Drop zone ────────────────────────────────────────────────────────────── */
+.drop-zone {
+    border: 2px dashed var(--border-light);
+    border-radius: 12px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: transparent;
+    user-select: none;
+    -webkit-app-region: no-drag;
+}
+.drop-zone:hover,
+.drop-zone.hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.drop-zone.active {
+    border-style: solid;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.drop-zone-icon { color: var(--text-disabled); transition: color 0.15s; }
+.drop-zone:hover .drop-zone-icon,
+.drop-zone.active .drop-zone-icon { color: var(--accent); }
+.drop-zone-hint { font-size: 12px; color: var(--text-secondary); text-align: center; }
+.drop-zone-sub  { font-size: 10px; color: var(--text-disabled); text-align: center; }
+
+/* ── Queue list ───────────────────────────────────────────────────────────── */
+.queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 200px;
+    overflow-y: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+
+.queue-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    background: var(--bg-elevated);
+    transition: background 0.12s;
+    cursor: default;
+    user-select: none;
+}
+.queue-item:first-child { border-radius: 10px 10px 0 0; }
+.queue-item:last-child  { border-radius: 0 0 10px 10px; }
+.queue-item:only-child  { border-radius: 10px; }
+.queue-item:hover       { background: var(--bg-overlay); }
+
+.queue-item-icon {
+    flex-shrink: 0;
+    color: var(--text-disabled);
+    display: flex;
+    align-items: center;
+}
+
+.queue-item-name {
+    flex: 1;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.queue-item-size {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-disabled);
+    flex-shrink: 0;
+}
+
+.queue-item-badge {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+}
+.badge-archive {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    color: var(--accent);
+}
+.badge-dir {
+    background: color-mix(in srgb, var(--success, #22c55e) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--success, #22c55e) 25%, transparent);
+    color: var(--success, #22c55e);
+}
+.badge-warn {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    color: var(--danger);
+}
+.badge-needs7z {
+    background: color-mix(in srgb, #f59e0b 12%, transparent);
+    border: 1px solid color-mix(in srgb, #f59e0b 28%, transparent);
+    color: #f59e0b;
+}
+
+.queue-item-remove {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-disabled);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s, color 0.12s;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+.queue-item-remove:hover {
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+    color: var(--danger);
+}
+
+/* ── Input / row ──────────────────────────────────────────────────────────── */
+.input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.input-field {
+    flex: 1;
+    background: var(--bg-control, var(--bg-elevated));
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+}
+.input-field:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.input-field::placeholder { color: var(--text-disabled); font-family: inherit; }
+
+.input-field.pw-field { font-family: monospace; letter-spacing: 0.1em; }
+
+/* ── Progress ─────────────────────────────────────────────────────────────── */
+.progress-wrap {
+    height: 3px;
+    background: var(--bg-overlay);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.progress-bar {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--success, #22c55e));
+    transition: width 0.1s linear;
+}
+
+.progress-area {
+    flex-shrink: 0;
+    padding: 8px 20px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.progress-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    letter-spacing: 0.06em;
+    min-height: 14px;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: none;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+    white-space: nowrap;
+    -webkit-app-region: no-drag;
+}
+.btn:active:not(:disabled) { transform: scale(0.95); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-ghost {
+    padding: 7px 13px;
+    background: var(--bg-control, var(--bg-elevated));
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+.btn-ghost:hover:not(:disabled) {
+    background: var(--bg-control-hov, var(--bg-overlay));
+    color: var(--accent);
+    border-color: var(--border-focus);
+}
+
+.btn-copy-action {
+    padding: 9px 20px;
+    background: color-mix(in srgb, var(--success, #22c55e) 12%, transparent);
+    color: var(--success, #22c55e);
+    border: 1px solid color-mix(in srgb, var(--success, #22c55e) 30%, transparent);
+}
+.btn-copy-action:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--success, #22c55e) 20%, transparent);
+}
+
+.btn-move {
+    padding: 9px 20px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.btn-move:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.btn-delete {
+    padding: 9px 20px;
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+.btn-delete:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+.btn-compress {
+    padding: 9px 20px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.btn-compress:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.btn-extract {
+    padding: 9px 20px;
+    background: color-mix(in srgb, var(--success, #22c55e) 12%, transparent);
+    color: var(--success, #22c55e);
+    border: 1px solid color-mix(in srgb, var(--success, #22c55e) 30%, transparent);
+}
+.btn-extract:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--success, #22c55e) 20%, transparent);
+}
+
+.btn-pw-toggle {
+    padding: 0 10px;
+    height: 36px;
+    background: var(--bg-control, var(--bg-elevated));
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    letter-spacing: 0;
+}
+.btn-pw-toggle:hover:not(:disabled) {
+    background: var(--bg-control-hov, var(--bg-overlay));
+    color: var(--text-primary);
+}
+
+/* ── Advanced options panel ───────────────────────────────────────────────── */
+.adv-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0;
+}
+
+.adv-panel {
+    background: var(--bg-overlay);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 13px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.adv-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.adv-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.adv-select {
+    width: 100%;
+    background: var(--bg-control, var(--bg-elevated));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color 0.15s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 26px;
+}
+.adv-select:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.adv-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+}
+.adv-checkbox-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ── Format picker row ────────────────────────────────────────────────────── */
+.action-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.fmt-select {
+    background: var(--bg-control, var(--bg-elevated));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 22px;
+    min-width: 80px;
+    transition: border-color 0.15s;
+}
+.fmt-select:focus { border-color: var(--accent); outline: none; }
+
+/* ── Preview modal ────────────────────────────────────────────────────────── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+.modal-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 18px 20px;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.modal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+}
+.modal-list {
+    flex: 1;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    padding: 2px 0;
+    overflow-x: hidden;
+}
+.modal-list-item {
+    padding: 3px 6px;
+    border-radius: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.modal-list-item:nth-child(odd) {
+    background: var(--bg-overlay);
+}
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px) scale(0.99); }
+    to   { opacity: 1; transform: none; }
+}
+.float-in { animation: fadeIn 0.16s ease both; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

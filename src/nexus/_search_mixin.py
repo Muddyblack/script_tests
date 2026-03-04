@@ -207,7 +207,7 @@ class _SearchMixin:
                 ("Re-index Files (X-Explorer)", "Background re-index of search cache", "reindex_files", "refresh.svg", "#60a5fa"),
                 ("Regex Helper", "Offline Pattern Tester", "regex_helper", "regex_sandbox.png", "#f472b6"),
                 ("Color Picker", "Hex & RGB preview + color tool", "color_picker", "color_picker.png", "#8b5cf6"),
-                ("File Ops", "Fast copy • move • delete", "file_ops", "folder.svg", "#22c55e"),
+                ("File Ops", "Fast copy • move • delete", "file_ops", "fileops.png", "#22c55e"),
                 ("Chronos Hub", "Achievement & Mission Tracker", "chronos_hub", "chronos.png", "#fbbf24"),
                 ("Archiver", "Zip • tar • 7z compress & extract", "archiver", "package.svg", "#a78bfa"),
                 ("Snip → Text (OCR)", "Select an area on screen and copy text to clipboard", "img_to_text", "ocr_icon.png", "#22c55e"),

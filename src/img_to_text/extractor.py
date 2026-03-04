@@ -170,7 +170,12 @@ def _get_proc_locked(languages: list[str]) -> subprocess.Popen:
     if _proc is not None and _proc.poll() is not None:
         _proc = None  # died, restart
 
-    if _proc is None or languages != _proc_languages:
+    # Only restart the worker if it lacks one or more of the requested languages.
+    # Removing a language never requires a restart — the loaded reader handles any
+    # subset of its initialised languages (same model files on disk regardless).
+    needs_restart = _proc is None or not set(languages).issubset(set(_proc_languages))
+
+    if needs_restart:
         if _proc is not None:
             _proc.stdin.close()
             _proc.wait()
