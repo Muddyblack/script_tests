@@ -143,14 +143,12 @@ class LiveCacheUpdater(FileSystemEventHandler):
                         elif kind == "modify":
                             _, path = op
                             try:
-                                st = os.stat(path)
-                                size = st.st_size
-                                mtime = st.st_mtime
+                                size = os.path.getsize(path)
                             except OSError:
-                                size, mtime = 0, 0
+                                size = 0
                             c.execute(
-                                "UPDATE files SET last_seen=?, size=?, mtime=? WHERE path=?",
-                                (now, size, mtime, path.replace("/", "\\")),
+                                "UPDATE files SET last_seen=?, size=? WHERE path=?",
+                                (now, size, path.replace("/", "\\")),
                             )
                     except Exception:
                         pass  # individual op errors must not break the batch
@@ -170,12 +168,10 @@ class LiveCacheUpdater(FileSystemEventHandler):
         name = os.path.basename(path_norm) or path_norm
         parent = os.path.dirname(path_norm)
         try:
-            st = os.stat(path)
-            size = 0 if is_dir else st.st_size
-            mtime = st.st_mtime
+            size = 0 if is_dir else os.path.getsize(path)
         except OSError:
-            size, mtime = 0, 0
+            size = 0
         c.execute(
-            "INSERT OR REPLACE INTO files VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (path_norm, name, parent, int(is_dir), now, size, mtime),
+            "INSERT OR REPLACE INTO files VALUES (?, ?, ?, ?, ?, ?)",
+            (path_norm, name, parent, int(is_dir), now, size),
         )
