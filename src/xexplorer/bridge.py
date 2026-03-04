@@ -362,6 +362,7 @@ class XExplorerBridge(QObject):
             c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("folders", folders_json))
             c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("ignore",  "|".join(ignore_parts)))
             conn.commit()
+        # _restart_watchers is async — returns immediately, work happens in a thread
         self._restart_watchers(data.get("folders", []))
 
     # ── Folder / drive management ─────────────────────────────────────────────
@@ -371,7 +372,12 @@ class XExplorerBridge(QObject):
         path = QFileDialog.getExistingDirectory(None, "Select Folder to Index")
         if path:
             path = path.replace("/", "\\")
-            return _resolve_unc(path)
+            # Skip _resolve_unc for paths that are already on a network location
+            # (it calls WNetGetUniversalNameW which can stall on a slow/unreachable share).
+            # Local mapped-drive → UNC conversion is a nicety; skip it to stay responsive.
+            if not _is_network_path(path):
+                path = _resolve_unc(path)
+            return path
         return ""
 
     @pyqtSlot(result=str)
@@ -622,7 +628,10 @@ class XExplorerBridge(QObject):
             roots = []
         if not roots:
             return
-        roots = [r for r in roots if os.path.isdir(r)]
+        # os.path.isdir() blocks the main-thread timer callback on network paths.
+        # Network roots are trusted as valid (the user explicitly configured them);
+        # skip the isdir check for them so the main thread never stalls.
+        roots = [r for r in roots if _is_network_path(r) or os.path.isdir(r)]
         if not roots:
             return
         ignore_rules = self._get_active_ignore_rules()
@@ -1408,43 +1417,72 @@ class XExplorerBridge(QObject):
     # ── Live watcher ──────────────────────────────────────────────────────────
 
     def _restart_watchers(self, folders: list[dict]) -> None:
+        """Restart filesystem watchers asynchronously.
+
+        All potentially-blocking work (obs.stop/join, os.path.exists,
+        Observer.schedule, obs.start) runs in a daemon thread so the
+        main/Qt thread is never stalled — especially important for UNC/
+        network paths where any of those calls can block for seconds.
+        """
         if not WATCHDOG_AVAILABLE:
             return
-        # Stop any previously running observers
-        for obs in self._observers:
-            with contextlib.suppress(Exception):
-                obs.stop()
-                obs.join()
+
+        # Grab the current observer list and clear it immediately on the main
+        # thread; the background thread is then responsible for stopping them.
+        old_observers = list(self._observers)
         self._observers.clear()
 
-        paths = [f["path"] for f in folders if os.path.exists(f.get("path", ""))]
-        if not paths:
-            return
-
-        ignore_rules = self._get_active_ignore_rules()
-        handler = LiveCacheUpdater(ignore_rules)
-        handler.file_changed = lambda: self.live_changed.emit()  # type: ignore
-
-        # Split into local vs. network paths so each gets the right observer
-        local_paths   = [p for p in paths if not _is_network_path(p)]
-        network_paths = [p for p in paths if     _is_network_path(p)]
-
-        def _make_observer(path_list, observer_cls, label):
-            if not path_list:
-                return
-            obs = observer_cls()
-            scheduled = 0
-            for p in path_list:
+        def _bg(folders=folders, old_obs=old_observers) -> None:
+            # 1. Stop stale observers (obs.join() can block on a hung network watcher)
+            for obs in old_obs:
                 with contextlib.suppress(Exception):
-                    obs.schedule(handler, p, recursive=True)
-                    scheduled += 1
-            if scheduled:
-                obs.start()
-                self._observers.append(obs)
+                    obs.stop()
+                    obs.join()
 
-        _make_observer(local_paths,   Observer,        "native")
-        # Poll every 10 s for network paths — fast enough without hammering the share
-        _make_observer(network_paths, lambda: PollingObserver(timeout=10), "polling")
+            # 2. Resolve which paths actually exist.
+            #    Skip os.path.exists() for network paths — it can hang on an
+            #    unreachable share; network roots are trusted as valid.
+            paths: list[str] = []
+            for f in folders:
+                p = f.get("path", "")
+                if not p:
+                    continue
+                if _is_network_path(p) or os.path.exists(p):
+                    paths.append(p)
+            if not paths:
+                return
+
+            ignore_rules = self._get_active_ignore_rules()
+            handler = LiveCacheUpdater(ignore_rules)
+            handler.file_changed = lambda: self.live_changed.emit()  # type: ignore
+
+            local_paths   = [p for p in paths if not _is_network_path(p)]
+            network_paths = [p for p in paths if     _is_network_path(p)]
+
+            new_obs: list = []
+
+            def _make_observer(path_list, observer_cls) -> None:
+                if not path_list:
+                    return
+                obs = observer_cls()
+                scheduled = 0
+                for p in path_list:
+                    with contextlib.suppress(Exception):
+                        obs.schedule(handler, p, recursive=True)
+                        scheduled += 1
+                if scheduled:
+                    obs.start()
+                    new_obs.append(obs)
+
+            _make_observer(local_paths,   Observer)
+            # Poll every 10 s for network paths — fast enough without hammering the share
+            _make_observer(network_paths, lambda: PollingObserver(timeout=10))
+
+            # Merge new observers back (list.extend is thread-safe enough here;
+            # the main thread only ever reads _observers in _restart_watchers itself)
+            self._observers.extend(new_obs)
+
+        threading.Thread(target=_bg, daemon=True, name="xexplorer-watchers").start()
 
 
     @pyqtSlot(result=bool)

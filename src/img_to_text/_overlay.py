@@ -8,6 +8,7 @@ from PyQt6.QtGui import (
     QColor,
     QCursor,
     QFont,
+    QGuiApplication,
     QImage,
     QPainter,
     QPainterPath,
@@ -264,10 +265,24 @@ class SnipOverlay(QWidget):
         self._active_handle: str | None = None
         self._toolbar_btns: list[QPushButton] = []
 
-        # Language bar — always visible in top-right corner
+        # Language bar — place in the top-right of the active screen (under cursor)
         self._lang_bar = LangBar(self)
         self._lang_bar.adjustSize()
-        self._lang_bar.move(virtual_geo.width() - self._lang_bar.width() - 12, 12)
+        try:
+            cursor_pos = QCursor.pos()
+            screen = QGuiApplication.screenAt(cursor_pos) or QGuiApplication.primaryScreen()
+            if screen is not None:
+                s_geo = screen.geometry()
+                x = s_geo.x() - virtual_geo.x() + (s_geo.width() - self._lang_bar.width() - 12)
+                y = s_geo.y() - virtual_geo.y() + 12
+            else:
+                x = virtual_geo.width() - self._lang_bar.width() - 12
+                y = 12
+        except Exception:
+            x = virtual_geo.width() - self._lang_bar.width() - 12
+            y = 12
+
+        self._lang_bar.move(int(x), int(y))
         self._lang_bar.raise_()
         self._lang_bar.show()
 

@@ -1,8 +1,8 @@
 """Nexus Search — thin launcher."""
 
-from src.nexus.app import main
+import multiprocessing
 
 if __name__ == "__main__":
-    main()
-else:
+    multiprocessing.freeze_support()
+    from src.nexus.app import main
     main()
