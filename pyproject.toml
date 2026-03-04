@@ -10,10 +10,9 @@ dependencies = [
     "PyQt6-WebEngine",
     "watchdog",
     "easyocr",
-    "pymupdf",
+    "pynput",
     "psutil",
     #"pywin32; sys_platform == \"win32\"",  # disabled as pywin32 not wanted to be installed.
-    "pynput",
 ]
 readme = "README.md"
 requires-python = ">=3.9"

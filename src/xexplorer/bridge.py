@@ -959,23 +959,45 @@ class XExplorerBridge(QObject):
             # ── PDF ──────────────────────────────────────────────────────────
             if ext == ".pdf":
                 try:
-                    import fitz  # PyMuPDF
-                    doc = fitz.open(path)
-                    n   = len(doc)
+                    from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QSize
+                    from PyQt6.QtPdf import QPdfDocument
+
+                    doc = QPdfDocument(None)
+                    doc.load(path)
+                    n = doc.pageCount()
+                    if n == 0:
+                        return json.dumps({"type": "unsupported", "content": "Cannot open PDF."})
                     idx = max(0, min(page, n - 1))
-                    mat = fitz.Matrix(1.5, 1.5)
-                    pix = doc[idx].get_pixmap(matrix=mat)
-                    data = base64.b64encode(pix.tobytes("png")).decode()
+                    page_size = doc.pagePointSize(idx)
+                    scale = 1.5
+                    w = max(1, int(page_size.width() * scale))
+                    h = max(1, int(page_size.height() * scale))
+                    img = doc.render(idx, QSize(w, h))
                     doc.close()
+                    # QPdfDocument renders with transparent bg — composite onto white
+                    # so dark-mode doesn't swallow black text.
+                    from PyQt6.QtGui import QColor, QImage, QPainter
+                    white = QImage(img.size(), QImage.Format.Format_RGB32)
+                    white.fill(QColor("white"))
+                    p = QPainter(white)
+                    p.drawImage(0, 0, img)
+                    p.end()
+                    img = white
+                    ba = QByteArray()
+                    buf = QBuffer(ba)
+                    buf.open(QIODevice.OpenModeFlag.WriteOnly)
+                    img.save(buf, "PNG")
+                    buf.close()
+                    data = base64.b64encode(bytes(ba)).decode()
                     return json.dumps({
-                        "type": "pdf",
-                        "content": f"data:image/png;base64,{data}",
+                        "type":       "pdf",
+                        "content":    f"data:image/png;base64,{data}",
                         "page_count": n,
-                        "page": idx,
-                        "label": f"Page {idx + 1} of {n}",
+                        "page":       idx,
+                        "label":      f"Page {idx + 1} of {n}",
                     })
-                except ImportError:
-                    return json.dumps({"type": "unsupported", "content": "Install PyMuPDF:\npip install pymupdf"})
+                except Exception as _exc:
+                    return json.dumps({"type": "unsupported", "content": f"Cannot preview PDF: {_exc}"})
 
             # ── PowerPoint ───────────────────────────────────────────────────
             if ext in {".pptx", ".ppt"}:
