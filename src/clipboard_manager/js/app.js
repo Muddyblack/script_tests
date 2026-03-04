@@ -1,7 +1,3 @@
-// Clipboard Manager — React App
-// Requires: bridge.js
-/* global React, ReactDOM, window */
-
 const { useState, useEffect, useCallback, useRef, memo } = React;
 const { bridge, getBridge, showToast } = window;
 
@@ -223,6 +219,7 @@ function App() {
     const [selected, setSelected] = useState(null);
     const [status, setStatus] = useState('Loading…');
     const [ctx, setCtx] = useState(null);
+    const [monitoringOn, setMonitoringOn] = useState(true);
     const searchRef = useRef(null);
     const pollRef = useRef(null);
     const bridgeRef = useRef(null);
@@ -246,10 +243,24 @@ function App() {
     }, [query, filter]);
 
     useEffect(() => {
-        bridge().then(b => {
+        let monPollId = null;
+        bridge().then(async b => {
             bridgeRef.current = b;
             refresh();
+            // Read initial monitoring state
+            try {
+                const on = await b.get_monitoring_enabled();
+                setMonitoringOn(!!on);
+            } catch (e) { /* ignore */ }
+            // Poll every 2 s so tray / external changes stay in sync
+            monPollId = setInterval(async () => {
+                try {
+                    const on = await b.get_monitoring_enabled();
+                    setMonitoringOn(prev => !!on === prev ? prev : !!on);
+                } catch (e) { /* ignore */ }
+            }, 2000);
         });
+        return () => { if (monPollId !== null) clearInterval(monPollId); };
     }, []);
 
     useEffect(() => {
@@ -352,6 +363,22 @@ function App() {
                     {query && <button className="search-clear" onClick={() => setQuery('')}>✕</button>}
                 </div>
                 <div className="entry-count">{total} entries</div>
+                <div className="toolbar-sep" />
+                <div
+                    className="monitor-toggle"
+                    title={monitoringOn ? 'Pause clipboard monitoring' : 'Resume clipboard monitoring'}
+                    onClick={async () => {
+                        const next = !monitoringOn;
+                        setMonitoringOn(next);
+                        const b = bridgeRef.current;
+                        if (b) await b.set_monitoring_enabled(next);
+                    }}
+                >
+                    <span className="monitor-toggle-label">{monitoringOn ? 'Monitoring' : 'Paused'}</span>
+                    <div className={`monitor-toggle-track${monitoringOn ? ' on' : ''}`}>
+                        <div className="monitor-toggle-thumb" />
+                    </div>
+                </div>
             </div>
 
             {/* ── Body ── */}
@@ -440,8 +467,8 @@ function App() {
 
             {/* ── Status bar ── */}
             <div className="statusbar">
-                <div className="status-dot" />
-                <span className="status-msg">{status}</span>
+                <div className={`status-dot${monitoringOn ? '' : ' paused'}`} />
+                <span className="status-msg">{monitoringOn ? status : '⏸ Monitoring paused — clipboard not being tracked'}</span>
             </div>
 
             {ctx && <CtxMenu items={ctxItems} pos={ctx.pos} onClose={() => setCtx(null)} />}

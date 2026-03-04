@@ -44,9 +44,15 @@ def main() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
 
     # When run standalone (not inside Nexus) spin up a local watcher
-    from src.clipboard_manager.watcher import ClipboardWatcher, get_watcher
+    from src.clipboard_manager.watcher import (
+        ClipboardWatcher,
+        get_watcher,
+        get_watcher_enabled,
+    )
     if get_watcher() is None:
         _watcher = ClipboardWatcher(app)  # noqa: F841 — keep alive
+        if not get_watcher_enabled():
+            _watcher.stop()
 
     win = ClipboardManager()
     win.show()

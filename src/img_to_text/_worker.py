@@ -5,12 +5,13 @@ from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 from PyQt6.QtGui import QImage
 
 from . import _settings as S
-from .extractor import ocr_qimage_with_meta
+from .extractor import is_model_ready, ocr_qimage_with_meta
 
 
 class _Signals(QObject):
     success = pyqtSignal(object)
     error = pyqtSignal(str)
+    status = pyqtSignal(str)  # intermediate status message for the UI
 
 
 class OcrWorker(QRunnable):
@@ -37,6 +38,8 @@ class OcrWorker(QRunnable):
 
     def run(self) -> None:
         try:
+            if not is_model_ready(self.languages):
+                self.signals.status.emit("⏳ Loading model…")
             self.signals.success.emit(
                 ocr_qimage_with_meta(
                     self.image,

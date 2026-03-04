@@ -289,6 +289,7 @@ const App = () => {
 
     // ── Bridge init ──────────────────────────────────────────────────────────
     useEffect(() => {
+        let pollId = null;
         getBridge(async (bridge) => {
             await loadSnippets(bridge);
             try {
@@ -300,7 +301,17 @@ const App = () => {
                 bridge.snippets_changed.connect(() => loadSnippets(bridge));
             }
             setReady(true);
+
+            // Poll watcher status every 2 s so tray / external changes
+            // are reflected immediately in the UI toggle.
+            pollId = setInterval(async () => {
+                try {
+                    const st = await bridge.get_watcher_status();
+                    setWatcherOn(prev => (!!st === prev ? prev : !!st));
+                } catch (e) { /* ignore */ }
+            }, 2000);
         });
+        return () => { if (pollId !== null) clearInterval(pollId); };
     }, []);
 
     async function loadSnippets(bridge) {

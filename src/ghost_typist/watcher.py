@@ -213,17 +213,47 @@ class SnippetWatcher:
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _db_reload_loop(self) -> None:
-        """Daemon thread: reload snippets whenever the DB file is modified."""
+        """Daemon thread: reload snippets and respect watcher_enabled flag.
+
+        Runs in the Nexus process. When another process (e.g. the Ghost Typist
+        UI subprocess) writes watcher_enabled=0 to the DB, this loop picks it up
+        within _AUTO_RELOAD_INTERVAL seconds and stops the listener.  Likewise
+        if the flag is flipped back to 1, the listener is restarted here.
+        """
         while self._running:
             time.sleep(_AUTO_RELOAD_INTERVAL)
             if not self._running:
                 break
             try:
+                # --- respect enable/disable written by the Ghost Typist UI ---
+                from src.ghost_typist.db import get_setting
+                if get_setting("watcher_enabled", "1") != "1":
+                    # Another process disabled us — stop and wait
+                    if self._listener is not None:
+                        self._listener.stop()
+                        self._listener = None
+                    self._running = False
+                    # Keep the thread alive so we can restart when re-enabled
+                    self._wait_for_reenable()
+                    return
+
                 if _DB_PATH and os.path.exists(_DB_PATH):
                     mtime = os.path.getmtime(_DB_PATH)
                     if mtime != self._last_db_mtime:
                         self._last_db_mtime = mtime
                         self.reload_snippets()
+            except Exception:
+                pass
+
+    def _wait_for_reenable(self) -> None:
+        """Spin-wait (cheap) until watcher_enabled flips back to 1, then restart."""
+        from src.ghost_typist.db import get_setting
+        while True:
+            time.sleep(_AUTO_RELOAD_INTERVAL)
+            try:
+                if get_setting("watcher_enabled", "1") == "1":
+                    self.start()
+                    return
             except Exception:
                 pass
 

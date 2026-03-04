@@ -48,14 +48,20 @@ class GhostTypistBridge(QObject):
 
     @pyqtSlot(result=bool)
     def get_watcher_status(self) -> bool:
+        # When running inside Nexus the real watcher lives in the Nexus process —
+        # read the DB (the shared source of truth) instead of the subprocess's
+        # in-memory object which was never started.
         if os.environ.get("NEXUS_OWNS_WATCHER") == "1":
             return db.get_setting("watcher_enabled", "1") == "1"
         return get_watcher().is_running
 
     @pyqtSlot(bool)
     def set_watcher_enabled(self, enabled: bool) -> None:
+        # Always write to DB — this is the cross-process signal.
+        # The Nexus watcher's _db_reload_loop picks up the flag within 2 s.
         db.set_setting("watcher_enabled", "1" if enabled else "0")
         if os.environ.get("NEXUS_OWNS_WATCHER") != "1":
+            # Standalone mode only: control this process's watcher directly.
             w = get_watcher()
             if enabled:
                 w.start()

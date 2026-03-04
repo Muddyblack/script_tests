@@ -414,6 +414,24 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
 
         self.status_lbl.setStyleSheet("color: #a855f7; font-weight: bold;")
 
+    def toggle_clipboard_watcher(self, enabled: bool) -> None:
+        """Enable or disable the background Clipboard Manager watcher."""
+        if not hasattr(self, "clipboard_watcher"):
+            return
+
+        from src.clipboard_manager.watcher import set_watcher_enabled
+
+        set_watcher_enabled(enabled)
+
+        if enabled:
+            self.clipboard_watcher.start()
+            self.status_lbl.setText("📋 Clipboard Monitor Started")
+        else:
+            self.clipboard_watcher.stop()
+            self.status_lbl.setText("📋 Clipboard Monitor Stopped")
+
+        self.status_lbl.setStyleSheet("color: #f472b6; font-weight: bold;")
+
     # ------------------------------------------------------------------
     # System command delegates
     # ------------------------------------------------------------------

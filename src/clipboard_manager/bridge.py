@@ -165,6 +165,24 @@ class ClipboardBridge(QObject):
         self._conn.commit()
         return True
 
+    # ── Monitoring toggle ─────────────────────────────────────────────────
+
+    @pyqtSlot(result=bool)
+    def get_monitoring_enabled(self) -> bool:
+        from src.clipboard_manager.watcher import get_watcher_enabled
+        return get_watcher_enabled()
+
+    @pyqtSlot(bool)
+    def set_monitoring_enabled(self, enabled: bool) -> None:
+        from src.clipboard_manager.watcher import get_watcher, set_watcher_enabled
+        set_watcher_enabled(enabled)
+        w = get_watcher()
+        if w is not None:
+            if enabled:
+                w.start()
+            else:
+                w.stop()
+
     def notify_clip_added(self) -> None:
         """Call this from the watcher integration to push updates to JS."""
         self.clip_added.emit()

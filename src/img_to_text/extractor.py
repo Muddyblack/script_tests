@@ -327,6 +327,21 @@ def ocr_qimage_detailed(
     )
 
 
+def is_model_ready(languages: list[str] | None = None) -> bool:
+    """Return True if the OCR worker is alive and already covers *languages*.
+
+    This is a best-effort, lock-free read — safe to call from the main thread
+    to decide whether to show a ``Loading model…`` status message.
+    """
+    from . import _settings as S
+    langs = languages if languages is not None else list(S.ocr_langs)
+    return (
+        _proc is not None
+        and _proc.poll() is None
+        and set(langs).issubset(set(_proc_languages))
+    )
+
+
 def set_languages(languages: list[str]) -> None:
     """Restart the worker with new languages on next call."""
     global _proc_languages
@@ -335,7 +350,9 @@ def set_languages(languages: list[str]) -> None:
 
 def pre_warm(languages: list[str] | None = None) -> None:
     """Start the OCR worker process in the background so the model is ready before first use."""
-    from . import _settings as S  # import here to avoid circular imports at module level
+    from . import (
+        _settings as S,  # import here to avoid circular imports at module level
+    )
 
     _langs = languages if languages is not None else list(S.ocr_langs)
 

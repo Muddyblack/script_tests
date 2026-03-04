@@ -403,7 +403,47 @@ input, textarea, select, button { font-family: inherit; outline: none; }
     background: #22c55e;
     box-shadow: 0 0 0 3px rgba(34,197,94,.2);
     flex-shrink: 0;
+    transition: background .3s, box-shadow .3s;
 }
+.status-dot.paused {
+    background: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245,158,11,.2);
+}
+
+/* ── Monitoring toggle (toolbar) ─────────────────────────────────────────── */
+.monitor-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+}
+.monitor-toggle-label {
+    font-size: 11px;
+    color: var(--text-disabled);
+    white-space: nowrap;
+}
+.monitor-toggle-track {
+    position: relative;
+    width: 30px;
+    height: 16px;
+    border-radius: 8px;
+    background: var(--border);
+    transition: background .2s;
+    flex-shrink: 0;
+}
+.monitor-toggle-track.on { background: var(--accent); }
+.monitor-toggle-thumb {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.monitor-toggle-track.on .monitor-toggle-thumb { transform: translateX(14px); }
 .status-msg { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Empty list ──────────────────────────────────────────────────────────── */

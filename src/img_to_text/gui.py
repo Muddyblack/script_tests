@@ -163,6 +163,7 @@ def start_snip_to_text(
                 _status("✓ Text copied")
             Toast.show_toast("Text copied", "📋")
 
+        w.signals.status.connect(_status)
         w.signals.success.connect(_ok)
         w.signals.error.connect(
             lambda e: (

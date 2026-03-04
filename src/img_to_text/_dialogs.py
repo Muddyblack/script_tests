@@ -570,6 +570,7 @@ class ImageOcrDialog(QWidget):
             self._set_status(f"❌  {e}")
             Toast.show_toast(f"OCR error: {e}", "❌", C.ERROR)
 
+        worker.signals.status.connect(self._set_status)
         worker.signals.success.connect(_ok)
         worker.signals.error.connect(_err)
         pool.start(worker)

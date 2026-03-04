@@ -12,4 +12,4 @@ hashtool/
 
 common/
 color_picker/
-
+clipboard_manager/

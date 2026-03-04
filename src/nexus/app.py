@@ -59,6 +59,21 @@ def main():
         # Best-effort: if watcher can't start, don't crash the app
         pass
 
+    # Start Clipboard Manager watcher in background (always-on listener)
+    try:
+        from src.clipboard_manager.watcher import (
+            ClipboardWatcher,
+        )
+        from src.clipboard_manager.watcher import (
+            get_watcher_enabled as _clip_enabled,
+        )
+
+        nexus.clipboard_watcher = ClipboardWatcher(app)
+        if not _clip_enabled():
+            nexus.clipboard_watcher.stop()
+    except Exception:
+        pass
+
     # System tray icon
     tray = create_tray_icon(app, nexus)  # noqa: F841 — prevent GC
     nexus.tray = tray

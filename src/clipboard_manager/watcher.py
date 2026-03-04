@@ -8,7 +8,10 @@ Supports both text and image clipboard content.
 Images are stored as PNG bytes in the image_data BLOB column.
 """
 
+import contextlib
 import hashlib
+import json
+import os
 import sqlite3
 import time
 
@@ -17,12 +20,76 @@ from PyQt6.QtWidgets import QApplication
 
 try:
     from src.common.config import CLIPBOARD_DB as CLIP_DB
+    from src.common.config import CLIPBOARD_SETTINGS_FILE
 except ImportError:
     import os as _os
     CLIP_DB = _os.path.join(_os.getenv("APPDATA", "."), "nexus_clipboard.db")
+    CLIPBOARD_SETTINGS_FILE = _os.path.join(
+        _os.getenv("APPDATA", "."), "nexus_clipboard.json"
+    )
 
-MAX_HISTORY = 500
+DEFAULT_HISTORY_LIMIT = 50
 POLL_MS = 500
+
+# The user can tweak the history cap in this JSON file or via
+# `NEXUS_CLIPBOARD_HISTORY_LIMIT`.
+def _ensure_settings_file(default: int) -> None:
+    if os.path.exists(CLIPBOARD_SETTINGS_FILE):
+        return
+    os.makedirs(os.path.dirname(CLIPBOARD_SETTINGS_FILE), exist_ok=True)
+    with open(CLIPBOARD_SETTINGS_FILE, "w", encoding="utf-8") as fh:
+        json.dump({"history_limit": default}, fh, indent=2)
+
+
+def _load_history_limit() -> int:
+    env_limit = os.getenv("NEXUS_CLIPBOARD_HISTORY_LIMIT")
+    if env_limit:
+        try:
+            limit = int(env_limit)
+        except ValueError:
+            limit = None
+        else:
+            if limit > 0:
+                return limit
+
+    _ensure_settings_file(DEFAULT_HISTORY_LIMIT)
+    try:
+        with open(CLIPBOARD_SETTINGS_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    limit = data.get("history_limit")
+    if isinstance(limit, int) and limit > 0:
+        return limit
+    return DEFAULT_HISTORY_LIMIT
+
+
+HISTORY_LIMIT = _load_history_limit()
+
+
+def get_watcher_enabled() -> bool:
+    """Return True if the clipboard watcher is enabled (default: True)."""
+    _ensure_settings_file(DEFAULT_HISTORY_LIMIT)
+    try:
+        with open(CLIPBOARD_SETTINGS_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    return data.get("watcher_enabled", True)
+
+
+def set_watcher_enabled(enabled: bool) -> None:
+    """Persist the watcher_enabled flag to the clipboard settings JSON."""
+    _ensure_settings_file(DEFAULT_HISTORY_LIMIT)
+    try:
+        with open(CLIPBOARD_SETTINGS_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    data["watcher_enabled"] = enabled
+    with open(CLIPBOARD_SETTINGS_FILE, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+
 
 # ── module-level singleton so manager window can access it ────────────────────
 _instance: "ClipboardWatcher | None" = None
@@ -82,8 +149,52 @@ class ClipboardWatcher(QObject):
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self._on_changed)
         self._timer.start()
+        self._running = True
 
-    # ── internal ──────────────────────────────────────────────────────────────
+        # Background settings sync: pick up enable/disable written by the
+        # clipboard GUI subprocess or the tray, keeping state across processes.
+        self._settings_timer = QTimer(self)
+        self._settings_timer.setInterval(2000)
+        self._settings_timer.timeout.connect(self._sync_enabled_state)
+        self._settings_timer.start()
+
+    # ── enable / disable ─────────────────────────────────────────────────────
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    def stop(self) -> None:
+        """Pause clipboard monitoring without destroying the watcher."""
+        if not self._running:
+            return
+        self._timer.stop()
+        with contextlib.suppress(RuntimeError, TypeError):
+            QApplication.clipboard().dataChanged.disconnect(self._on_changed)
+        self._running = False
+
+    def start(self) -> None:
+        """Resume clipboard monitoring."""
+        if self._running:
+            return
+        cb = QApplication.clipboard()
+        cb.dataChanged.connect(self._on_changed)
+        self._timer.start()
+        self._running = True
+
+    def _sync_enabled_state(self) -> None:
+        """Called every 2 s (main thread) to honour enable/disable written by
+        another process (e.g. the clipboard GUI subprocess or the tray)."""
+        try:
+            should_run = get_watcher_enabled()
+        except Exception:
+            return
+        if should_run and not self._running:
+            self.start()
+        elif not should_run and self._running:
+            self.stop()
+
+    # ── internal ─────────────────────────────────────────────────────────────
 
     def _on_changed(self) -> None:
         try:
@@ -130,14 +241,15 @@ class ClipboardWatcher(QObject):
 
     def _handle_file_urls(self, mime) -> None:
         """Save image files copied via file-URL MIME (Explorer copy / drag)."""
-        import os
         import urllib.parse
+
+        from PyQt6.QtCore import QUrl
+
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif"}
 
         urls = list(mime.urls()) if mime.hasUrls() else []
         if not urls and mime.hasFormat("text/uri-list"):
             raw = bytes(mime.data("text/uri-list")).decode("utf-8", "ignore")
-            from PyQt6.QtCore import QUrl
             for line in raw.splitlines():
                 line = line.strip()
                 if line:
@@ -175,6 +287,7 @@ class ClipboardWatcher(QObject):
         """Convert QImage to PNG bytes via PyQt6 buffer."""
         try:
             from PyQt6.QtCore import QBuffer, QIODevice
+
             buf = QBuffer()
             buf.open(QIODevice.OpenMode.WriteOnly)
             img.save(buf, "PNG")
@@ -190,8 +303,8 @@ class ClipboardWatcher(QObject):
             self._conn.execute("UPDATE clips SET ts=? WHERE id=?", (time.time(), row[0]))
         else:
             self._conn.execute(
-                "INSERT INTO clips (content, hash, pinned, ts, type) VALUES (?,?,0,?,?)",
-                (content, h, time.time(), "text"),
+                "INSERT INTO clips (content, hash, pinned, ts, type) VALUES (?,?,?,?,?)",
+                (content, h, 0, time.time(), "text"),
             )
             self._evict()
         self._conn.commit()
@@ -209,20 +322,20 @@ class ClipboardWatcher(QObject):
         self._conn.commit()
 
     def _evict(self) -> None:
-        """Remove oldest unpinned entries beyond MAX_HISTORY."""
+        """Remove oldest unpinned entries beyond HISTORY_LIMIT."""
         self._conn.execute(
             """DELETE FROM clips WHERE id IN (
                 SELECT id FROM clips WHERE pinned=0
                 ORDER BY ts DESC LIMIT -1 OFFSET ?
             )""",
-            (MAX_HISTORY,),
+            (HISTORY_LIMIT,),
         )
 
     # ── _save kept for backward compat (text only callers) ───────────────────
     def _save(self, content: str, h: str) -> None:
         self._save_text(content, h)
 
-    # ── public ────────────────────────────────────────────────────────────────
+    # ── public ───────────────────────────────────────────────────────────────
 
     def set_last_hash(self, h: str) -> None:
         """Tell the watcher that *we* just set the clipboard so it skips it."""

@@ -73,12 +73,22 @@ def create_tray_icon(app, nexus) -> QSystemTrayIcon:
     menu.addSeparator()
 
     # -- Background Services --
-    has_watcher = hasattr(nexus, "ghost_watcher")
-    is_running = nexus.ghost_watcher.is_running if has_watcher else False
     gt_service_action = QAction("⌨️  Ghost Typist Listener", menu, checkable=True)
-    gt_service_action.setChecked(is_running)
     gt_service_action.triggered.connect(nexus.toggle_ghost_watcher)
     menu.addAction(gt_service_action)
+
+    clip_service_action = QAction("📋  Clipboard Monitor", menu, checkable=True)
+    clip_service_action.triggered.connect(nexus.toggle_clipboard_watcher)
+    menu.addAction(clip_service_action)
+
+    def _refresh_service_states() -> None:
+        """Sync checkmarks with actual watcher state just before menu shows."""
+        if hasattr(nexus, "ghost_watcher"):
+            gt_service_action.setChecked(nexus.ghost_watcher.is_running)
+        if hasattr(nexus, "clipboard_watcher"):
+            clip_service_action.setChecked(nexus.clipboard_watcher.is_running)
+
+    menu.aboutToShow.connect(_refresh_service_states)
 
     menu.addSeparator()
 
