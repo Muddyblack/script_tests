@@ -52,6 +52,9 @@ from .system_commands import (
     launch_regex_helper as _launch_regex,
 )
 from .system_commands import (
+    launch_sqlite_viewer as _launch_sqlite_viewer,
+)
+from .system_commands import (
     launch_xexplorer as _launch_xexplorer,
 )
 from .system_commands import (
@@ -248,6 +251,7 @@ class _LaunchMixin:
                     "port_inspector": _launch_port_inspector,
                     "hash_tool": _launch_hash_tool,
                     "ghost_typist": _launch_ghost_typist,
+                    "sqlite_viewer": _launch_sqlite_viewer,
                 }
                 if cmd in _CMD_MAP:
                     _CMD_MAP[cmd](self)

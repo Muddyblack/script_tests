@@ -292,6 +292,11 @@ def launch_port_inspector(nexus) -> None:
     )
 
 
+def launch_sqlite_viewer(nexus) -> None:
+    """Launch the SQLite Viewer tool."""
+    _launch_python_module(nexus, "🛢️ Launching SQLite Viewer...", "src.sqlite_viewer.sqlite_viewer")
+
+
 def launch_hash_tool(nexus) -> None:
     """Launch the Hash Tool."""
     _launch_python_module(nexus, "🔑 Launching Hash Tool...", "src.hash_tool.hash_tool")

@@ -216,6 +216,7 @@ class _SearchMixin:
                 ("Port Inspector", "Real-time network ports · kill by PID", "port_inspector", "port_inspector.png", "#38bdf8"),
                 ("Hash Tool", "MD5 · SHA-1 · SHA-256 · SHA-512 hashing + Base64 encode/decode", "hash_tool", "hash_tool.png", "#a3e635"),
                 ("Ghost Typist", "Text expansion · snippets · macros", "ghost_typist", "ghost_typist.png", "#a855f7"),
+                ("SQLite Viewer", "Browse & query SQLite databases", "sqlite_viewer", "sqlite_viewer.png", "#0ea5e9"),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
                 if not terms or matches_all_terms(title, t_terms):
