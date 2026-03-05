@@ -321,12 +321,46 @@ class XExplorerBridge(QObject):
             prog_files = os.environ.get("PROGRAMFILES",     "C:\\Program Files")
             prog_x86   = os.environ.get("PROGRAMFILES(X86)","C:\\Program Files (x86)")
             defaults = [
-                "node_modules","venv",".venv","env","__pycache__",".git",".svn",
-                ".idea",".vscode","dist","build","AppData","Local Settings",
-                "System Volume Information","$RECYCLE.BIN",
-                ".exe",".dll",".sys",".tmp",".pyc",
+                # ── Python ───────────────────────────────────────────────────
+                "venv", ".venv", "env", ".env", "__pycache__", ".mypy_cache",
+                ".pytest_cache", ".ruff_cache", ".tox", ".nox", "eggs",
+                ".eggs", "*.egg-info", "*.pyc", "*.pyo", "*.pyd",
+                # ── JS / Node ─────────────────────────────────────────────────
+                "node_modules", ".pnp", ".yarn", ".npm", ".pnpm-store",
+                # ── Version control ──────────────────────────────────────────
+                ".git", ".svn", ".hg", ".bzr",
+                # ── IDEs & editors ────────────────────────────────────────────
+                ".idea", ".vscode", ".vs", ".fleet", ".eclipse",
+                # ── Build & dist outputs ──────────────────────────────────────
+                "dist", "build", "out", "target", "bin", "obj",
+                "__pycache__", ".next", ".nuxt", ".svelte-kit",
+                ".parcel-cache", ".turbo", ".gradle", ".m2",
+                # ── Compiled / binary extensions ──────────────────────────────
+                ".exe", ".dll", ".so", ".dylib", ".sys", ".pdb",
+                ".o", ".a", ".lib", ".class", ".jar",
+                # ── Temp / generated ─────────────────────────────────────────
+                ".tmp", ".temp", ".cache", ".pyc", ".log",
+                "thumbs.db", "desktop.ini",
+                # ── macOS noise ───────────────────────────────────────────────
+                ".DS_Store", ".Spotlight-V100", ".Trashes",
+                ".fseventsd", "__MACOSX",
+                # ── Linux noise ───────────────────────────────────────────────
+                ".Trash-1000", ".thumbnails",
+                # ── Windows system ────────────────────────────────────────────
+                "AppData", "Local Settings",
+                "System Volume Information", "$RECYCLE.BIN",
                 win_dir, prog_files, prog_x86,
-                "C:\\MSOCache","C:\\$Recycle.Bin",
+                "C:\\MSOCache", "C:\\$Recycle.Bin",
+                # ── Docker / containers ───────────────────────────────────────
+                ".docker",
+                # ── Rust ─────────────────────────────────────────────────────
+                # (target/ already in build outputs above)
+                # ── Go ────────────────────────────────────────────────────────
+                "vendor",
+                # ── Coverage / reports ────────────────────────────────────────
+                ".coverage", "coverage", "htmlcov", ".nyc_output",
+                # ── Secrets / env files ───────────────────────────────────────
+                ".env.local", ".env.production", ".env.development",
             ]
             c.execute("SELECT value FROM settings WHERE key='ignore'")
             res2 = c.fetchone()
