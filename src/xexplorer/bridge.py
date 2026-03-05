@@ -155,6 +155,7 @@ class XExplorerBridge(QObject):
         # Preview async state (key = "<abs_path>|<page>")
         self._preview_cache: dict[str, str] = {}
         self._preview_in_flight: set[str] = set()
+        self._preview_cancel: dict[str, threading.Event] = {}  # key → cancel flag
         self._op_flush_timer = QTimer(self)
         self._op_flush_timer.setInterval(50)  # flush 20×/s
         self._op_flush_timer.timeout.connect(self._flush_op_queue)
@@ -971,36 +972,47 @@ class XExplorerBridge(QObject):
 
     # ── Internal sync helpers (run in background thread) ─────────────────────
 
-    def _load_image_sync(self, path: str, ext: str) -> str:
+    def _load_image_sync(self, path: str, ext: str, cancel: threading.Event | None = None) -> str:
         """Read an image file and return preview JSON. Called off the main thread."""
         try:
             size = os.path.getsize(path)
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             if size > 8 * 1024 * 1024:
                 return json.dumps({"type": "unsupported", "content": "Image too large to preview."})
             with open(path, "rb") as f:
                 data = base64.b64encode(f.read()).decode()
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             mime = {".svg": "image/svg+xml", ".gif": "image/gif"}.get(ext, "image/png")
             return json.dumps({"type": "image", "content": f"data:{mime};base64,{data}", "ext": ext})
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
 
-    def _load_text_sync(self, path: str, ext: str) -> str:
+    def _load_text_sync(self, path: str, ext: str, cancel: threading.Event | None = None) -> str:
         """Read a text file and return preview JSON. Called off the main thread."""
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
                 content = f.read(64 * 1024)
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             return json.dumps({"type": "text", "content": content, "ext": ext.lstrip(".")})
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
 
-    def _load_pdf_sync(self, path: str, page: int) -> str:
+    def _load_pdf_sync(self, path: str, page: int, cancel: threading.Event | None = None) -> str:
         """Render a PDF page and return preview JSON. Called off the main thread."""
         try:
             from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QSize
             from PyQt6.QtPdf import QPdfDocument
 
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             doc = QPdfDocument(None)
             doc.load(path)
+            if cancel and cancel.is_set():
+                doc.close()
+                return json.dumps({"type": "unsupported", "content": ""})
             n = doc.pageCount()
             if n == 0:
                 return json.dumps({"type": "unsupported", "content": "Cannot open PDF."})
@@ -1034,9 +1046,11 @@ class XExplorerBridge(QObject):
         except Exception as exc:
             return json.dumps({"type": "unsupported", "content": f"Cannot preview PDF: {exc}"})
 
-    def _load_pptx_xml_sync(self, path: str, page: int) -> str:
+    def _load_pptx_xml_sync(self, path: str, page: int, cancel: threading.Event | None = None) -> str:
         """Parse a .pptx file with stdlib XML and return slide preview JSON. Off main thread."""
         try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             import re as _re2
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
@@ -1077,9 +1091,11 @@ class XExplorerBridge(QObject):
         except Exception as _exc:
             return json.dumps({"type": "unsupported", "content": f"Cannot preview this presentation: {_exc}"})
 
-    def _load_xlsx_sync(self, path: str, page: int) -> str:
+    def _load_xlsx_sync(self, path: str, page: int, cancel: threading.Event | None = None) -> str:
         """Parse a .xlsx/.xlsm file and return sheet preview JSON. Off main thread."""
         try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
 
@@ -1158,9 +1174,11 @@ class XExplorerBridge(QObject):
         except Exception as _exc:
             return json.dumps({"type": "unsupported", "content": f"Cannot preview this spreadsheet: {_exc}"})
 
-    def _load_docx_sync(self, path: str) -> str:
+    def _load_docx_sync(self, path: str, cancel: threading.Event | None = None) -> str:
         """Parse a .docx file and return document preview JSON. Off main thread."""
         try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
 
@@ -1224,19 +1242,39 @@ class XExplorerBridge(QObject):
     # ── Async preview dispatch ────────────────────────────────────────────────
 
     def _async_preview(self, path: str, page: int, loader_fn, loading_msg: str = "Loading…") -> str:
-        """Generic async preview helper using the existing op-queue pattern."""
+        """Generic async preview helper using the existing op-queue pattern.
+
+        Cancels any in-flight render for a *different* file so switching files
+        is instant — the old thread stops as soon as it checks the flag.
+        """
         abs_path = os.path.abspath(path)
         async_key = f"{abs_path}|{page}"
 
         if async_key in self._preview_cache:
             return self._preview_cache[async_key]
+
+        # Cancel every in-flight render that isn't for this exact key.
+        for key, flag in list(self._preview_cancel.items()):
+            if key != async_key:
+                flag.set()
+
         if async_key in self._preview_in_flight:
             return json.dumps({"type": "loading", "key": async_key, "content": loading_msg})
 
         self._preview_in_flight.add(async_key)
+        cancel = threading.Event()
+        self._preview_cancel[async_key] = cancel
 
-        def _run(_key=async_key):
-            result = loader_fn()
+        def _run(_key=async_key, _cancel=cancel, _loader=loader_fn):
+            if _cancel.is_set():
+                self._preview_in_flight.discard(_key)
+                self._preview_cancel.pop(_key, None)
+                return
+            result = _loader(_cancel)
+            if _cancel.is_set():
+                self._preview_in_flight.discard(_key)
+                self._preview_cancel.pop(_key, None)
+                return
             # Inject the key so the JS side can match the event
             try:
                 d = json.loads(result)
@@ -1244,6 +1282,7 @@ class XExplorerBridge(QObject):
                 result = json.dumps(d)
             except Exception:
                 pass
+            self._preview_cancel.pop(_key, None)
             self._op_emit_queue.put(("preview", _key, result))
 
         threading.Thread(target=_run, daemon=True).start()
@@ -1275,21 +1314,21 @@ class XExplorerBridge(QObject):
 
         if ext in IMAGE_EXTS:
             return self._async_preview(path, 0,
-                lambda: self._load_image_sync(path, ext), "Loading image…")
+                lambda c: self._load_image_sync(path, ext, c), "Loading image…")
 
         # For text files we need to peek at the size first — but we must not
         # block the main thread, so we do that check inside the worker too.
-        def _text_or_unsupported():
+        def _text_or_unsupported(cancel=None):
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
             try:
                 size = os.path.getsize(path)
             except OSError as e:
                 return json.dumps({"type": "error", "content": str(e)})
             if ext in TEXT_EXTS or size < 256 * 1024:
-                return self._load_text_sync(path, ext)
+                return self._load_text_sync(path, ext, cancel)
             return json.dumps({"type": "unsupported", "content": ""})
 
-        # Quick existence check (cheap, cached by OS on local drives; skipped
-        # implicitly for network paths since the worker handles errors).
         return self._async_preview(path, 0, _text_or_unsupported, "Loading…")
 
     @pyqtSlot(str, result=bool)
@@ -1334,7 +1373,7 @@ class XExplorerBridge(QObject):
             if ext == ".pdf":
                 return self._async_preview(
                     path, page,
-                    lambda: self._load_pdf_sync(path, page),
+                    lambda c: self._load_pdf_sync(path, page, c),
                     "Rendering PDF…",
                 )
 
@@ -1448,17 +1487,17 @@ class XExplorerBridge(QObject):
                         })
 
                 return self._async_preview(path, page,
-                    lambda: self._load_pptx_xml_sync(path, page), "Loading presentation…")
+                    lambda c: self._load_pptx_xml_sync(path, page, c), "Loading presentation…")
 
             # ── Excel ────────────────────────────────────────────────────────
             if ext in {".xlsx", ".xls", ".xlsm"}:
                 return self._async_preview(path, page,
-                    lambda: self._load_xlsx_sync(path, page), "Loading spreadsheet…")
+                    lambda c: self._load_xlsx_sync(path, page, c), "Loading spreadsheet…")
 
             # ── Word (DOCX) ───────────────────────────────────────────────────
             if ext == ".docx":
                 return self._async_preview(path, page,
-                    lambda: self._load_docx_sync(path), "Loading document…")
+                    lambda c: self._load_docx_sync(path, c), "Loading document…")
 
             # ── Visio ─────────────────────────────────────────────────────────
             if ext in {".vsd", ".vsdx", ".vsdm"}:
