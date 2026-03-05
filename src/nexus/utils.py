@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import time
 
 
 def format_display_name(name: str, max_len: int = 60) -> str:
@@ -13,6 +14,39 @@ def format_display_name(name: str, max_len: int = 60) -> str:
         return name
     half = (max_len - 3) // 2
     return f"{name[:half]}...{name[-half:]}"
+
+
+def copy_to_clipboard(data: str | QImage) -> None:
+    """Copies text or image to the system clipboard with robust Linux support.
+
+    On Linux, sets both the CLIPBOARD and SELECTION (primary) buffers to
+    ensure clipboard managers and middle-click paste work correctly.
+    """
+    if data is None:
+        return
+
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QClipboard, QImage
+
+    app = QApplication.instance()
+    if not app:
+        return
+
+    cb = app.clipboard()
+    if isinstance(data, str):
+        # Set main clipboard
+        cb.setText(data, QClipboard.Mode.Clipboard)
+        if sys.platform == "linux":
+            # Set primary selection (middle-click)
+            cb.setText(data, QClipboard.Mode.Selection)
+    elif isinstance(data, QImage):
+        cb.setImage(data, QClipboard.Mode.Clipboard)
+        if sys.platform == "linux":
+            cb.setImage(data, QClipboard.Mode.Selection)
+
+    # Some clipboard managers on Linux (like Klipper or Gpaste) need a small
+    # pump for the event loop to register the change if the app is busy.
+    app.processEvents()
 
 
 def run_workspace(ws_id: int) -> None:

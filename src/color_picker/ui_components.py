@@ -21,6 +21,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.common.theme import ThemeManager
+from src.img_to_text._capture import capture_virtual_desktop
+from src.nexus.utils import copy_to_clipboard
 
 
 class FlowLayout(QLayout):
@@ -405,10 +407,8 @@ class ScreenPicker(QWidget):
         )
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setMouseTracking(True)
-        screen = QApplication.primaryScreen()
-        vg = screen.virtualGeometry()
+        self.pixmap, vg = capture_virtual_desktop()
         self.setGeometry(vg)
-        self.pixmap = screen.grabWindow(0, vg.x(), vg.y(), vg.width(), vg.height())
         self.image = self.pixmap.toImage()
         self.mouse_pos = QCursor.pos()
 
@@ -539,7 +539,7 @@ class InputWithCopy(QWidget):
     def _copy(self):
         txt = self.line_edit.text()
         if txt:
-            QApplication.clipboard().setText(txt)
+            copy_to_clipboard(txt)
             self.copy_btn.setText("✓")
             self._flash_timer.start(1400)
 

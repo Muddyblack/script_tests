@@ -149,11 +149,13 @@ class _LaunchMixin:
 
             if action == copy_path:
                 norm_paths = [os.path.normpath(p) for p in paths]
-                QApplication.clipboard().setText("\n".join(norm_paths))
+                from src.nexus.utils import copy_to_clipboard
+                copy_to_clipboard("\n".join(norm_paths))
                 self.status_lbl.setText(f"Copied {len(norm_paths)} path(s)")
             elif action == copy_name:
                 names = [os.path.basename(p) for p in paths]
-                QApplication.clipboard().setText("\n".join(names))
+                from src.nexus.utils import copy_to_clipboard
+                copy_to_clipboard("\n".join(names))
                 self.status_lbl.setText("Copied file name(s) to clipboard")
             elif action == open_loc:
                 norm_path = os.path.normpath(paths[0])

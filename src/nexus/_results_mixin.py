@@ -48,14 +48,16 @@ class _ResultsMixin:
     # ------------------------------------------------------------------
     def _action_copy_path(self, path: str):
         norm = os.path.normpath(path)
-        QApplication.clipboard().setText(norm)
+        from src.nexus.utils import copy_to_clipboard
+        copy_to_clipboard(norm)
         short = norm if len(norm) < 50 else "…" + norm[-45:]
         self.status_lbl.setText(f"Copied: {short}")
 
     def _action_copy_dir(self, path: str):
         d = path if os.path.isdir(path) else os.path.dirname(path)
         norm = os.path.normpath(d)
-        QApplication.clipboard().setText(norm)
+        from src.nexus.utils import copy_to_clipboard
+        copy_to_clipboard(norm)
         short = norm if len(norm) < 50 else "…" + norm[-45:]
         self.status_lbl.setText(f"Copied: {short}")
 

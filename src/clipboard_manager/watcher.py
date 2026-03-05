@@ -12,8 +12,16 @@ import contextlib
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import time
+
+# Detect Wayland — on Wayland the compositor won't deliver clipboard events to
+# unfocused windows, so Qt's dataChanged / mimeData() return stale/empty data
+# when Nexus has no focused window.  wl-paste reads the Wayland clipboard
+# directly and bypasses this restriction.
+_WL_PASTE = shutil.which("wl-paste") if os.environ.get("WAYLAND_DISPLAY") else None
 
 from PyQt6.QtCore import QObject, QTimer
 from PyQt6.QtWidgets import QApplication
@@ -101,6 +109,7 @@ def get_watcher() -> "ClipboardWatcher | None":
 
 
 def ensure_db(conn: sqlite3.Connection) -> None:
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS clips (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,13 +150,18 @@ class ClipboardWatcher(QObject):
         if txt:
             self._last_hash = hashlib.sha256(txt.encode()).hexdigest()
 
-        # Use dataChanged signal for instant response + poll as fallback
+        # dataChanged fires instantly when Qt sees the change (unreliable on
+        # Wayland without window focus — compositor only notifies focused clients)
         cb = QApplication.clipboard()
         cb.dataChanged.connect(self._on_changed)
 
+        # Poll timer: on Wayland use wl-paste so we catch copies from any app
+        # even when Nexus has no focused window.
         self._timer = QTimer(self)
         self._timer.setInterval(POLL_MS)
-        self._timer.timeout.connect(self._on_changed)
+        self._timer.timeout.connect(
+            self._poll_wayland if _WL_PASTE else self._on_changed
+        )
         self._timer.start()
         self._running = True
 
@@ -277,6 +291,31 @@ class ClipboardWatcher(QObject):
             except Exception:
                 pass
             break  # only first image file
+
+    def _poll_wayland(self) -> None:
+        """Poll clipboard via wl-paste on Wayland.
+
+        wl-paste bypasses the compositor restriction that prevents unfocused
+        clients from receiving clipboard updates via the Wayland protocol.
+        Text only — images still go through _on_changed via dataChanged signal.
+        """
+        try:
+            result = subprocess.run(
+                [_WL_PASTE, "--no-newline", "--type", "text/plain"],
+                capture_output=True, timeout=0.4,
+            )
+            if result.returncode != 0:
+                return
+            text = result.stdout.decode("utf-8", errors="replace")
+            if not text:
+                return
+            h = hashlib.sha256(text.encode()).hexdigest()
+            if h == self._last_hash:
+                return
+            self._last_hash = h
+            self._save_text(text, h)
+        except Exception:
+            pass
 
     # Keep old name as alias so nothing breaks
     def _poll(self) -> None:

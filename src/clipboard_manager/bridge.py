@@ -15,6 +15,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QApplication
 
 from src.clipboard_manager.watcher import CLIP_DB, ensure_db, get_watcher
+from src.nexus.utils import copy_to_clipboard
 
 
 class ClipboardBridge(QObject):
@@ -128,7 +129,7 @@ class ClipboardBridge(QObject):
                 watcher = get_watcher()
                 if watcher is not None:
                     watcher.set_last_hash(h)
-                QApplication.clipboard().setImage(img)
+                copy_to_clipboard(img)
                 return True
             return False
 
@@ -137,7 +138,7 @@ class ClipboardBridge(QObject):
         watcher = get_watcher()
         if watcher is not None:
             watcher.set_last_hash(h)
-        QApplication.clipboard().setText(content)
+        copy_to_clipboard(content)
         return True
 
     @pyqtSlot(int, result=bool)
