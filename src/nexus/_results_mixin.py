@@ -7,7 +7,6 @@ import webbrowser
 from PyQt6.QtCore import QByteArray, QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (
-    QApplication,
     QFileIconProvider,
     QHBoxLayout,
     QLabel,

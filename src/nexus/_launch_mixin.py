@@ -6,7 +6,7 @@ import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtWidgets import QMenu
 
 from src.common.config import PROJECT_ROOT
 from src.common.theme import ThemeManager

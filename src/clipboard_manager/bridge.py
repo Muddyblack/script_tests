@@ -12,7 +12,6 @@ import json
 import sqlite3
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
-from PyQt6.QtWidgets import QApplication
 
 from src.clipboard_manager.watcher import CLIP_DB, ensure_db, get_watcher
 from src.nexus.utils import copy_to_clipboard

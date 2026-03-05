@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import QApplication
 from src.common.web_app_window import BaseWebApp
 from src.sqlite_viewer.bridge import SqliteViewerBridge
 
+
 class SqliteViewer(BaseWebApp):
     WINDOW_TITLE = "SQLite Viewer"
     ICON_NAME    = "sqlite_viewer"

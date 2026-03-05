@@ -375,9 +375,9 @@ class SnippetWatcher:
     def _evdev_loop(self) -> None:
         """Read raw key events from all keyboard devices and process them."""
         try:
-            import evdev  # type: ignore
-            import evdev.ecodes as ec  # type: ignore
             import select
+
+            import evdev.ecodes as ec  # type: ignore
 
             fds = {d.fd: d for d in self._evdev_devices}
             while self._running:

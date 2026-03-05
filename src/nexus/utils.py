@@ -3,7 +3,8 @@
 import os
 import subprocess
 import sys
-import time
+
+from PyQt6.QtGui import QImage
 
 
 def format_display_name(name: str, max_len: int = 60) -> str:
@@ -25,8 +26,8 @@ def copy_to_clipboard(data: str | QImage) -> None:
     if data is None:
         return
 
-    from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QClipboard, QImage
+    from PyQt6.QtWidgets import QApplication
 
     app = QApplication.instance()
     if not app:

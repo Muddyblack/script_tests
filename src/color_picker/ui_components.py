@@ -10,7 +10,6 @@ from PyQt6.QtGui import (
     QRadialGradient,
 )
 from PyQt6.QtWidgets import (
-    QApplication,
     QHBoxLayout,
     QLabel,
     QLayout,
