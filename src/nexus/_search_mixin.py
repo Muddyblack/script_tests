@@ -2,7 +2,10 @@
 
 import os
 import re
+import threading
 import urllib.parse
+
+from PyQt6.QtCore import QTimer
 
 from .system_commands import update_process_cache as _update_procs
 from .utils import format_display_name, parse_chronos_input
@@ -20,12 +23,23 @@ class _SearchMixin:
     # Search engine
     # ------------------------------------------------------------------
     def perform_search(self):
+        """Full search: instant in-memory results + async file DB query."""
+        self.perform_search_instant()
+        self.perform_search_files()
+
+    def perform_search_instant(self):
         raw_search = self.search_input.text().strip()
         search = raw_search.lower()
         self.results_list.clear()
         self.results_tree.clear()
         self.pending_icons.clear()
         candidates = []
+
+        # Generation counter — incremented each search so stale async results
+        # from a previous query are silently discarded when they arrive.
+        if not hasattr(self, "_search_gen"):
+            self._search_gen = 0
+        self._search_gen += 1
 
         def matches_all_terms(text, terms):
             if not terms:
@@ -287,45 +301,6 @@ class _SearchMixin:
                         }
                     )
 
-        # File Search
-        if active_modes.get("files"):
-            files_only = active_modes.get("files_only", False)
-            folders_only = active_modes.get("folders_only", False)
-            target_folders = active_modes.get("target_folders", [])
-
-            results = self.search_engine.search_files(
-                query_terms=terms,
-                target_folders=target_folders,
-                files_only=files_only,
-                folders_only=folders_only,
-                limit=100,
-            )
-
-            for f_path, is_dir, f_name, *_rest in results:
-                score = 200 + (50 if is_dir else 0)
-                if search_term and f_name.lower() == search_term:
-                    score += 500
-                score += self.get_usage_boost(f"file_{f_path}")
-
-                icon = (
-                    "globe.svg"
-                    if self._is_unc_path(f_path)
-                    else "folder.svg"
-                    if is_dir
-                    else "file.svg"
-                )
-
-                candidates.append(
-                    {
-                        "score": score,
-                        "title": format_display_name(f_name),
-                        "path": f_path,
-                        "file_path": f_path,
-                        "icon": icon,
-                        "data": {"type": "file", "path": f_path},
-                    }
-                )
-
         # Processes
         is_explicit_process = search.startswith(":p")
         if active_modes.get("processes") and (terms or is_explicit_process):
@@ -411,7 +386,85 @@ class _SearchMixin:
                 )
 
         candidates.sort(key=lambda x: x["score"], reverse=True)
+        # Keep a copy of the non-file candidates for the async file-search
+        # callback to merge into (populate_list_results caps current_candidates).
+        self._pre_file_candidates = list(candidates)
         if self.view_mode == "tree":
             self.populate_tree_results(candidates)
         else:
             self.populate_list_results(candidates)
+
+    def perform_search_files(self):
+        """Run the SQLite file search off the main thread and merge results in."""
+        search = self.search_input.text().strip().lower()
+
+        prefixes = {":b": "bookmarks", ":f": "files", ":p": "processes",
+                    ":t": "toggles", ":ssh": "ssh", ":a": "apps"}
+        active_modes = self.modes.copy()
+        search_term = search
+        for pref, mode_key in prefixes.items():
+            if search.startswith(pref + " ") or search == pref:
+                for k in active_modes:
+                    if k in prefixes.values():
+                        active_modes[k] = False
+                active_modes[mode_key] = True
+                search_term = search[len(pref):].strip()
+                break
+
+        if not active_modes.get("files"):
+            return
+
+        terms = [t for t in search_term.split() if t]
+        files_only = active_modes.get("files_only", False)
+        folders_only = active_modes.get("folders_only", False)
+        target_folders = active_modes.get("target_folders", [])
+        _gen = self._search_gen
+
+        def _do_file_search(
+            _terms=terms, _tf=target_folders, _fo=files_only,
+            _fdo=folders_only, _st=search_term, _gen=_gen,
+        ):
+            try:
+                results = self.search_engine.search_files(
+                    query_terms=_terms, target_folders=_tf,
+                    files_only=_fo, folders_only=_fdo, limit=100,
+                )
+            except Exception:
+                results = []
+
+            file_candidates = []
+            for f_path, is_dir, f_name, *_rest in results:
+                score = 200 + (50 if is_dir else 0)
+                if _st and f_name.lower() == _st:
+                    score += 500
+                score += self.get_usage_boost(f"file_{f_path}")
+                icon = (
+                    "globe.svg" if self._is_unc_path(f_path)
+                    else "folder.svg" if is_dir
+                    else "file.svg"
+                )
+                file_candidates.append({
+                    "score": score,
+                    "title": format_display_name(f_name),
+                    "path": f_path,
+                    "file_path": f_path,
+                    "icon": icon,
+                    "data": {"type": "file", "path": f_path},
+                })
+
+            def _apply(_fc=file_candidates, _g=_gen):
+                if self._search_gen != _g:
+                    return
+                merged = list(getattr(self, "_pre_file_candidates", [])) + _fc
+                merged.sort(key=lambda x: x["score"], reverse=True)
+                self.results_list.clear()
+                self.results_tree.clear()
+                self.pending_icons.clear()
+                if self.view_mode == "tree":
+                    self.populate_tree_results(merged)
+                else:
+                    self.populate_list_results(merged)
+
+            QTimer.singleShot(0, _apply)
+
+        threading.Thread(target=_do_file_search, daemon=True).start()

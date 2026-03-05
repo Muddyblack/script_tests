@@ -137,7 +137,7 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
         # Debounce timer for search
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
-        self.search_timer.timeout.connect(self.perform_search)
+        self.search_timer.timeout.connect(self.perform_search_files)
 
         self.last_search_time = 0
         # Clock timer — live updates

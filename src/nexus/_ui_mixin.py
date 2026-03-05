@@ -217,7 +217,8 @@ class _UIMixin:
         self.search_input = NexusInput(self)
         self.search_input.setObjectName("nexus_search")
         self.search_input.setPlaceholderText("Search apps, files, workspaces …")
-        self.search_input.textChanged.connect(lambda: self.search_timer.start(30))
+        self.search_input.textChanged.connect(self.perform_search_instant)
+        self.search_input.textChanged.connect(lambda: self.search_timer.start(200))
         self.rainbow_frame._content_layout.addWidget(self.search_input)
         right_layout.addWidget(self.rainbow_frame)
 

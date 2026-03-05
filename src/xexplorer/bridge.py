@@ -935,13 +935,293 @@ class XExplorerBridge(QObject):
             print(f"[icon] EXCEPTION for {path}: {exc}")
             return ""
 
+    # ── Internal sync helpers (run in background thread) ─────────────────────
+
+    def _load_image_sync(self, path: str, ext: str) -> str:
+        """Read an image file and return preview JSON. Called off the main thread."""
+        try:
+            size = os.path.getsize(path)
+            if size > 8 * 1024 * 1024:
+                return json.dumps({"type": "unsupported", "content": "Image too large to preview."})
+            with open(path, "rb") as f:
+                data = base64.b64encode(f.read()).decode()
+            mime = {".svg": "image/svg+xml", ".gif": "image/gif"}.get(ext, "image/png")
+            return json.dumps({"type": "image", "content": f"data:{mime};base64,{data}", "ext": ext})
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
+    def _load_text_sync(self, path: str, ext: str) -> str:
+        """Read a text file and return preview JSON. Called off the main thread."""
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                content = f.read(64 * 1024)
+            return json.dumps({"type": "text", "content": content, "ext": ext.lstrip(".")})
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
+    def _load_pdf_sync(self, path: str, page: int) -> str:
+        """Render a PDF page and return preview JSON. Called off the main thread."""
+        try:
+            from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QSize
+            from PyQt6.QtPdf import QPdfDocument
+
+            doc = QPdfDocument(None)
+            doc.load(path)
+            n = doc.pageCount()
+            if n == 0:
+                return json.dumps({"type": "unsupported", "content": "Cannot open PDF."})
+            idx = max(0, min(page, n - 1))
+            page_size = doc.pagePointSize(idx)
+            scale = 1.5
+            w = max(1, int(page_size.width() * scale))
+            h = max(1, int(page_size.height() * scale))
+            img = doc.render(idx, QSize(w, h))
+            doc.close()
+            from PyQt6.QtGui import QColor, QImage, QPainter
+            white = QImage(img.size(), QImage.Format.Format_RGB32)
+            white.fill(QColor("white"))
+            p = QPainter(white)
+            p.drawImage(0, 0, img)
+            p.end()
+            img = white
+            ba = QByteArray()
+            buf = QBuffer(ba)
+            buf.open(QIODevice.OpenModeFlag.WriteOnly)
+            img.save(buf, "PNG")
+            buf.close()
+            data = base64.b64encode(bytes(ba)).decode()
+            return json.dumps({
+                "type":       "pdf",
+                "content":    f"data:image/png;base64,{data}",
+                "page_count": n,
+                "page":       idx,
+                "label":      f"Page {idx + 1} of {n}",
+            })
+        except Exception as exc:
+            return json.dumps({"type": "unsupported", "content": f"Cannot preview PDF: {exc}"})
+
+    def _load_pptx_xml_sync(self, path: str, page: int) -> str:
+        """Parse a .pptx file with stdlib XML and return slide preview JSON. Off main thread."""
+        try:
+            import re as _re2
+            import xml.etree.ElementTree as _ET
+            import zipfile as _zf
+
+            if not _zf.is_zipfile(path):
+                raise ValueError(".ppt legacy binary format is not supported; save as .pptx first")
+            _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+            with _zf.ZipFile(path) as _z:
+                _slides = sorted(
+                    (s for s in _z.namelist() if _re2.match(r"ppt/slides/slide\d+\.xml$", s)),
+                    key=lambda s: int(_re2.search(r"\d+", s.split("/")[-1]).group()),
+                )
+                n = len(_slides)
+                if n == 0:
+                    return json.dumps({"type": "unsupported", "content": "No slides found in file."})
+                idx = max(0, min(page, n - 1))
+                _root = _ET.fromstring(_z.read(_slides[idx]))
+            parts: list[str] = []
+            title_text = ""
+            for _para in _root.iter(f"{{{_A}}}p"):
+                _pPr = _para.find(f"{{{_A}}}pPr")
+                _lvl = int(_pPr.get("lvl", 0)) if _pPr is not None else 0
+                _line = "".join(t.text or "" for t in _para.iter(f"{{{_A}}}t")).strip()
+                if not _line:
+                    continue
+                if not title_text and _lvl == 0:
+                    title_text = _line
+                _tag = "h2" if _lvl == 0 and not parts else "p"
+                _style = f"margin-left:{_lvl * 16}px"
+                parts.append(f'<{_tag} class="sl-text sl-l{_lvl}" style="{_style}">{html.escape(_line)}</{_tag}>')
+            return json.dumps({
+                "type":       "slide",
+                "content":    "\n".join(parts) or '<p class="sl-empty">Empty slide</p>',
+                "page_count": n,
+                "page":       idx,
+                "label":      f"Slide {idx + 1}/{n}: {title_text}" if title_text else f"Slide {idx + 1}/{n}",
+            })
+        except Exception as _exc:
+            return json.dumps({"type": "unsupported", "content": f"Cannot preview this presentation: {_exc}"})
+
+    def _load_xlsx_sync(self, path: str, page: int) -> str:
+        """Parse a .xlsx/.xlsm file and return sheet preview JSON. Off main thread."""
+        try:
+            import xml.etree.ElementTree as _ET
+            import zipfile as _zf
+
+            _SS  = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            _REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+            def _col_idx(ref: str) -> int:
+                col = "".join(c for c in ref if c.isalpha())
+                r = 0
+                for ch in col.upper():
+                    r = r * 26 + (ord(ch) - 64)
+                return r - 1
+
+            with _zf.ZipFile(path) as _z:
+                _names = _z.namelist()
+                _wb    = _ET.fromstring(_z.read("xl/workbook.xml"))
+                _sels  = _wb.findall(f".//{{{_SS}}}sheet")
+                _sheet_names = [s.get("name", f"Sheet{i+1}") for i, s in enumerate(_sels)]
+                _rids        = [s.get(f"{{{_REL}}}id") for s in _sels]
+                n   = len(_sheet_names)
+                idx = max(0, min(page, n - 1))
+                _rels    = _ET.fromstring(_z.read("xl/_rels/workbook.xml.rels"))
+                _rid_map = {r.get("Id"): r.get("Target") for r in _rels}
+                _target  = _rid_map.get(_rids[idx], f"worksheets/sheet{idx + 1}.xml")
+                _sheet_path = "xl/" + _target.lstrip("/")
+                _sst: list[str] = []
+                if "xl/sharedStrings.xml" in _names:
+                    for _si in _ET.fromstring(_z.read("xl/sharedStrings.xml")).findall(f"{{{_SS}}}si"):
+                        _sst.append("".join(e.text or "" for e in _si.iter(f"{{{_SS}}}t")))
+                _ws   = _ET.fromstring(_z.read(_sheet_path))
+                rows: list[list] = []
+                for _row_el in _ws.findall(f".//{{{_SS}}}row"):
+                    if len(rows) >= 200:
+                        break
+                    _cs = _row_el.findall(f"{{{_SS}}}c")
+                    if not _cs:
+                        continue
+                    _max_c = max(_col_idx(_c.get("r", "A")) for _c in _cs) + 1
+                    _row: list = [None] * _max_c
+                    for _c in _cs:
+                        _ci  = _col_idx(_c.get("r", "A"))
+                        _t   = _c.get("t", "")
+                        _v_e = _c.find(f"{{{_SS}}}v")
+                        _v   = _v_e.text if _v_e is not None else None
+                        if _t == "s" and _v is not None:
+                            _v = _sst[int(_v)] if int(_v) < len(_sst) else ""
+                        elif _t == "b":
+                            _v = "TRUE" if _v == "1" else "FALSE"
+                        if _ci < _max_c:
+                            _row[_ci] = _v
+                    rows.append(_row)
+
+            def _table_html(rows: list) -> str:
+                if not rows:
+                    return '<p class="sl-empty">Empty sheet</p>'
+                head = rows[0]
+                h = '<div class="sheet-wrap"><table class="sheet-table"><thead><tr>'
+                for cell in head:
+                    h += f"<th>{'&nbsp;' if cell is None else html.escape(str(cell))}</th>"
+                h += "</tr></thead><tbody>"
+                for row in rows[1:]:
+                    h += "<tr>"
+                    for cell in row:
+                        h += f"<td>{'&nbsp;' if cell is None else html.escape(str(cell))}</td>"
+                    h += "</tr>"
+                h += "</tbody></table></div>"
+                return h
+
+            return json.dumps({
+                "type":       "sheet",
+                "content":    _table_html(rows),
+                "page_count": n,
+                "page":       idx,
+                "label":      f"{_sheet_names[idx]} ({idx + 1}/{n})",
+            })
+        except Exception as _exc:
+            return json.dumps({"type": "unsupported", "content": f"Cannot preview this spreadsheet: {_exc}"})
+
+    def _load_docx_sync(self, path: str) -> str:
+        """Parse a .docx file and return document preview JSON. Off main thread."""
+        try:
+            import xml.etree.ElementTree as _ET
+            import zipfile as _zf
+
+            _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            with _zf.ZipFile(path) as _z:
+                _doc = _ET.fromstring(_z.read("word/document.xml"))
+            blocks: list[str] = []
+
+            _HEADING_MAP = [
+                ("heading1", "h1"), ("heading2", "h2"), ("heading3", "h3"), ("heading4", "h4"),
+                ("title", "h1"), ("subtitle", "h2"),
+            ]
+
+            _body = _doc.find(f"{{{_W}}}body") or _doc
+            for _child in _body:
+                _local = _child.tag.split("}")[-1] if "}" in _child.tag else _child.tag
+                if _local == "p":
+                    _text = "".join(t.text or "" for t in _child.iter(f"{{{_W}}}t")).strip()
+                    if not _text:
+                        continue
+                    _pPr = _child.find(f"{{{_W}}}pPr")
+                    _sid = ""
+                    if _pPr is not None:
+                        _ps = _pPr.find(f"{{{_W}}}pStyle")
+                        if _ps is not None:
+                            _sid = (_ps.get(f"{{{_W}}}val") or "").lower()
+                    _html_tag = "p"
+                    for _key, _htag in _HEADING_MAP:
+                        if _sid.startswith(_key):
+                            _html_tag = _htag
+                            break
+                    blocks.append(f"<{_html_tag}>{html.escape(_text)}</{_html_tag}>")
+                elif _local == "tbl":
+                    _rows_html: list[str] = []
+                    for _tr in _child.findall(f".//{{{_W}}}tr"):
+                        _cells = [
+                            html.escape("".join(t.text or "" for t in _tc.iter(f"{{{_W}}}t")).strip())
+                            for _tc in _tr.findall(f"{{{_W}}}tc")
+                        ]
+                        _rows_html.append("<tr>" + "".join(f"<td>{c}</td>" for c in _cells) + "</tr>")
+                    if _rows_html:
+                        blocks.append(
+                            '<div class="sheet-wrap"><table class="sheet-table"><tbody>'
+                            + "".join(_rows_html)
+                            + "</tbody></table></div>"
+                        )
+
+            if not blocks:
+                blocks.append('<p class="sl-empty">Empty document</p>')
+
+            return json.dumps({
+                "type": "docx",
+                "content": "\n".join(blocks),
+                "page_count": 1,
+                "page": 0,
+                "label": "Word document",
+            })
+        except Exception as _exc:
+            return json.dumps({"type": "unsupported", "content": f"Cannot preview this document: {_exc}"})
+
+    # ── Async preview dispatch ────────────────────────────────────────────────
+
+    def _async_preview(self, path: str, page: int, loader_fn, loading_msg: str = "Loading…") -> str:
+        """Generic async preview helper using the existing op-queue pattern."""
+        abs_path = os.path.abspath(path)
+        async_key = f"{abs_path}|{page}"
+
+        if async_key in self._preview_cache:
+            return self._preview_cache[async_key]
+        if async_key in self._preview_in_flight:
+            return json.dumps({"type": "loading", "key": async_key, "content": loading_msg})
+
+        self._preview_in_flight.add(async_key)
+
+        def _run(_key=async_key):
+            result = loader_fn()
+            # Inject the key so the JS side can match the event
+            try:
+                d = json.loads(result)
+                d["key"] = _key
+                result = json.dumps(d)
+            except Exception:
+                pass
+            self._op_emit_queue.put(("preview", _key, result))
+
+        threading.Thread(target=_run, daemon=True).start()
+        return json.dumps({"type": "loading", "key": async_key, "content": loading_msg})
+
     @pyqtSlot(str, result=str)
     def get_preview(self, path: str) -> str:
-        """Return JSON {type, content, ...} for the preview pane (first page/slide/sheet)."""
-        if not os.path.exists(path) or os.path.isdir(path):
-            return json.dumps({"type": "unsupported", "content": ""})
+        """Return JSON {type, content, ...} for the preview pane (first page/slide/sheet).
 
-        ext = os.path.splitext(path)[1].lower()
+        Always returns immediately — heavy work runs in a background thread and
+        the result is delivered via the preview_ready signal / xex:preview_ready event.
+        """
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
         TEXT_EXTS  = {
             ".txt", ".md", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".yaml",
@@ -953,26 +1233,30 @@ class XExplorerBridge(QObject):
         OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
         VISIO_EXTS  = {".vsd", ".vsdx", ".vsdm"}
 
-        # Delegate paginated types to get_preview_page(path, 0)
+        ext = os.path.splitext(path)[1].lower()
+
+        # Paginated types go through get_preview_page which is already async
         if ext in PDF_EXTS or ext in OFFICE_EXTS or ext in VISIO_EXTS:
             return self.get_preview_page(path, 0)
 
-        try:
-            size = os.path.getsize(path)
-            if ext in IMAGE_EXTS:
-                if size > 8 * 1024 * 1024:  # 8 MB cap
-                    return json.dumps({"type": "unsupported", "content": "Image too large to preview."})
-                with open(path, "rb") as f:
-                    data = base64.b64encode(f.read()).decode()
-                mime = {".svg": "image/svg+xml", ".gif": "image/gif"}.get(ext, "image/png")
-                return json.dumps({"type": "image", "content": f"data:{mime};base64,{data}", "ext": ext})
+        if ext in IMAGE_EXTS:
+            return self._async_preview(path, 0,
+                lambda: self._load_image_sync(path, ext), "Loading image…")
+
+        # For text files we need to peek at the size first — but we must not
+        # block the main thread, so we do that check inside the worker too.
+        def _text_or_unsupported():
+            try:
+                size = os.path.getsize(path)
+            except OSError as e:
+                return json.dumps({"type": "error", "content": str(e)})
             if ext in TEXT_EXTS or size < 256 * 1024:
-                with open(path, encoding="utf-8", errors="replace") as f:
-                    content = f.read(64 * 1024)
-                return json.dumps({"type": "text", "content": content, "ext": ext.lstrip(".")})
-        except Exception as e:
-            return json.dumps({"type": "error", "content": str(e)})
-        return json.dumps({"type": "unsupported", "content": ""})
+                return self._load_text_sync(path, ext)
+            return json.dumps({"type": "unsupported", "content": ""})
+
+        # Quick existence check (cheap, cached by OS on local drives; skipped
+        # implicitly for network paths since the worker handles errors).
+        return self._async_preview(path, 0, _text_or_unsupported, "Loading…")
 
     @pyqtSlot(str, result=bool)
     def can_preview(self, path: str) -> bool:
@@ -1014,46 +1298,11 @@ class XExplorerBridge(QObject):
         try:
             # ── PDF ──────────────────────────────────────────────────────────
             if ext == ".pdf":
-                try:
-                    from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QSize
-                    from PyQt6.QtPdf import QPdfDocument
-
-                    doc = QPdfDocument(None)
-                    doc.load(path)
-                    n = doc.pageCount()
-                    if n == 0:
-                        return json.dumps({"type": "unsupported", "content": "Cannot open PDF."})
-                    idx = max(0, min(page, n - 1))
-                    page_size = doc.pagePointSize(idx)
-                    scale = 1.5
-                    w = max(1, int(page_size.width() * scale))
-                    h = max(1, int(page_size.height() * scale))
-                    img = doc.render(idx, QSize(w, h))
-                    doc.close()
-                    # QPdfDocument renders with transparent bg — composite onto white
-                    # so dark-mode doesn't swallow black text.
-                    from PyQt6.QtGui import QColor, QImage, QPainter
-                    white = QImage(img.size(), QImage.Format.Format_RGB32)
-                    white.fill(QColor("white"))
-                    p = QPainter(white)
-                    p.drawImage(0, 0, img)
-                    p.end()
-                    img = white
-                    ba = QByteArray()
-                    buf = QBuffer(ba)
-                    buf.open(QIODevice.OpenModeFlag.WriteOnly)
-                    img.save(buf, "PNG")
-                    buf.close()
-                    data = base64.b64encode(bytes(ba)).decode()
-                    return json.dumps({
-                        "type":       "pdf",
-                        "content":    f"data:image/png;base64,{data}",
-                        "page_count": n,
-                        "page":       idx,
-                        "label":      f"Page {idx + 1} of {n}",
-                    })
-                except Exception as _exc:
-                    return json.dumps({"type": "unsupported", "content": f"Cannot preview PDF: {_exc}"})
+                return self._async_preview(
+                    path, page,
+                    lambda: self._load_pdf_sync(path, page),
+                    "Rendering PDF…",
+                )
 
             # ── PowerPoint ───────────────────────────────────────────────────
             if ext in {".pptx", ".ppt"}:
@@ -1164,190 +1413,18 @@ class XExplorerBridge(QObject):
                             "content": "Rendering slide…",
                         })
 
-                try:
-                    import re as _re2
-                    import xml.etree.ElementTree as _ET
-                    import zipfile as _zf
-
-                    if not _zf.is_zipfile(path):
-                        raise ValueError(".ppt legacy binary format is not supported; save as .pptx first")
-                    _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
-                    with _zf.ZipFile(path) as _z:
-                        _slides = sorted(
-                            (s for s in _z.namelist() if _re2.match(r"ppt/slides/slide\d+\.xml$", s)),
-                            key=lambda s: int(_re2.search(r"\d+", s.split("/")[-1]).group()),
-                        )
-                        n = len(_slides)
-                        if n == 0:
-                            return json.dumps({"type": "unsupported", "content": "No slides found in file."})
-                        idx = max(0, min(page, n - 1))
-                        _root = _ET.fromstring(_z.read(_slides[idx]))
-                    parts: list[str] = []
-                    title_text = ""
-                    for _para in _root.iter(f"{{{_A}}}p"):
-                        _pPr = _para.find(f"{{{_A}}}pPr")
-                        _lvl = int(_pPr.get("lvl", 0)) if _pPr is not None else 0
-                        _line = "".join(t.text or "" for t in _para.iter(f"{{{_A}}}t")).strip()
-                        if not _line:
-                            continue
-                        if not title_text and _lvl == 0:
-                            title_text = _line
-                        _tag = "h2" if _lvl == 0 and not parts else "p"
-                        _style = f"margin-left:{_lvl * 16}px"
-                        parts.append(f'<{_tag} class="sl-text sl-l{_lvl}" style="{_style}">{html.escape(_line)}</{_tag}>')
-                    return json.dumps({
-                        "type":       "slide",
-                        "content":    "\n".join(parts) or '<p class="sl-empty">Empty slide</p>',
-                        "page_count": n,
-                        "page":       idx,
-                        "label":      f"Slide {idx + 1}/{n}: {title_text}" if title_text else f"Slide {idx + 1}/{n}",
-                    })
-                except Exception as _exc:
-                    return json.dumps({"type": "unsupported", "content": f"Cannot preview this presentation: {_exc}"})
+                return self._async_preview(path, page,
+                    lambda: self._load_pptx_xml_sync(path, page), "Loading presentation…")
 
             # ── Excel ────────────────────────────────────────────────────────
             if ext in {".xlsx", ".xls", ".xlsm"}:
-                try:
-                    import xml.etree.ElementTree as _ET
-                    import zipfile as _zf
-
-                    _SS  = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-                    _REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-
-                    def _col_idx(ref: str) -> int:
-                        col = "".join(c for c in ref if c.isalpha())
-                        r = 0
-                        for ch in col.upper():
-                            r = r * 26 + (ord(ch) - 64)
-                        return r - 1
-
-                    with _zf.ZipFile(path) as _z:
-                        _names = _z.namelist()
-                        _wb    = _ET.fromstring(_z.read("xl/workbook.xml"))
-                        _sels  = _wb.findall(f".//{{{_SS}}}sheet")
-                        _sheet_names = [s.get("name", f"Sheet{i+1}") for i, s in enumerate(_sels)]
-                        _rids        = [s.get(f"{{{_REL}}}id") for s in _sels]
-                        n   = len(_sheet_names)
-                        idx = max(0, min(page, n - 1))
-                        _rels    = _ET.fromstring(_z.read("xl/_rels/workbook.xml.rels"))
-                        _rid_map = {r.get("Id"): r.get("Target") for r in _rels}
-                        _target  = _rid_map.get(_rids[idx], f"worksheets/sheet{idx + 1}.xml")
-                        _sheet_path = "xl/" + _target.lstrip("/")
-                        _sst: list[str] = []
-                        if "xl/sharedStrings.xml" in _names:
-                            for _si in _ET.fromstring(_z.read("xl/sharedStrings.xml")).findall(f"{{{_SS}}}si"):
-                                _sst.append("".join(e.text or "" for e in _si.iter(f"{{{_SS}}}t")))
-                        _ws   = _ET.fromstring(_z.read(_sheet_path))
-                        rows: list[list] = []
-                        for _row_el in _ws.findall(f".//{{{_SS}}}row"):
-                            if len(rows) >= 200:
-                                break
-                            _cs = _row_el.findall(f"{{{_SS}}}c")
-                            if not _cs:
-                                continue
-                            _max_c = max(_col_idx(_c.get("r", "A")) for _c in _cs) + 1
-                            _row: list = [None] * _max_c
-                            for _c in _cs:
-                                _ci  = _col_idx(_c.get("r", "A"))
-                                _t   = _c.get("t", "")
-                                _v_e = _c.find(f"{{{_SS}}}v")
-                                _v   = _v_e.text if _v_e is not None else None
-                                if _t == "s" and _v is not None:
-                                    _v = _sst[int(_v)] if int(_v) < len(_sst) else ""
-                                elif _t == "b":
-                                    _v = "TRUE" if _v == "1" else "FALSE"
-                                if _ci < _max_c:
-                                    _row[_ci] = _v
-                            rows.append(_row)
-
-                    def _table_html(rows: list) -> str:
-                        if not rows:
-                            return '<p class="sl-empty">Empty sheet</p>'
-                        head = rows[0]
-                        h = '<div class="sheet-wrap"><table class="sheet-table"><thead><tr>'
-                        for cell in head:
-                            h += f"<th>{'&nbsp;' if cell is None else html.escape(str(cell))}</th>"
-                        h += "</tr></thead><tbody>"
-                        for row in rows[1:]:
-                            h += "<tr>"
-                            for cell in row:
-                                h += f"<td>{'&nbsp;' if cell is None else html.escape(str(cell))}</td>"
-                            h += "</tr>"
-                        h += "</tbody></table></div>"
-                        return h
-
-                    return json.dumps({
-                        "type":       "sheet",
-                        "content":    _table_html(rows),
-                        "page_count": n,
-                        "page":       idx,
-                        "label":      f"{_sheet_names[idx]} ({idx + 1}/{n})",
-                    })
-                except Exception as _exc:
-                    return json.dumps({"type": "unsupported", "content": f"Cannot preview this spreadsheet: {_exc}"})
+                return self._async_preview(path, page,
+                    lambda: self._load_xlsx_sync(path, page), "Loading spreadsheet…")
 
             # ── Word (DOCX) ───────────────────────────────────────────────────
             if ext == ".docx":
-                try:
-                    import xml.etree.ElementTree as _ET
-                    import zipfile as _zf
-
-                    _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-                    with _zf.ZipFile(path) as _z:
-                        _doc = _ET.fromstring(_z.read("word/document.xml"))
-                    blocks: list[str] = []
-
-                    _HEADING_MAP = [
-                        ("heading1", "h1"), ("heading2", "h2"), ("heading3", "h3"), ("heading4", "h4"),
-                        ("title", "h1"), ("subtitle", "h2"),
-                    ]
-
-                    _body = _doc.find(f"{{{_W}}}body") or _doc
-                    for _child in _body:
-                        _local = _child.tag.split("}")[-1] if "}" in _child.tag else _child.tag
-                        if _local == "p":
-                            _text = "".join(t.text or "" for t in _child.iter(f"{{{_W}}}t")).strip()
-                            if not _text:
-                                continue
-                            _pPr = _child.find(f"{{{_W}}}pPr")
-                            _sid = ""
-                            if _pPr is not None:
-                                _ps = _pPr.find(f"{{{_W}}}pStyle")
-                                if _ps is not None:
-                                    _sid = (_ps.get(f"{{{_W}}}val") or "").lower()
-                            _html_tag = "p"
-                            for _key, _htag in _HEADING_MAP:
-                                if _sid.startswith(_key):
-                                    _html_tag = _htag
-                                    break
-                            blocks.append(f"<{_html_tag}>{html.escape(_text)}</{_html_tag}>")
-                        elif _local == "tbl":
-                            _rows_html: list[str] = []
-                            for _tr in _child.findall(f".//{{{_W}}}tr"):
-                                _cells = [
-                                    html.escape("".join(t.text or "" for t in _tc.iter(f"{{{_W}}}t")).strip())
-                                    for _tc in _tr.findall(f"{{{_W}}}tc")
-                                ]
-                                _rows_html.append("<tr>" + "".join(f"<td>{c}</td>" for c in _cells) + "</tr>")
-                            if _rows_html:
-                                blocks.append(
-                                    '<div class="sheet-wrap"><table class="sheet-table"><tbody>'
-                                    + "".join(_rows_html)
-                                    + "</tbody></table></div>"
-                                )
-
-                    if not blocks:
-                        blocks.append('<p class="sl-empty">Empty document</p>')
-
-                    return json.dumps({
-                        "type": "docx",
-                        "content": "\n".join(blocks),
-                        "page_count": 1,
-                        "page": 0,
-                        "label": "Word document",
-                    })
-                except Exception as _exc:
-                    return json.dumps({"type": "unsupported", "content": f"Cannot preview this document: {_exc}"})
+                return self._async_preview(path, page,
+                    lambda: self._load_docx_sync(path), "Loading document…")
 
             # ── Visio ─────────────────────────────────────────────────────────
             if ext in {".vsd", ".vsdx", ".vsdm"}:
