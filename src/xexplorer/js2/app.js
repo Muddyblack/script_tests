@@ -312,6 +312,9 @@ const App = () => {
         browseNavRef.current = { tabId, path };
         if (!isLiveRefresh) {
             patchTab(tabId, { loading: true, selected: new Set() });
+        } else {
+            // Live refresh: show subtle loading indicator without clearing selection
+            patchTab(tabId, { loading: true });
         }
         getBridge(async br => {
             const raw = await br.list_folder(path);
