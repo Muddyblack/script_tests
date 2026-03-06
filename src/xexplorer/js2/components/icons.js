@@ -3,7 +3,7 @@ const _iconCache = {}; // cacheKey → data-url | '' | 'pending'
 const _PER_FILE_EXTS = new Set(['exe', 'lnk', 'url']);
 
 function _iconCacheKey(name, path, is_dir) {
-    if (is_dir) return '__dir__';
+    if (is_dir) return path;
     const ext = (name || '').split('.').pop().toLowerCase() || '__file__';
     return _PER_FILE_EXTS.has(ext) ? path : ext;
 }

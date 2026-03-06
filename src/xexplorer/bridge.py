@@ -1145,9 +1145,7 @@ class XExplorerBridge(QObject):
         # Per-file cache key for exe/lnk/url (each has a unique icon),
         # extension-based key for everything else (same as Nexus logic).
         is_dir = os.path.isdir(path)
-        cache_key = (
-            "__DIR__" if is_dir else (path if ext in (".exe", ".lnk", ".url") else ext)
-        )
+        cache_key = path if (is_dir or ext in (".exe", ".lnk", ".url")) else ext
         if cache_key in self._icon_cache:
             return self._icon_cache[cache_key]
         try:

@@ -58,24 +58,32 @@ const Modal = ({ width = 380, onClose, children }) => (
 );
 
 // ── Drag-resize handle ────────────────────────────────────────────────────────
-const Resizer = ({ onDrag }) => {
+const Resizer = ({ onDrag, dir = 'x' }) => {
     const latest = useRef(onDrag);
     useEffect(() => { latest.current = onDrag; }, [onDrag]);
 
     const handleMouseDown = useCallback(e => {
         e.preventDefault();
-        let lastX = e.clientX;
+        let last = dir === 'x' ? e.clientX : e.clientY;
         const handle = e.currentTarget;
         handle.classList.add('dragging');
-        const onMove = ev => { const dx = ev.clientX - lastX; lastX = ev.clientX; latest.current(dx); };
+
+        const onMove = ev => {
+            const current = dir === 'x' ? ev.clientX : ev.clientY;
+            const delta = current - last;
+            last = current;
+            latest.current(delta);
+        };
+
         const onUp = () => {
             handle.classList.remove('dragging');
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
         };
+
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
-    }, []);
+    }, [dir]);
 
-    return <div className="resize-handle" onMouseDown={handleMouseDown} />;
+    return <div className={`resize-handle resizer-${dir}`} onMouseDown={handleMouseDown} />;
 };

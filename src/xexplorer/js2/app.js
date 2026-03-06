@@ -14,6 +14,7 @@ const App = () => {
 
     // Panel widths (resizable)
     const [sidebarWidth, setSidebarWidth] = useState(220);
+    const [sidebarTopHeight, setSidebarTopHeight] = useState(260); // top folders height
     const [previewWidth, setPreviewWidth] = useState(350);
 
     // Context menu
@@ -978,8 +979,10 @@ const App = () => {
                     onFavMove={handleFavMove}
                     onFavShowInExplorer={handleFavShowInExplorer}
                     onFavNewTab={handleFavNewTab}
+                    topHeight={sidebarTopHeight}
+                    onResize={dy => setSidebarTopHeight(h => Math.max(100, Math.min(650, h + dy)))}
                 />
-                <Resizer onDrag={dx => setSidebarWidth(w => Math.max(150, Math.min(520, w + dx)))} />
+                <Resizer dir="x" onDrag={dx => setSidebarWidth(w => Math.max(150, Math.min(520, w + dx)))} />
                 <div className="main-panel"
                     onDragOver={activeTab.browsePath ? e => e.preventDefault() : undefined}
                     onDrop={activeTab.browsePath ? handleDropOnCurrentDir : undefined}>
@@ -1039,7 +1042,7 @@ const App = () => {
                 </div>{/* main-panel */}
                 {hasPreview && (
                     <>
-                        <Resizer onDrag={dx => setPreviewWidth(w => Math.max(200, Math.min(700, w - dx)))} />
+                        <Resizer dir="x" onDrag={dx => setPreviewWidth(w => Math.max(200, Math.min(700, w - dx)))} />
                         <PreviewPane file={activeTab.previewFile} onClose={() => patchActive({ previewFile: null })} />
                     </>
                 )}

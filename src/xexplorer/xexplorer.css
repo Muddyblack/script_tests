@@ -991,16 +991,19 @@ button {
 /* ── Resize handles ───────────────────────────────────────────────────────── */
 .resize-handle {
     flex-shrink: 0;
-    width: 5px;
-    cursor: col-resize;
-    background: transparent;
     position: relative;
     user-select: none;
     z-index: 20;
     transition: background .15s;
+    background: transparent;
 }
 
-.resize-handle::after {
+.resizer-x {
+    width: 5px;
+    cursor: col-resize;
+}
+
+.resizer-x::after {
     content: '';
     position: absolute;
     top: 20%;
@@ -1013,9 +1016,36 @@ button {
     transition: background .15s;
 }
 
+.resizer-y {
+    height: 6px;
+    cursor: row-resize;
+    width: 100%;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-base);
+}
+
+.resizer-y::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 24px;
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+}
+
 .resize-handle:hover::after,
 .resize-handle.dragging::after {
     background: var(--accent);
+}
+
+.resizer-y:hover,
+.resizer-y.dragging {
+    background: var(--bg-elevated);
+    border-color: var(--accent);
 }
 
 /* ── Preview page navigation ─────────────────────────────────────────────── */

@@ -107,7 +107,8 @@ const Breadcrumb = ({ path, onBack, onHome, onNavigate }) => {
 const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder,
     onRemoveFolder, onIndexFolder, onToggleIgnore, onRemoveIgnore, onAddIgnore,
     onScanDrives, onBrowseFolder, onScopeOnly,
-    favorites, onFavClick, onFavRemove, onFavShowInExplorer, onFavNewTab, onFavMove }) => {
+    favorites, onFavClick, onFavRemove, onFavShowInExplorer, onFavNewTab, onFavMove,
+    topHeight, onResize }) => {
     const [bottomTab, setBottomTab] = useState('favs'); // 'favs' | 'ignore'
     const [ignoreQ, setIgnoreQ] = useState('');
     const filteredIgnore = !ignoreQ.trim() ? ignore
@@ -120,7 +121,7 @@ const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder
         <aside className="sidebar">
             {/* Indexed folders */}
             <div className="sidebar-section">Indexed Folders</div>
-            <div style={{ flex: '0 0 auto', maxHeight: 220, overflowY: 'auto', padding: '0 6px 4px' }}>
+            <div style={{ flex: '0 0 auto', maxHeight: topHeight, height: topHeight, overflowY: 'auto', padding: '0 6px 4px' }}>
                 {folders.length === 0
                     ? <div style={{ padding: '10px 6px', fontSize: 11.5, color: 'var(--text-disabled)' }}>No folders yet</div>
                     : folders.map(f => (
@@ -153,7 +154,7 @@ const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder
                 <button className="sidebar-btn secondary" onClick={onScanDrives}>⟳ Drives</button>
             </div>
 
-            <div className="sidebar-divider" />
+            <Resizer dir="y" onDrag={onResize} />
 
             {/* ── Bottom tabs: Favorites / Ignore ── */}
             <div className="sb-tab-bar">
