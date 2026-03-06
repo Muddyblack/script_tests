@@ -287,9 +287,9 @@ const App = () => {
         if (activeTab.browsePath === null) return;
         const tabId = activeTabId;
         const path = activeTab.browsePath;
+        let isCancelled = false;
+
         // Determine whether this is a real navigation or a background live-refresh.
-        // Only real navigations should show a loading spinner and clear the selection;
-        // live refreshes silently swap the result list in-place so there is no flicker.
         const isLiveRefresh = (
             browseNavRef.current.tabId === tabId &&
             browseNavRef.current.path === path
@@ -300,12 +300,35 @@ const App = () => {
         }
         getBridge(async br => {
             const raw = await br.list_folder(path);
+            if (isCancelled) return;
             const list = JSON.parse(raw);
-            patchTab(tabId, { results: list, loading: false });
+
+            // Re-bind old selection using case-insensitive path match
+            // to prevent network drives dropping visual selection if casing changes
+            if (isLiveRefresh && activeTab.selected && activeTab.selected.size > 0) {
+                const oldSelLower = new Set([...activeTab.selected].map(x => x.toLowerCase()));
+                const newSel = new Set();
+                list.forEach(f => {
+                    if (oldSelLower.has(f.path.toLowerCase())) {
+                        newSel.add(f.path);
+                    }
+                });
+                // Ensure selection visually persists identically
+                if (newSel.size > 0) {
+                    patchTab(tabId, { results: list, loading: false, selected: newSel });
+                } else {
+                    patchTab(tabId, { results: list, loading: false });
+                }
+            } else {
+                patchTab(tabId, { results: list, loading: false });
+            }
+
             if (!isLiveRefresh) setStatusMsg(`📁 ${list.length} items`);
             // Tell the bridge which folder to poll for live updates
             if (br.set_active_browse_path) br.set_active_browse_path(path);
         });
+
+        return () => { isCancelled = true; };
     }, [activeTabId, activeTab.browsePath, liveRefreshTick]);
 
     async function handleNavUp() {
