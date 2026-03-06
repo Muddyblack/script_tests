@@ -6,7 +6,7 @@ import sys
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile, QWebEnginePage
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
@@ -55,7 +55,7 @@ class xexplorer(QMainWindow):
         page = QWebEnginePage(profile, self)
         self.view = QWebEngineView()
         self.view.setPage(page)
-        
+
         s = self.view.settings()
         for attr in ("DeveloperExtrasEnabled", "LocalContentCanAccessFileUrls",
                      "LocalContentCanAccessRemoteUrls"):

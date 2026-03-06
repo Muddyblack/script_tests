@@ -256,16 +256,26 @@ const App = () => {
             } else if (br.get_tabs) {
                 try {
                     const rawTabs = await br.get_tabs();
+                    console.log('[xexplorer] Loaded tabs:', rawTabs);
                     const state = JSON.parse(rawTabs);
                     if (state && state.tabs && state.tabs.length > 0) {
-                        const newTabs = state.tabs.map((t, i) => ({
-                            ...INIT_TAB(i + 1, t.path),
-                            title: t.title || (t.path ? t.path.split(/[/\\]/).filter(Boolean).pop() : 'New Tab')
-                        }));
+                        const newTabs = state.tabs.map((t, i) => {
+                            const tab = INIT_TAB(i + 1, t.path);
+                            // Restore query if it was a search tab
+                            if (t.query) {
+                                tab.query = t.query;
+                                tab.browsePath = null;  // Search mode, not browse mode
+                            }
+                            tab.title = t.title || (t.path ? t.path.split(/[/\\]/).filter(Boolean).pop() : 'New Tab');
+                            return tab;
+                        });
                         tabIdRef.current = newTabs.length + 1;
                         setTabs(newTabs);
                         const activeIdx = Math.max(0, Math.min((state.activeIdx || 0), newTabs.length - 1));
                         setActiveTabId(newTabs[activeIdx].id);
+                        console.log('[xexplorer] Restored', newTabs.length, 'tabs');
+                    } else {
+                        console.log('[xexplorer] No tabs to restore');
                     }
                 } catch (e) {
                     console.error('Failed to load tabs', e);
@@ -274,14 +284,61 @@ const App = () => {
         });
     }, []);
 
+    // Debounced save - only save after 2 seconds of no changes
     useEffect(() => {
         const br = b.current;
         if (!br || !br.save_tabs) return;
-        const stateToSave = {
-            tabs: tabs.map(t => ({ path: t.browsePath, title: t.title })),
-            activeIdx: tabs.findIndex(t => t.id === activeTabId)
+        
+        const timer = setTimeout(() => {
+            // Filter out empty tabs (no path and no query)
+            const validTabs = tabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
+            
+            // If no valid tabs, don't save anything (will use default on next load)
+            if (validTabs.length === 0) {
+                console.log('[xexplorer] No valid tabs to save');
+                return;
+            }
+            
+            const stateToSave = {
+                tabs: validTabs.map(t => ({ 
+                    path: t.browsePath || null,
+                    query: t.query || '',
+                    title: t.title 
+                })),
+                activeIdx: Math.max(0, validTabs.findIndex(t => t.id === activeTabId))
+            };
+            console.log('[xexplorer] Saving tabs (debounced):', stateToSave);
+            br.save_tabs(JSON.stringify(stateToSave));
+        }, 2000);
+        
+        return () => clearTimeout(timer);
+    }, [tabs, activeTabId]);
+
+    // Also save immediately on window close
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            const br = b.current;
+            if (!br || !br.save_tabs) return;
+            
+            // Filter out empty tabs
+            const validTabs = tabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
+            
+            // If no valid tabs, don't save (will use default on next load)
+            if (validTabs.length === 0) return;
+            
+            const stateToSave = {
+                tabs: validTabs.map(t => ({ 
+                    path: t.browsePath || null,
+                    query: t.query || '',
+                    title: t.title 
+                })),
+                activeIdx: Math.max(0, validTabs.findIndex(t => t.id === activeTabId))
+            };
+            console.log('[xexplorer] Saving tabs on close:', stateToSave);
+            br.save_tabs(JSON.stringify(stateToSave));
         };
-        br.save_tabs(JSON.stringify(stateToSave));
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [tabs, activeTabId]);
 
     async function loadConfig(br) {
