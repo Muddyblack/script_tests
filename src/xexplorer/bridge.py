@@ -911,7 +911,7 @@ class XExplorerBridge(QObject):
             return "Name cannot be empty"
         try:
             path = os.path.join(parent_dir, name.strip())
-            with open(path, 'a'):
+            with open(path, "a"):
                 pass
             self.live_changed.emit()
             return ""

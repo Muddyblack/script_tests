@@ -17,20 +17,22 @@ import sqlite3
 import subprocess
 import time
 
+from PyQt6.QtCore import QObject, QTimer
+from PyQt6.QtWidgets import QApplication
+
 # Detect Wayland — on Wayland the compositor won't deliver clipboard events to
 # unfocused windows, so Qt's dataChanged / mimeData() return stale/empty data
 # when Nexus has no focused window.  wl-paste reads the Wayland clipboard
 # directly and bypasses this restriction.
 _WL_PASTE = shutil.which("wl-paste") if os.environ.get("WAYLAND_DISPLAY") else None
 
-from PyQt6.QtCore import QObject, QTimer
-from PyQt6.QtWidgets import QApplication
 
 try:
     from src.common.config import CLIPBOARD_DB as CLIP_DB
     from src.common.config import CLIPBOARD_SETTINGS_FILE
 except ImportError:
     import os as _os
+
     CLIP_DB = _os.path.join(_os.getenv("APPDATA", "."), "nexus_clipboard.db")
     CLIPBOARD_SETTINGS_FILE = _os.path.join(
         _os.getenv("APPDATA", "."), "nexus_clipboard.json"
@@ -38,6 +40,7 @@ except ImportError:
 
 DEFAULT_HISTORY_LIMIT = 50
 POLL_MS = 500
+
 
 # The user can tweak the history cap in this JSON file or via
 # `NEXUS_CLIPBOARD_HISTORY_LIMIT`.
@@ -275,7 +278,7 @@ class ClipboardWatcher(QObject):
                 raw = url.toString()
                 for prefix in ("file:///", "file://", "file:"):
                     if raw.lower().startswith(prefix):
-                        path = urllib.parse.unquote(raw[len(prefix):])
+                        path = urllib.parse.unquote(raw[len(prefix) :])
                         break
             if not path or not os.path.isfile(path):
                 continue
@@ -302,7 +305,8 @@ class ClipboardWatcher(QObject):
         try:
             result = subprocess.run(
                 [_WL_PASTE, "--no-newline", "--type", "text/plain"],
-                capture_output=True, timeout=0.4,
+                capture_output=True,
+                timeout=0.4,
             )
             if result.returncode != 0:
                 return
@@ -339,7 +343,9 @@ class ClipboardWatcher(QObject):
     def _save_text(self, content: str, h: str) -> None:
         row = self._conn.execute("SELECT id FROM clips WHERE hash=?", (h,)).fetchone()
         if row:
-            self._conn.execute("UPDATE clips SET ts=? WHERE id=?", (time.time(), row[0]))
+            self._conn.execute(
+                "UPDATE clips SET ts=? WHERE id=?", (time.time(), row[0])
+            )
         else:
             self._conn.execute(
                 "INSERT INTO clips (content, hash, pinned, ts, type) VALUES (?,?,?,?,?)",
@@ -351,7 +357,9 @@ class ClipboardWatcher(QObject):
     def _save_image(self, png_bytes: bytes, h: str) -> None:
         row = self._conn.execute("SELECT id FROM clips WHERE hash=?", (h,)).fetchone()
         if row:
-            self._conn.execute("UPDATE clips SET ts=? WHERE id=?", (time.time(), row[0]))
+            self._conn.execute(
+                "UPDATE clips SET ts=? WHERE id=?", (time.time(), row[0])
+            )
         else:
             self._conn.execute(
                 "INSERT INTO clips (content, hash, pinned, ts, type, image_data) VALUES (?,?,0,?,?,?)",

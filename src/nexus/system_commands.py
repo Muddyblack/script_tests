@@ -9,12 +9,12 @@ import webbrowser
 
 from PyQt6.QtCore import QTimer
 
+from src.nexus.monitor_overlay import start_monitor_selection
+
 from .utils import parse_chronos_input
 
 
-def _set_status(
-    nexus, text: str, color: str = "#a855f7", *, bold: bool = True
-) -> None:
+def _set_status(nexus, text: str, color: str = "#a855f7", *, bold: bool = True) -> None:
     """Update Nexus status label text and style consistently."""
     weight = "bold" if bold else "normal"
     nexus.status_lbl.setText(text)
@@ -81,7 +81,9 @@ def execute_system_toggle(nexus, cmd: str) -> None:
             WM_COMMAND = 0x0111
             TOGGLE_DESKTOP_ICONS = 0x7402
             progman = ctypes.windll.user32.FindWindowW("Progman", None)
-            ctypes.windll.user32.SendMessageW(progman, WM_COMMAND, TOGGLE_DESKTOP_ICONS, 0)
+            ctypes.windll.user32.SendMessageW(
+                progman, WM_COMMAND, TOGGLE_DESKTOP_ICONS, 0
+            )
             _set_status(nexus, "🔳 Desktop Icons Toggled")
 
         elif cmd == "toggle_mute":
@@ -116,6 +118,15 @@ def execute_system_toggle(nexus, cmd: str) -> None:
             _set_status(nexus, "🖥️ Desktop Toggled")
 
         # --- POWER CONTROLS ---
+        elif cmd == "cmd_monitor_dp":
+            start_monitor_selection(nexus, "dp")
+
+        elif cmd == "cmd_monitor_hdmi":
+            start_monitor_selection(nexus, "hdmi")
+
+        elif cmd == "cmd_monitor_dvi":
+            start_monitor_selection(nexus, "dvi")
+
         elif cmd == "cmd_lock":
             subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"])
             _set_status(nexus, "🔒 Workstation Locked")
@@ -224,9 +235,12 @@ def update_process_cache(nexus, force: bool = False) -> None:
     except Exception as e:
         print(f"Error in update_process_cache: {e}")
 
+
 def launch_xexplorer(nexus) -> None:
     """Launch the XExplorer HTML-based File Manager."""
-    _launch_python_module(nexus, "🧭 Launching X-Explorer...", "src.xexplorer.xexplorer")
+    _launch_python_module(
+        nexus, "🧭 Launching X-Explorer...", "src.xexplorer.xexplorer"
+    )
 
 
 def launch_regex_helper(nexus) -> None:
@@ -294,7 +308,9 @@ def launch_port_inspector(nexus) -> None:
 
 def launch_sqlite_viewer(nexus) -> None:
     """Launch the SQLite Viewer tool."""
-    _launch_python_module(nexus, "🛢️ Launching SQLite Viewer...", "src.sqlite_viewer.sqlite_viewer")
+    _launch_python_module(
+        nexus, "🛢️ Launching SQLite Viewer...", "src.sqlite_viewer.sqlite_viewer"
+    )
 
 
 def launch_hash_tool(nexus) -> None:
@@ -312,6 +328,7 @@ def launch_ghost_typist(nexus) -> None:
         "src.ghost_typist",
         env=env,
     )
+
 
 def log_to_chronos(nexus, text: str) -> None:
     """Inject an achievement into the Chronos Hub."""
