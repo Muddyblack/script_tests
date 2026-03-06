@@ -311,10 +311,10 @@ const App = () => {
         );
         browseNavRef.current = { tabId, path };
         if (!isLiveRefresh) {
-            patchTab(tabId, { loading: true, selected: new Set() });
+            patchTab(tabId, { loading: true, liveRefreshing: false, selected: new Set() });
         } else {
-            // Live refresh: show subtle loading indicator without clearing selection
-            patchTab(tabId, { loading: true });
+            // Live refresh: subtle background update without showing "Searching..."
+            patchTab(tabId, { loading: false, liveRefreshing: true });
         }
         getBridge(async br => {
             const raw = await br.list_folder(path);
@@ -333,12 +333,12 @@ const App = () => {
                 });
                 // Ensure selection visually persists identically
                 if (newSel.size > 0) {
-                    patchTab(tabId, { results: list, loading: false, selected: newSel });
+                    patchTab(tabId, { results: list, loading: false, liveRefreshing: false, selected: newSel });
                 } else {
-                    patchTab(tabId, { results: list, loading: false });
+                    patchTab(tabId, { results: list, loading: false, liveRefreshing: false });
                 }
             } else {
-                patchTab(tabId, { results: list, loading: false });
+                patchTab(tabId, { results: list, loading: false, liveRefreshing: false });
             }
 
             if (!isLiveRefresh) setStatusMsg(`📁 ${list.length} items`);
