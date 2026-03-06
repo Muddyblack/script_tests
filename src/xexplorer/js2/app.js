@@ -45,6 +45,14 @@ const App = () => {
     const tabIdRef = useRef(2);
     const [tabs, setTabs] = useState([INIT_TAB(1)]);
     const [activeTabId, setActiveTabId] = useState(1);
+    const tabsRef = useRef(tabs);  // Keep current tabs in ref for beforeunload
+    const activeTabIdRef = useRef(activeTabId);  // Keep current activeTabId in ref
+
+    // Update refs when state changes
+    useEffect(() => {
+        tabsRef.current = tabs;
+        activeTabIdRef.current = activeTabId;
+    }, [tabs, activeTabId]);
 
     const activeTab = useMemo(
         () => tabs.find(t => t.id === activeTabId) ?? tabs[0],
@@ -253,47 +261,45 @@ const App = () => {
                 setTabs(prev => prev.map((t, i) => i === 0
                     ? { ...t, browsePath: initPath, browseStack: [], title }
                     : t));
-            } else if (br.get_tabs) {
+            } else {
+                // Load tabs from localStorage (webprofile persists this automatically)
                 try {
-                    const rawTabs = await br.get_tabs();
-                    const state = JSON.parse(rawTabs);
-                    if (state && state.tabs && state.tabs.length > 0) {
-                        const newTabs = state.tabs.map((t, i) => {
-                            const tab = INIT_TAB(i + 1, t.path);
-                            // Restore query if it was a search tab
-                            if (t.query) {
-                                tab.query = t.query;
-                                tab.browsePath = null;  // Search mode, not browse mode
-                            }
-                            tab.title = t.title || (t.path ? t.path.split(/[/\\]/).filter(Boolean).pop() : 'New Tab');
-                            return tab;
-                        });
-                        tabIdRef.current = newTabs.length + 1;
-                        setTabs(newTabs);
-                        const activeIdx = Math.max(0, Math.min((state.activeIdx || 0), newTabs.length - 1));
-                        setActiveTabId(newTabs[activeIdx].id);
-                    } else {
-                        console.log('[xexplorer] No tabs to restore');
+                    const savedTabs = localStorage.getItem('xexplorer_tabs');
+                    if (savedTabs) {
+                        const state = JSON.parse(savedTabs);
+                        if (state && state.tabs && state.tabs.length > 0) {
+                            const newTabs = state.tabs.map((t, i) => {
+                                const tab = INIT_TAB(i + 1, t.path);
+                                // Restore query if it was a search tab
+                                if (t.query) {
+                                    tab.query = t.query;
+                                    tab.browsePath = null;  // Search mode, not browse mode
+                                }
+                                tab.title = t.title || (t.path ? t.path.split(/[/\\]/).filter(Boolean).pop() : 'New Tab');
+                                return tab;
+                            });
+                            tabIdRef.current = newTabs.length + 1;
+                            setTabs(newTabs);
+                            const activeIdx = Math.max(0, Math.min((state.activeIdx || 0), newTabs.length - 1));
+                            setActiveTabId(newTabs[activeIdx].id);
+                        }
                     }
                 } catch (e) {
-                    console.error('Failed to load tabs', e);
+                    console.error('Failed to load tabs from localStorage', e);
                 }
             }
         });
     }, []);
 
-    // Debounced save - only save after 2 seconds of no changes
+    // Debounced save to localStorage - only save after 2 seconds of no changes
     useEffect(() => {
-        const br = b.current;
-        if (!br || !br.save_tabs) return;
-        
         const timer = setTimeout(() => {
             // Filter out empty tabs (no path and no query)
             const validTabs = tabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
             
-            // If no valid tabs, don't save anything (will use default on next load)
+            // If no valid tabs, clear localStorage
             if (validTabs.length === 0) {
-                console.log('[xexplorer] No valid tabs to save');
+                localStorage.removeItem('xexplorer_tabs');
                 return;
             }
             
@@ -305,24 +311,27 @@ const App = () => {
                 })),
                 activeIdx: Math.max(0, validTabs.findIndex(t => t.id === activeTabId))
             };
-            console.log('[xexplorer] Saving tabs (debounced):', stateToSave);
-            br.save_tabs(JSON.stringify(stateToSave));
+            localStorage.setItem('xexplorer_tabs', JSON.stringify(stateToSave));
         }, 2000);
         
         return () => clearTimeout(timer);
     }, [tabs, activeTabId]);
 
-    // Also save immediately on window close
+    // Also save immediately to localStorage on window close
     useEffect(() => {
         const handleBeforeUnload = () => {
-            const br = b.current;
-            if (!br || !br.save_tabs) return;
+            // Use refs to get current state (not closure-captured state)
+            const currentTabs = tabsRef.current;
+            const currentActiveTabId = activeTabIdRef.current;
             
             // Filter out empty tabs
-            const validTabs = tabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
+            const validTabs = currentTabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
             
-            // If no valid tabs, don't save (will use default on next load)
-            if (validTabs.length === 0) return;
+            // If no valid tabs, clear localStorage
+            if (validTabs.length === 0) {
+                localStorage.removeItem('xexplorer_tabs');
+                return;
+            }
             
             const stateToSave = {
                 tabs: validTabs.map(t => ({ 
@@ -330,14 +339,13 @@ const App = () => {
                     query: t.query || '',
                     title: t.title 
                 })),
-                activeIdx: Math.max(0, validTabs.findIndex(t => t.id === activeTabId))
+                activeIdx: Math.max(0, validTabs.findIndex(t => t.id === currentActiveTabId))
             };
-            console.log('[xexplorer] Saving tabs on close:', stateToSave);
-            br.save_tabs(JSON.stringify(stateToSave));
+            localStorage.setItem('xexplorer_tabs', JSON.stringify(stateToSave));
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [tabs, activeTabId]);
+    }, []);  // Empty deps - handler uses refs, not closure
 
     async function loadConfig(br) {
         const raw = await br.get_config();

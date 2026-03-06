@@ -656,26 +656,6 @@ class XExplorerBridge(QObject):
             )
             conn.commit()
 
-    @pyqtSlot(result=str)
-    def get_tabs(self) -> str:
-        """Return JSON list of tabs or empty array."""
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT value FROM settings WHERE key='saved_tabs'")
-            res = c.fetchone()
-            if res:
-                return res[0]
-        return "[]"
-
-    @pyqtSlot(str)
-    def save_tabs(self, json_str: str) -> None:
-        """Persist the open tabs."""
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute(
-                "INSERT OR REPLACE INTO settings VALUES(?,?)", ("saved_tabs", json_str)
-            )
-            conn.commit()
 
     # ── Search ────────────────────────────────────────────────────────────────
 

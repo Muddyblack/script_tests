@@ -91,8 +91,31 @@ class xexplorer(QMainWindow):
         _open_windows.append(win)
 
     def closeEvent(self, event):  # type: ignore[override]
+        # Properly cleanup WebEngine resources to avoid warnings
+        if hasattr(self, "_devtools"):
+            self._devtools.setPage(None)
+            self._devtools.deleteLater()
+            self._devtools = None
+
+        # Disconnect signals
+        if hasattr(self, "bridge"):
+            self.bridge.open_window_requested.disconnect()
+
+        # Clear web channel
+        if hasattr(self, "channel"):
+            self.channel.deregisterObject(self.bridge)
+
+        # Cleanup view and page
+        if hasattr(self, "view"):
+            page = self.view.page()
+            self.view.setPage(None)
+            if page:
+                page.deleteLater()
+            self.view.deleteLater()
+
         with __import__("contextlib").suppress(ValueError):
             _open_windows.remove(self)
+
         super().closeEvent(event)
 
     def _open_devtools(self) -> None:

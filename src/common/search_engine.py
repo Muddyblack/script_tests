@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import threading
 
 
 class SearchEngine:
@@ -24,7 +25,8 @@ class SearchEngine:
         }
         # Keep persistent connections for faster queries
         self._connections = {}
-        self._warm_cache()
+        # Warm cache in background thread to not slow down startup
+        threading.Thread(target=self._warm_cache, daemon=True).start()
 
     def _get_connection(self, db_path):
         """Get or create a persistent connection with optimizations."""
