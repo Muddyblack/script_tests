@@ -296,24 +296,24 @@ const App = () => {
         const timer = setTimeout(() => {
             // Filter out empty tabs (no path and no query)
             const validTabs = tabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
-            
+
             // If no valid tabs, clear localStorage
             if (validTabs.length === 0) {
                 localStorage.removeItem('xexplorer_tabs');
                 return;
             }
-            
+
             const stateToSave = {
-                tabs: validTabs.map(t => ({ 
+                tabs: validTabs.map(t => ({
                     path: t.browsePath || null,
                     query: t.query || '',
-                    title: t.title 
+                    title: t.title
                 })),
                 activeIdx: Math.max(0, validTabs.findIndex(t => t.id === activeTabId))
             };
             localStorage.setItem('xexplorer_tabs', JSON.stringify(stateToSave));
         }, 2000);
-        
+
         return () => clearTimeout(timer);
     }, [tabs, activeTabId]);
 
@@ -323,21 +323,21 @@ const App = () => {
             // Use refs to get current state (not closure-captured state)
             const currentTabs = tabsRef.current;
             const currentActiveTabId = activeTabIdRef.current;
-            
+
             // Filter out empty tabs
             const validTabs = currentTabs.filter(t => t.browsePath || (t.query && t.query.trim().length >= 2));
-            
+
             // If no valid tabs, clear localStorage
             if (validTabs.length === 0) {
                 localStorage.removeItem('xexplorer_tabs');
                 return;
             }
-            
+
             const stateToSave = {
-                tabs: validTabs.map(t => ({ 
+                tabs: validTabs.map(t => ({
                     path: t.browsePath || null,
                     query: t.query || '',
-                    title: t.title 
+                    title: t.title
                 })),
                 activeIdx: Math.max(0, validTabs.findIndex(t => t.id === currentActiveTabId))
             };
@@ -966,6 +966,7 @@ const App = () => {
         onDragStart: handleDragStart,
         onDropOnFolder: handleDropOnFolder,
         cutPaths,
+        loading: activeTab.loading,
     };
 
     const hasPreview = !!activeTab.previewFile;
@@ -1180,7 +1181,12 @@ const App = () => {
                         <span>Indexing… {indexProgress}</span>
                     </div>
                 ) : activeTab.loading ? (
-                    <span className="status-msg">🔍 Searching…</span>
+                    <span className="status-msg status-msg-searching" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div className="spin-ring" style={{ width: 14, height: 14 }} />
+                        {activeTab.query && activeTab.query.trim()
+                            ? 'Searching…'
+                            : 'Loading…'}
+                    </span>
                 ) : (
                     <span className="status-msg">{statusMsg}</span>
                 )}

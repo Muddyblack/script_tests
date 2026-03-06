@@ -3,7 +3,12 @@ const _iconCache = {}; // cacheKey → data-url | '' | 'pending'
 const _PER_FILE_EXTS = new Set(['exe', 'lnk', 'url']);
 
 function _iconCacheKey(name, path, is_dir) {
-    if (is_dir) return path;
+    if (is_dir) {
+        // Only give unique cache keys to drive roots (C:\, etc)
+        // All other folders share the generic folder icon.
+        if (path && (path.length <= 3 && path.endsWith(':\\'))) return path.toUpperCase();
+        return '__FOLDER__';
+    }
     const ext = (name || '').split('.').pop().toLowerCase() || '__file__';
     return _PER_FILE_EXTS.has(ext) ? path : ext;
 }

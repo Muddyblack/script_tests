@@ -39,7 +39,7 @@ const FileRow = React.memo(({ file, isSelected, isDragOver, isCut, onSelect, onD
            prev.file.mtime === next.file.mtime;
 });
 
-const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, sortDir, onSort, onDragStart, onDropOnFolder, cutPaths }) => {
+const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, sortDir, onSort, onDragStart, onDropOnFolder, cutPaths, loading }) => {
     const [dragOverPath, setDragOverPath] = useState(null);
     const cols = [
         { label: 'Name', key: 'name', width: '42%' },
@@ -48,7 +48,17 @@ const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, 
         { label: 'Modified', key: 'mtime', width: '38%' },
     ];
     return (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+            {loading && files.length === 0 && (
+                <div style={{
+                    position: 'absolute', inset: 0,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--text-disabled)'
+                }}>
+                    <div className="spin-ring" style={{ width: 32, height: 32 }} />
+                    <div style={{ marginTop: 8 }}>Loading…</div>
+                </div>
+            )}
             <table className="details-table">
                 <thead>
                     <tr className="details-head">
@@ -101,8 +111,18 @@ const IconItem = React.memo(({ file, isSelected, onSelect, onDouble, onCtxMenu }
            prev.file.name === next.file.name;
 });
 
-const IconsView = ({ files, selected, onSelect, onDouble, onCtxMenu }) => (
-    <div style={{ flex: 1, overflowY: 'auto' }}>
+const IconsView = ({ files, selected, onSelect, onDouble, onCtxMenu, loading }) => (
+    <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+        {loading && files.length === 0 && (
+            <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--text-disabled)'
+            }}>
+                <div className="spin-ring" style={{ width: 32, height: 32 }} />
+                <div style={{ marginTop: 8 }}>Loading…</div>
+            </div>
+        )}
         <div className="icons-grid">
             {files.slice(0, 800).map(f => (
                 <IconItem

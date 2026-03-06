@@ -154,9 +154,14 @@ class XExplorerBridge(QObject):
         self._observers: list = []
         self._icon_provider = QFileIconProvider()
         self._icon_cache: dict[str, str] = {}
+        self._icon_lock = threading.Lock()
         self._start_time: float = 0.0
         self._current_roots: list[str] = []
         self._initial_path: str = initial_path
+
+        # Pre-warm icons in a background thread
+        threading.Thread(target=self._pre_warm_icons, daemon=True).start()
+
         self._auto_reindex_timer: QTimer | None = None
         # Browse-folder change poller — emits live_changed when the currently
         # viewed folder's mtime changes (covers non-indexed paths too).
@@ -1128,15 +1133,24 @@ class XExplorerBridge(QObject):
     @pyqtSlot(str, result=str)
     def get_file_icon_b64(self, path: str) -> str:
         """Return a base64-encoded PNG of the system file icon (high-res)."""
-        ext = (
-            os.path.splitext(path)[1].lower() if not os.path.isdir(path) else "__DIR__"
-        )
-        # Per-file cache key for exe/lnk/url (each has a unique icon),
-        # extension-based key for everything else (same as Nexus logic).
         is_dir = os.path.isdir(path)
-        cache_key = path if (is_dir or ext in (".exe", ".lnk", ".url")) else ext
-        if cache_key in self._icon_cache:
-            return self._icon_cache[cache_key]
+        ext = os.path.splitext(path)[1].lower() if not is_dir else "__DIR__"
+
+        # Determine cache key:
+        # - Files: extension-based, except exe/lnk/url which have unique icons.
+        # - Folders: generic "__DIR__" unless it's a drive root (C:\).
+        if is_dir:
+            if len(path) <= 3 and path.endswith(":\\"):
+                cache_key = path.upper()
+            else:
+                cache_key = "__DIR__"
+        else:
+            cache_key = path if (ext in (".exe", ".lnk", ".url")) else ext
+
+        with self._icon_lock:
+            if cache_key in self._icon_cache:
+                return self._icon_cache[cache_key]
+
         try:
             from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 
@@ -1171,11 +1185,41 @@ class XExplorerBridge(QObject):
                 print(f"[icon] PNG save failed for {path}, ok={ok}")
                 return ""
             b64 = base64.b64encode(bytes(ba)).decode()
-            self._icon_cache[cache_key] = b64
+            with self._icon_lock:
+                self._icon_cache[cache_key] = b64
             return b64
         except Exception as exc:
             print(f"[icon] EXCEPTION for {path}: {exc}")
             return ""
+
+    def _pre_warm_icons(self) -> None:
+        """Render common icons in background thread to avoid first-search lag."""
+        common = [
+            # Dirs
+            "C:\\",
+            os.path.expanduser("~"),
+            # Common files (dummy paths, but with extensions)
+            "temp.txt",
+            "temp.py",
+            "temp.md",
+            "temp.js",
+            "temp.html",
+            "temp.css",
+            "temp.json",
+            "temp.csv",
+            "temp.pdf",
+            "temp.zip",
+            "temp.png",
+            "temp.jpg",
+            "temp.mp4",
+            "temp.log",
+        ]
+        for p in common:
+            try:
+                self.get_file_icon_b64(p)
+            except Exception:
+                pass
+            time.sleep(0.01)  # Cooperate with event loop
 
     # ── Internal sync helpers (run in background thread) ─────────────────────
 

@@ -53,9 +53,13 @@ class SearchEngine:
             try:
                 conn = self._get_connection(db)
                 # Touch the table data to load it into memory
-                # A full scan of the name column ensures we read the data pages, not just the index/sqlite_stat1
+                # A full scan using string operations ensures we read the data pages, not just the index
                 conn.execute(
-                    "SELECT path FROM files WHERE name = '__warmup__'"
+                    "SELECT SUM(LENGTH(path) + LENGTH(name) + size) FROM files"
+                ).fetchone()
+                # Dummy query to compile the LIKE statement cache
+                conn.execute(
+                    "SELECT path, is_dir, name, size FROM files WHERE name LIKE '%__warmup__%' LIMIT 1"
                 ).fetchall()
             except Exception:
                 pass

@@ -62,7 +62,18 @@ const PreviewPane = ({ file, onClose }) => {
             </div>
             <div className="preview-body" style={{ flex: 1, overflow: 'auto', padding: preview?.type === 'sheet' || preview?.type === 'html' ? 0 : 14, position: 'relative' }}>
                 {!preview && (
-                    <div style={{ color: 'var(--text-disabled)', fontSize: 12, padding: 14 }}>Loading preview…</div>
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 8,
+                        color: 'var(--text-disabled)',
+                        fontSize: 12,
+                        padding: 14
+                    }}>
+                        <div className="spin-ring" style={{ width: 24, height: 24 }} />
+                        <span>Loading preview…</span>
+                    </div>
                 )}
                 {preview?.type === 'pdf' && (
                     <div style={{ textAlign: 'center' }}>
