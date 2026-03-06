@@ -1797,8 +1797,8 @@ class XExplorerBridge(QObject):
                     except ImportError:
                         pass  # COM not available — fall through to stdlib XML parser
                     else:
-                        abs_path = os.path.abspath(path)
-                        async_key = f"{abs_path}|{page}"
+                        # Use raw path as key to avoid blocking os.path.abspath on main thread
+                        async_key = f"{path}|{page}|ppt_com"
 
                         # Return cached result instantly if available
                         if async_key in self._preview_cache:
@@ -1825,7 +1825,7 @@ class XExplorerBridge(QObject):
                         self._preview_cancel[async_key] = cancel
 
                         def _run_ppt_com(
-                            _path=abs_path, _page=page, _key=async_key, _cancel=cancel
+                            _path=path, _page=page, _key=async_key, _cancel=cancel
                         ) -> None:
                             import hashlib
                             import tempfile
@@ -1835,6 +1835,14 @@ class XExplorerBridge(QObject):
 
                             # Check cancellation before starting COM
                             if _cancel.is_set():
+                                self._preview_in_flight.discard(_key)
+                                self._preview_cancel.pop(_key, None)
+                                return
+
+                            # Do abspath in worker thread to avoid blocking main thread
+                            try:
+                                abs_path = os.path.abspath(_path)
+                            except Exception:
                                 self._preview_in_flight.discard(_key)
                                 self._preview_cancel.pop(_key, None)
                                 return
@@ -1856,7 +1864,7 @@ class XExplorerBridge(QObject):
                                     return
 
                                 prs = app.Presentations.Open(
-                                    _path, WithWindow=False, ReadOnly=True
+                                    abs_path, WithWindow=False, ReadOnly=True
                                 )
 
                                 if _cancel.is_set():
@@ -1868,8 +1876,8 @@ class XExplorerBridge(QObject):
                                 if _cancel.is_set():
                                     return
 
-                                st = os.stat(_path)
-                                file_key_src = f"{_path}|{st.st_size}|{st.st_mtime_ns}"
+                                st = os.stat(abs_path)
+                                file_key_src = f"{abs_path}|{st.st_size}|{st.st_mtime_ns}"
                                 file_key = hashlib.sha1(
                                     file_key_src.encode("utf-8", errors="replace")
                                 ).hexdigest()
@@ -2010,8 +2018,8 @@ class XExplorerBridge(QObject):
                         }
                     )
 
-                abs_path = os.path.abspath(path)
-                async_key = f"{abs_path}|{page}"
+                # Use raw path as key to avoid blocking os.path.abspath on main thread
+                async_key = f"{path}|{page}|visio_com"
                 if async_key in self._preview_cache:
                     return self._preview_cache[async_key]
 
@@ -2032,7 +2040,7 @@ class XExplorerBridge(QObject):
                 cancel = threading.Event()
                 self._preview_cancel[async_key] = cancel
 
-                def _run_visio(_path=abs_path, _page=page, _key=async_key, _cancel=cancel) -> None:
+                def _run_visio(_path=path, _page=page, _key=async_key, _cancel=cancel) -> None:
                     import hashlib
                     import tempfile
 
@@ -2041,6 +2049,14 @@ class XExplorerBridge(QObject):
 
                     # Check cancellation before starting COM
                     if _cancel.is_set():
+                        self._preview_in_flight.discard(_key)
+                        self._preview_cancel.pop(_key, None)
+                        return
+
+                    # Do abspath in worker thread to avoid blocking main thread
+                    try:
+                        abs_path = os.path.abspath(_path)
+                    except Exception:
                         self._preview_in_flight.discard(_key)
                         self._preview_cancel.pop(_key, None)
                         return
@@ -2059,7 +2075,7 @@ class XExplorerBridge(QObject):
                         if _cancel.is_set():
                             return
 
-                        doc = app.Documents.OpenEx(_path, 64)  # 64 = visOpenRO
+                        doc = app.Documents.OpenEx(abs_path, 64)  # 64 = visOpenRO
 
                         if _cancel.is_set():
                             return
@@ -2072,8 +2088,8 @@ class XExplorerBridge(QObject):
                         if _cancel.is_set():
                             return
 
-                        st = os.stat(_path)
-                        key_src = f"{_path}|{st.st_size}|{st.st_mtime_ns}|p{idx}"
+                        st = os.stat(abs_path)
+                        key_src = f"{abs_path}|{st.st_size}|{st.st_mtime_ns}|p{idx}"
                         file_key = hashlib.sha1(
                             key_src.encode("utf-8", errors="replace")
                         ).hexdigest()
