@@ -1198,17 +1198,28 @@ class XExplorerBridge(QObject):
     ) -> str:
         """Read an image file and return preview JSON. Called off the main thread."""
         try:
-            size = os.path.getsize(path)
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
+
+            size = os.path.getsize(path)
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             if size > 8 * 1024 * 1024:
                 return json.dumps(
                     {"type": "unsupported", "content": "Image too large to preview."}
                 )
-            with open(path, "rb") as f:
-                data = base64.b64encode(f.read()).decode()
+
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
+
+            with open(path, "rb") as f:
+                data = base64.b64encode(f.read()).decode()
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             mime = {".svg": "image/svg+xml", ".gif": "image/gif"}.get(ext, "image/png")
             return json.dumps(
                 {"type": "image", "content": f"data:{mime};base64,{data}", "ext": ext}
@@ -1221,10 +1232,15 @@ class XExplorerBridge(QObject):
     ) -> str:
         """Read a text file and return preview JSON. Called off the main thread."""
         try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                content = f.read(64 * 1024)
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
+
+            with open(path, encoding="utf-8", errors="replace") as f:
+                content = f.read(64 * 1024)
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             return json.dumps(
                 {"type": "text", "content": content, "ext": ext.lstrip(".")}
             )
@@ -1241,31 +1257,56 @@ class XExplorerBridge(QObject):
 
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
+
             doc = QPdfDocument(None)
-            doc.load(path)
+
+            # Load PDF with timeout protection for network drives
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(doc.load, path)
+                try:
+                    future.result(timeout=5.0)  # 5 second timeout for network drives
+                except concurrent.futures.TimeoutError:
+                    doc.close()
+                    return json.dumps({"type": "error", "content": "PDF load timeout - network drive too slow"})
+
             if cancel and cancel.is_set():
                 doc.close()
                 return json.dumps({"type": "unsupported", "content": ""})
+
             n = doc.pageCount()
             if n == 0:
+                doc.close()
                 return json.dumps(
                     {"type": "unsupported", "content": "Cannot open PDF."}
                 )
+
+            if cancel and cancel.is_set():
+                doc.close()
+                return json.dumps({"type": "unsupported", "content": ""})
+
             idx = max(0, min(page, n - 1))
             page_size = doc.pagePointSize(idx)
             scale = 1.5
             w = max(1, int(page_size.width() * scale))
             h = max(1, int(page_size.height() * scale))
+
             if cancel and cancel.is_set():
+                doc.close()
                 return json.dumps({"type": "unsupported", "content": ""})
 
             # Heavy render lock to prevent concurrent pdfium usage (prevents freezing/crashes)
             with self._preview_lock:
                 if cancel and cancel.is_set():
+                    doc.close()
                     return json.dumps({"type": "unsupported", "content": ""})
                 img = doc.render(idx, QSize(w, h))
 
             doc.close()
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             from PyQt6.QtGui import QColor, QImage, QPainter
 
             white = QImage(img.size(), QImage.Format.Format_RGB32)
@@ -1274,12 +1315,20 @@ class XExplorerBridge(QObject):
             p.drawImage(0, 0, img)
             p.end()
             img = white
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             ba = QByteArray()
             buf = QBuffer(ba)
             buf.open(QIODevice.OpenModeFlag.WriteOnly)
             img.save(buf, "PNG")
             buf.close()
             data = base64.b64encode(bytes(ba)).decode()
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             return json.dumps(
                 {
                     "type": "pdf",
@@ -1305,12 +1354,22 @@ class XExplorerBridge(QObject):
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
 
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             if not _zf.is_zipfile(path):
                 raise ValueError(
                     ".ppt legacy binary format is not supported; save as .pptx first"
                 )
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
             with _zf.ZipFile(path) as _z:
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 _slides = sorted(
                     (
                         s
@@ -1324,8 +1383,16 @@ class XExplorerBridge(QObject):
                     return json.dumps(
                         {"type": "unsupported", "content": "No slides found in file."}
                     )
+
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 idx = max(0, min(page, n - 1))
                 _root = _ET.fromstring(_z.read(_slides[idx]))
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             parts: list[str] = []
             title_text = ""
             for _para in _root.iter(f"{{{_A}}}p"):
@@ -1341,6 +1408,10 @@ class XExplorerBridge(QObject):
                 parts.append(
                     f'<{_tag} class="sl-text sl-l{_lvl}" style="{_style}">{html.escape(_line)}</{_tag}>'
                 )
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             return json.dumps(
                 {
                     "type": "slide",
@@ -1371,6 +1442,9 @@ class XExplorerBridge(QObject):
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
 
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             _SS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             _REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
@@ -1382,8 +1456,15 @@ class XExplorerBridge(QObject):
                 return r - 1
 
             with _zf.ZipFile(path) as _z:
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 _names = _z.namelist()
                 _wb = _ET.fromstring(_z.read("xl/workbook.xml"))
+
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 _sels = _wb.findall(f".//{{{_SS}}}sheet")
                 _sheet_names = [
                     s.get("name", f"Sheet{i + 1}") for i, s in enumerate(_sels)
@@ -1391,11 +1472,19 @@ class XExplorerBridge(QObject):
                 _rids = [s.get(f"{{{_REL}}}id") for s in _sels]
                 n = len(_sheet_names)
                 idx = max(0, min(page, n - 1))
+
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 _rels = _ET.fromstring(_z.read("xl/_rels/workbook.xml.rels"))
                 _rid_map = {r.get("Id"): r.get("Target") for r in _rels}
                 _target = _rid_map.get(_rids[idx], f"worksheets/sheet{idx + 1}.xml")
                 _sheet_path = "xl/" + _target.lstrip("/")
                 _sst: list[str] = []
+
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 if "xl/sharedStrings.xml" in _names:
                     for _si in _ET.fromstring(_z.read("xl/sharedStrings.xml")).findall(
                         f"{{{_SS}}}si"
@@ -1403,6 +1492,10 @@ class XExplorerBridge(QObject):
                         _sst.append(
                             "".join(e.text or "" for e in _si.iter(f"{{{_SS}}}t"))
                         )
+
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+
                 _ws = _ET.fromstring(_z.read(_sheet_path))
                 rows: list[list] = []
                 for _row_el in _ws.findall(f".//{{{_SS}}}row"):
@@ -1467,9 +1560,18 @@ class XExplorerBridge(QObject):
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
 
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             with _zf.ZipFile(path) as _z:
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
                 _doc = _ET.fromstring(_z.read("word/document.xml"))
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
             blocks: list[str] = []
 
             _HEADING_MAP = [
