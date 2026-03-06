@@ -1,5 +1,4 @@
-﻿"""Nexus Search main UI widget.
-"""
+﻿"""Nexus Search main UI widget."""
 
 import ctypes
 import os
@@ -61,11 +60,14 @@ from .system_commands import (
 from .themes import get_nexus_theme
 
 
-class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixin, QWidget):
+class NexusSearch(
+    _LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixin, QWidget
+):
     """Nexus Search launcher — thin core, logic delegated to mixins."""
 
     # Signal emitted from pynput thread, handled on the Qt main thread.
     _global_key_signal = pyqtSignal(str, bool)  # (key_name, has_modifier)
+    file_search_finished = pyqtSignal(list, int)  # (candidates, generation)
 
     # ------------------------------------------------------------------
     # Initialisation
@@ -151,6 +153,7 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
         self._held_modifiers: set[str] = set()  # currently-held modifier names
         self._global_listener = None
         self._global_key_signal.connect(self._handle_global_key)
+        self.file_search_finished.connect(self._handle_file_results)
         self._start_global_listener()
 
     # ------------------------------------------------------------------
@@ -496,7 +499,9 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
             | Qt.WindowType.WindowStaysOnTopHint
         )
 
-        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        screen = (
+            QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        )
         sg = screen.availableGeometry()
         pw = self._theme_picker.sizeHint().width() or 280
         ph = self._theme_picker.sizeHint().height() or 330
@@ -515,4 +520,3 @@ class NexusSearch(_LaunchMixin, _ResultsMixin, _SearchMixin, _UIMixin, _DataMixi
             QDesktopServices.openUrl(QUrl.fromLocalFile(settings_dir))
         else:
             self.status_lbl.setText("Settings directory not found")
-

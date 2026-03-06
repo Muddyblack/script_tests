@@ -155,6 +155,7 @@ class _SearchMixin:
             ":p": "processes",
             ":t": "toggles",
             ":ssh": "ssh",
+            ":s": "ssh",
             ":a": "apps",
         }
         active_modes = self.modes.copy()
@@ -639,6 +640,7 @@ class _SearchMixin:
             ":p": "processes",
             ":t": "toggles",
             ":ssh": "ssh",
+            ":s": "ssh",
             ":a": "apps",
         }
         active_modes = self.modes.copy()
@@ -704,19 +706,28 @@ class _SearchMixin:
                     }
                 )
 
-            def _apply(_fc=file_candidates, _g=_gen):
-                if self._search_gen != _g:
-                    return
-                merged = list(getattr(self, "_pre_file_candidates", [])) + _fc
-                merged.sort(key=lambda x: x["score"], reverse=True)
-                self.results_list.clear()
-                self.results_tree.clear()
-                self.pending_icons.clear()
-                if self.view_mode == "tree":
-                    self.populate_tree_results(merged)
-                else:
-                    self.populate_list_results(merged)
-
-            QTimer.singleShot(0, _apply)
+            self.file_search_finished.emit(file_candidates, _gen)
 
         threading.Thread(target=_do_file_search, daemon=True).start()
+
+    def _handle_file_results(self, file_candidates, generation):
+        """Main-thread callback to merge and display file search results."""
+        if self._search_gen != generation:
+            return
+
+        # Merge with existing instant results (apps, bookmarks, etc)
+        # _pre_file_candidates was saved in perform_search_instant
+        pre_file = getattr(self, "_pre_file_candidates", [])
+        merged = list(pre_file) + file_candidates
+
+        # Re-sort everything to ensure file hits are integrated properly by score
+        merged.sort(key=lambda x: x["score"], reverse=True)
+
+        self.results_list.clear()
+        self.results_tree.clear()
+        self.pending_icons.clear()
+
+        if self.view_mode == "tree":
+            self.populate_tree_results(merged)
+        else:
+            self.populate_list_results(merged)
