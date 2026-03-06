@@ -1,5 +1,3 @@
-"""UI-building mixin — setup_ui, mode toggles, folder picker, clock."""
-
 import json
 import os
 import sqlite3
@@ -94,11 +92,12 @@ class _UIMixin:
         # Mode buttons
         self.mode_btns = {}
         modes_metadata = [
+            ("frequent", "Frequent", "zap.svg"),
             ("apps", "Apps", "package.svg"),
             ("bookmarks", "Bookmarks", "star.svg"),
             ("files", "Files", "folder.svg"),
             ("ssh", "SSH", "server.svg"),
-            ("processes", "Processes", "zap.svg"),
+            ("processes", "Processes", "power.svg"),
             ("toggles", "System", "settings.svg"),
         ]
         mgr = ThemeManager()
@@ -197,7 +196,7 @@ class _UIMixin:
         self._theme_btn.setObjectName("theme_btn")
         self._theme_btn.setFixedHeight(24)
         self._theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._theme_btn.setToolTip("Color Theme (Ctrl+K Ctrl+T)")
+        self._theme_btn.setToolTip("Color Theme (Ctrl+Shift+K Ctrl+Shift+T)")
         self._theme_btn.clicked.connect(self._open_theme_picker)
         top_bar.addWidget(self._theme_btn)
 
@@ -209,6 +208,15 @@ class _UIMixin:
         self._settings_btn.setToolTip("Open Settings Folder")
         self._settings_btn.clicked.connect(self._open_settings_folder)
         top_bar.addWidget(self._settings_btn)
+
+        # Close button
+        self.btn_close = QPushButton("✕")
+        self.btn_close.setObjectName("nexus_close_btn")
+        self.btn_close.setFixedSize(32, 28)
+        self.btn_close.setToolTip("Close Nexus (Esc)")
+        self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_close.clicked.connect(self.hide)
+        top_bar.addWidget(self.btn_close)
 
         right_layout.addLayout(top_bar)
 
@@ -229,7 +237,7 @@ class _UIMixin:
         self.results_list = QListWidget()
         self.results_list.setObjectName("nexus_list")
         self.results_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.results_list.itemDoubleClicked.connect(self.launch_selected)
+        self.results_list.itemClicked.connect(self.launch_selected)
         self.results_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.results_list.customContextMenuRequested.connect(self.show_context_menu)
 
@@ -239,7 +247,7 @@ class _UIMixin:
         self.results_tree.viewport().setStyleSheet("background: transparent;")
         self.results_tree.setHeaderHidden(True)
         self.results_tree.setIndentation(20)
-        self.results_tree.itemDoubleClicked.connect(self.launch_selected)
+        self.results_tree.itemClicked.connect(self.launch_selected)
         self.results_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.results_tree.customContextMenuRequested.connect(
             self.show_tree_context_menu

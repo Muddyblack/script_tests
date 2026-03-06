@@ -140,21 +140,43 @@ class _LaunchMixin:
             else:
                 archive_action = menu.addAction("Compress to Archive...")
 
+            # Frequent removal
+            frequent_action = None
+            if len(data_list) == 1:
+                d = data_list[0]
+                ukey = None
+                dtype = d.get("type")
+                if dtype == "app":
+                    ukey = f"app_{d.get('path')}"
+                elif dtype == "cmd":
+                    ukey = f"cmd_{d.get('cmd')}"
+                elif dtype == "file":
+                    ukey = f"file_{d.get('path')}"
+                elif dtype == "script":
+                    ukey = f"script_{d.get('path')}"
+
+                if ukey and hasattr(self, "usage_stats") and ukey in self.usage_stats:
+                    menu.addSeparator()
+                    frequent_action = menu.addAction("❌ Remove from Frequent")
+                    frequent_action.setData(ukey)
+
             action = menu.exec(parent_widget.mapToGlobal(pos))
             if not action:
                 return
 
-            if action != search_here:
+            if action != search_here and action != frequent_action:
                 self.hide()
 
             if action == copy_path:
                 norm_paths = [os.path.normpath(p) for p in paths]
                 from src.nexus.utils import copy_to_clipboard
+
                 copy_to_clipboard("\n".join(norm_paths))
                 self.status_lbl.setText(f"Copied {len(norm_paths)} path(s)")
             elif action == copy_name:
                 names = [os.path.basename(p) for p in paths]
                 from src.nexus.utils import copy_to_clipboard
+
                 copy_to_clipboard("\n".join(names))
                 self.status_lbl.setText("Copied file name(s) to clipboard")
             elif action == open_loc:
@@ -184,19 +206,34 @@ class _LaunchMixin:
                 self.file_ops_win._switch_tab("fileops")
                 self.file_ops_win.show()
             elif (
-                archive_action and action == archive_action
-                or extract_action and action == extract_action
+                archive_action
+                and action == archive_action
+                or extract_action
+                and action == extract_action
             ):
                 self.archiver_win = FileToolsWindow()
                 self.archiver_win.arc_sources = list(paths)
                 self.archiver_win._arc_refresh()
                 self.archiver_win._switch_tab("archiver")
                 self.archiver_win.show()
+            elif frequent_action and action == frequent_action:
+                ukey = action.data()
+                self.remove_usage(ukey)
+                self.status_lbl.setText("Removed from Frequent list")
+                self.perform_search()
 
     # ------------------------------------------------------------------
     # Launch
     # ------------------------------------------------------------------
     def launch_selected(self):
+        import time
+
+        # Debounce: prevent "doubled" launches from fast clicks
+        now = time.time()
+        if hasattr(self, "last_launch_time") and (now - self.last_launch_time) < 0.5:
+            return
+        self.last_launch_time = now
+
         try:
             if self.view_mode == "tree":
                 item = self.results_tree.currentItem()
@@ -237,10 +274,12 @@ class _LaunchMixin:
                 self.show_folder_picker()
                 return
             elif data.get("type") == "app":
+                self.record_usage(f"app_{data['path']}")
                 if not os.path.exists(data["path"]):
                     raise FileNotFoundError(f"App not found: {data['path']}")
                 os.startfile(data["path"])
             elif data["type"] == "cmd":
+                self.record_usage(f"cmd_{data['cmd']}")
                 cmd = data["cmd"]
                 _CMD_MAP = {
                     "xexplorer": _launch_xexplorer,

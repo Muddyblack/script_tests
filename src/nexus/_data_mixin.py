@@ -115,11 +115,30 @@ class _DataMixin:
         """Increment usage count."""
         count = self.usage_stats.get(key, 0) + 1
         self.usage_stats[key] = count
+
+        # Prevent runaway growth: if we track too many things,
+        # keep only the top 1000 most used items.
+        if len(self.usage_stats) > 1500:
+            sorted_usage = sorted(
+                self.usage_stats.items(), key=lambda x: x[1], reverse=True
+            )[:1000]
+            self.usage_stats = dict(sorted_usage)
+
         try:
             with open(USAGE_FILE, "w") as f:
                 json.dump(self.usage_stats, f)
         except Exception:
             pass
+
+    def remove_usage(self, key):
+        """Remove an item from usage statistics."""
+        if key in self.usage_stats:
+            del self.usage_stats[key]
+            try:
+                with open(USAGE_FILE, "w") as f:
+                    json.dump(self.usage_stats, f)
+            except Exception:
+                pass
 
     def get_usage_boost(self, key):
         """Score boost based on usage frequency."""
@@ -191,7 +210,7 @@ class _DataMixin:
                     r"Mozilla\Firefox\Profiles\*\bookmarkbackups",
                 )
             )
-)
+        )
 
         def extract_urls(node):
             if isinstance(node, dict):

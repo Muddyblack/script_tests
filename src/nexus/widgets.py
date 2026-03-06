@@ -101,14 +101,14 @@ class RainbowFrame(QFrame):
         gradient = QConicalGradient(cx, cy, self._angle)
 
         colors = [
-            (0.00, QColor(56, 128, 255)),   # vivid blue
-            (0.14, QColor(110, 90, 255)),   # blue-violet
-            (0.28, QColor(180, 60, 210)),   # purple
-            (0.42, QColor(240, 55, 130)),   # hot pink
-            (0.56, QColor(255, 120, 30)),   # orange
-            (0.70, QColor(50, 200, 100)),   # green
-            (0.85, QColor(0, 200, 220)),    # cyan-teal
-            (1.00, QColor(56, 128, 255)),   # blue (wrap)
+            (0.00, QColor(56, 128, 255)),  # vivid blue
+            (0.14, QColor(110, 90, 255)),  # blue-violet
+            (0.28, QColor(180, 60, 210)),  # purple
+            (0.42, QColor(240, 55, 130)),  # hot pink
+            (0.56, QColor(255, 120, 30)),  # orange
+            (0.70, QColor(50, 200, 100)),  # green
+            (0.85, QColor(0, 200, 220)),  # cyan-teal
+            (1.00, QColor(56, 128, 255)),  # blue (wrap)
         ]
         for stop, color in colors:
             c = QColor(color)
@@ -171,10 +171,7 @@ class NexusInput(QLineEdit):
             event.modifiers() & Qt.KeyboardModifier.AltModifier
             and Qt.Key.Key_1 <= key <= Qt.Key.Key_9
         ):
-            idx = key - Qt.Key.Key_1
-            if idx < self.nexus.results_list.count():
-                self.nexus.results_list.setCurrentRow(idx)
-                self.nexus.launch_selected()
+            self.nexus.launch_by_index(key - Qt.Key.Key_1)
             event.accept()
             return
 

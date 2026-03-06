@@ -1,4 +1,4 @@
-﻿"""Nexus Search main UI widget."""
+"""Nexus Search main UI widget."""
 
 import ctypes
 import os
@@ -19,7 +19,7 @@ from PyQt6.QtCore import (
     pyqtSignal,
 )
 from PyQt6.QtGui import QCursor, QDesktopServices, QGuiApplication
-from PyQt6.QtWidgets import QFileIconProvider, QWidget
+from PyQt6.QtWidgets import QApplication, QFileIconProvider, QWidget
 
 from src.common.config import DB_PATH, SETTINGS_FILE, X_EXPLORER_DB
 from src.common.search_engine import SearchEngine
@@ -90,6 +90,7 @@ class NexusSearch(
 
         # Mode state
         self.modes = {
+            "frequent": True,
             "apps": True,
             "bookmarks": True,
             "files": False,
@@ -142,6 +143,7 @@ class NexusSearch(
         self.search_timer.timeout.connect(self.perform_search_files)
 
         self.last_search_time = 0
+        self.last_launch_time = 0.0
         # Clock timer — live updates
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.update_clock)
@@ -215,7 +217,9 @@ class NexusSearch(
         """Process redirected keypress — runs on the Qt main thread (slot)."""
         if not self.isVisible():
             return
-        if self.isActiveWindow():
+
+        # If any window of this application is active, let Qt handle the keys natively
+        if QApplication.activeWindow():
             return
 
         navigation_keys = {
@@ -224,6 +228,15 @@ class NexusSearch(
             "page up": -10,
             "page down": 10,
         }
+
+        # Alt + 1-9 shortcuts
+        if (
+            "alt" in self._held_modifiers
+            and key_name.isdigit()
+            and "1" <= key_name <= "9"
+        ):
+            self.launch_by_index(int(key_name) - 1)
+            return
 
         if key_name in navigation_keys:
             self.navigate_results(navigation_keys[key_name])
@@ -234,6 +247,44 @@ class NexusSearch(
         elif len(key_name) == 1 and not has_modifier:
             self.search_input.setText(self.search_input.text() + key_name)
             self.summon_and_focus()
+
+    def launch_by_index(self, idx):
+        """Select and launch an item by its visual index (0-indexed)."""
+        if self.view_mode == "tree":
+            # For tree view, we traverse visible items to find the Nth one
+            count = 0
+            target_item = None
+
+            def find_visible(parent=None):
+                nonlocal count, target_item
+                item_count = (
+                    self.results_tree.topLevelItemCount()
+                    if parent is None
+                    else parent.childCount()
+                )
+                for i in range(item_count):
+                    child = (
+                        self.results_tree.topLevelItem(i)
+                        if parent is None
+                        else parent.child(i)
+                    )
+                    if not child.isHidden() and count == idx:
+                        target_item = child
+                        return True
+                    if not child.isHidden():
+                        count += 1
+                        if child.isExpanded() and find_visible(child):
+                            return True
+                return False
+
+            find_visible()
+            if target_item:
+                self.results_tree.setCurrentItem(target_item)
+                self.launch_selected()
+        else:
+            if 0 <= idx < self.results_list.count():
+                self.results_list.setCurrentRow(idx)
+                self.launch_selected()
 
     # ------------------------------------------------------------------
     # Focus management
@@ -301,7 +352,16 @@ class NexusSearch(
     # Event overrides
     # ------------------------------------------------------------------
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
+        key = event.key()
+        if (
+            event.modifiers() & Qt.KeyboardModifier.AltModifier
+            and Qt.Key.Key_1 <= key <= Qt.Key.Key_9
+        ):
+            self.launch_by_index(key - Qt.Key.Key_1)
+            event.accept()
+            return
+
+        if key == Qt.Key.Key_Escape:
             self.hide()
             event.accept()
         else:
@@ -512,6 +572,10 @@ class NexusSearch(
         self._theme_picker.show()
         self._theme_picker.raise_()
         self._theme_picker.activateWindow()
+
+        # Aggressive focus for Windows
+        QTimer.singleShot(50, self._theme_picker.activateWindow)
+        QTimer.singleShot(100, lambda: self._theme_picker._list.setFocus())
 
     def _open_settings_folder(self):
         """Open the folder where Nexus settings are stored."""

@@ -106,13 +106,23 @@ def get_nexus_theme(mgr) -> str:
             background: {accent_subtle}; color: {accent}; border-color: {accent};
         }}
 
+        QPushButton#nexus_close_btn {{
+            background: {ov_sm}; border: 1px solid {ov_lg};
+            border-radius: 8px; color: {text2}; font-size: 14px; padding: 2px;
+            font-family: {font};
+        }}
+        QPushButton#nexus_close_btn:hover {{
+            background: rgba(239, 68, 68, 0.4); color: #ffffff; border-color: #ef4444;
+        }}
+
         /* ── Rainbow input wrapper ── */
         QFrame#rainbow_frame {{ background: transparent; border: none; border-radius: 16px; }}
         QLineEdit#nexus_search {{
             background: {ov_sm}; border: 2px solid {ov_lg};
             border-radius: 14px; padding: 12px 22px;
             color: {text}; font-size: 17px; font-family: {font};
-            selection-background-color: {accent_subtle};
+            selection-background-color: {accent};
+            selection-color: #ffffff;
         }}
         QLineEdit#nexus_search:focus {{
             border: 2px solid transparent; background: {ov_md};

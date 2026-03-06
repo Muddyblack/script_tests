@@ -48,11 +48,34 @@ class _HotkeyWindow(QObject):
             print("[Hotkeys] pynput not available — global hotkeys disabled.")
             return
 
+        # State machine for sequences (e.g. Ctrl+K -> Ctrl+T)
+        self._chord_context = False
+        self._timer = None
+
+        def _reset_context():
+            self._chord_context = False
+
+        def on_chord_k():
+            self._chord_context = True
+            if self._timer:
+                self._timer.cancel()
+            self._timer = threading.Timer(2.0, _reset_context)
+            self._timer.start()
+
+        def on_chord_t():
+            if self._chord_context:
+                self.theme_picker_signal.emit()
+                self._chord_context = False
+                if self._timer:
+                    self._timer.cancel()
+
         hotkeys = {
             _fmt(toggle_hotkey): self.toggle_signal.emit,
             _fmt(ocr_hotkey): self.ocr_signal.emit,
             _fmt(chronos_hotkey): self.chronos_signal.emit,
-            _fmt("ctrl+shift+t"): self.theme_picker_signal.emit,
+            # Chord sequence: First press Ctrl+Shift+K, then Ctrl+Shift+T within 2s
+            _fmt("ctrl+shift+k"): on_chord_k,
+            _fmt("ctrl+shift+t"): on_chord_t,
         }
 
         def _run() -> None:
