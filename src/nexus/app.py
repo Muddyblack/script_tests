@@ -46,6 +46,20 @@ def main():
 
     _ocr_prewarm()
 
+    # Pre-warm xexplorer database cache in background for instant first search
+    from src.common.config import X_EXPLORER_DB
+    from src.common.search_engine import SearchEngine
+
+    def _warm_xexplorer_db():
+        try:
+            engine = SearchEngine(X_EXPLORER_DB)
+            engine.warm_cache()  # Warm in background thread
+        except Exception:
+            pass  # Best-effort: don't crash if DB doesn't exist yet
+
+    import threading
+    threading.Thread(target=_warm_xexplorer_db, daemon=True).start()
+
     # Start Ghost Typist watcher in background (no UI required)
     try:
         from src.ghost_typist.db import get_setting, init_db

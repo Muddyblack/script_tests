@@ -25,8 +25,7 @@ class SearchEngine:
         }
         # Keep persistent connections for faster queries
         self._connections = {}
-        # Warm cache in background thread to not slow down startup
-        threading.Thread(target=self._warm_cache, daemon=True).start()
+        self._cache_warmed = False
 
     def _get_connection(self, db_path):
         """Get or create a persistent connection with optimizations."""
@@ -41,7 +40,11 @@ class SearchEngine:
         return self._connections[db_path]
 
     def _warm_cache(self):
-        """Warm up the database cache on startup for instant first search."""
+        """Warm up the database cache for instant first search."""
+        if self._cache_warmed:
+            return
+        self._cache_warmed = True
+
         for db in self.db_paths:
             if not os.path.exists(db):
                 continue
@@ -51,6 +54,10 @@ class SearchEngine:
                 conn.execute("SELECT COUNT(*) FROM files").fetchone()
             except Exception:
                 pass
+
+    def warm_cache(self):
+        """Public method to warm cache - can be called from Nexus startup."""
+        threading.Thread(target=self._warm_cache, daemon=True).start()
 
     def search_files(
         self,
