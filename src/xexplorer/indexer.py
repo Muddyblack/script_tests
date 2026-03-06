@@ -66,14 +66,16 @@ class IndexerWorker(QThread):
                     name = entry.name
                     name_lower = name.lower()
                     try:
-                        is_dir = entry.is_dir(follow_symlinks=False)
+                        is_dir = entry.is_dir(follow_symlinks=True)
+                        is_sym = entry.is_symlink()
                         full_path = entry.path          # already absolute when parent is absolute
                         path_lower = full_path.lower()
 
                         if is_dir:
                             if name_lower not in IL and path_lower not in IL:
                                 batch.append((full_path, name, current, 1, now, 0))
-                                subdirs.append(full_path)
+                                if not is_sym:
+                                    subdirs.append(full_path)
                         else:
                             _, ext = os.path.splitext(name)
                             ext_lower = ext.lower()

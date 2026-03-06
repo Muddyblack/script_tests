@@ -436,10 +436,10 @@ class XExplorerBridge(QObject):
         items: list[dict] = []
         try:
             with os.scandir(path) as it:
-                entries = sorted(it, key=lambda e: (not e.is_dir(follow_symlinks=False), e.name.lower()))
+                entries = sorted(it, key=lambda e: (not e.is_dir(follow_symlinks=True), e.name.lower()))
             for entry in entries:
                 try:
-                    is_dir = entry.is_dir(follow_symlinks=False)
+                    is_dir = entry.is_dir(follow_symlinks=True)
                     ext = "" if is_dir else os.path.splitext(entry.name)[1].lstrip(".").lower()
                     # Reuse the stat that scandir already fetched via FindNextFile
                     # (on Windows this is free — no extra syscall, even on network shares).
@@ -539,6 +539,25 @@ class XExplorerBridge(QObject):
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
             c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("favorites", json_str))
+            conn.commit()
+
+    @pyqtSlot(result=str)
+    def get_tabs(self) -> str:
+        """Return JSON list of tabs or empty array."""
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='saved_tabs'")
+            res = c.fetchone()
+            if res:
+                return res[0]
+        return "[]"
+
+    @pyqtSlot(str)
+    def save_tabs(self, json_str: str) -> None:
+        """Persist the open tabs."""
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("saved_tabs", json_str))
             conn.commit()
 
     # ── Search ────────────────────────────────────────────────────────────────
@@ -872,10 +891,44 @@ class XExplorerBridge(QObject):
 
     # ── File operations ───────────────────────────────────────────────────────
 
+    @pyqtSlot(str, str, result=str)
+    def create_folder(self, parent_dir: str, name: str) -> str:
+        """Create a new folder in parent_dir. Returns '' on success or error string."""
+        if not name.strip():
+            return "Name cannot be empty"
+        try:
+            path = os.path.join(parent_dir, name.strip())
+            os.mkdir(path)
+            self.live_changed.emit()
+            return ""
+        except Exception as e:
+            return str(e)
+
+    @pyqtSlot(str, str, result=str)
+    def create_file(self, parent_dir: str, name: str) -> str:
+        """Create an empty file in parent_dir. Returns '' on success or error string."""
+        if not name.strip():
+            return "Name cannot be empty"
+        try:
+            path = os.path.join(parent_dir, name.strip())
+            with open(path, 'a'):
+                pass
+            self.live_changed.emit()
+            return ""
+        except Exception as e:
+            return str(e)
+
     @pyqtSlot(str)
     def open_path(self, path: str) -> None:
         if os.path.exists(path):
-            os.startfile(path)
+            if sys.platform == "win32":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", path])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", path])
 
     @pyqtSlot(str)
     def show_in_explorer(self, path: str) -> None:
@@ -884,8 +937,12 @@ class XExplorerBridge(QObject):
             if sys.platform == "win32":
                 import subprocess
                 subprocess.Popen(["explorer", "/select,", path] if os.path.isfile(path) else ["explorer", d])
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", "-R", path] if os.path.isfile(path) else ["open", d])
             else:
-                os.startfile(d)
+                import subprocess
+                subprocess.Popen(["xdg-open", d])
 
     @pyqtSlot(str)
     def copy_to_clipboard(self, text: str) -> None:
@@ -1637,8 +1694,11 @@ class XExplorerBridge(QObject):
                         obs.schedule(handler, p, recursive=True)
                         scheduled += 1
                 if scheduled:
-                    obs.start()
-                    new_obs.append(obs)
+                    try:
+                        obs.start()
+                        new_obs.append(obs)
+                    except Exception as e:
+                        print(f"Failed to start observer: {e}")
 
             _make_observer(local_paths,   Observer)
             # Poll every 30 s for network paths — frequent enough to notice

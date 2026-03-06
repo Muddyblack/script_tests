@@ -233,9 +233,36 @@ const App = () => {
                 setTabs(prev => prev.map((t, i) => i === 0
                     ? { ...t, browsePath: initPath, browseStack: [], title }
                     : t));
+            } else if (br.get_tabs) {
+                try {
+                    const rawTabs = await br.get_tabs();
+                    const state = JSON.parse(rawTabs);
+                    if (state && state.tabs && state.tabs.length > 0) {
+                        const newTabs = state.tabs.map((t, i) => ({
+                            ...INIT_TAB(i + 1, t.path),
+                            title: t.title || (t.path ? t.path.split(/[/\\]/).filter(Boolean).pop() : 'New Tab')
+                        }));
+                        tabIdRef.current = newTabs.length + 1;
+                        setTabs(newTabs);
+                        const activeIdx = Math.max(0, Math.min((state.activeIdx || 0), newTabs.length - 1));
+                        setActiveTabId(newTabs[activeIdx].id);
+                    }
+                } catch (e) {
+                    console.error('Failed to load tabs', e);
+                }
             }
         });
     }, []);
+
+    useEffect(() => {
+        const br = b.current;
+        if (!br || !br.save_tabs) return;
+        const stateToSave = {
+            tabs: tabs.map(t => ({ path: t.browsePath, title: t.title })),
+            activeIdx: tabs.findIndex(t => t.id === activeTabId)
+        };
+        br.save_tabs(JSON.stringify(stateToSave));
+    }, [tabs, activeTabId]);
 
     async function loadConfig(br) {
         const raw = await br.get_config();
@@ -260,7 +287,7 @@ const App = () => {
         // live refreshes silently swap the result list in-place so there is no flicker.
         const isLiveRefresh = (
             browseNavRef.current.tabId === tabId &&
-            browseNavRef.current.path  === path
+            browseNavRef.current.path === path
         );
         browseNavRef.current = { tabId, path };
         if (!isLiveRefresh) {
@@ -758,7 +785,7 @@ const App = () => {
     // ── Common view props ─────────────────────────────────────────────────────
     const cutPaths = useMemo(() =>
         clipboard?.mode === 'cut' ? new Set(clipboard.paths) : new Set()
-    , [clipboard]);
+        , [clipboard]);
 
     const viewProps = {
         files: displayFiles,
