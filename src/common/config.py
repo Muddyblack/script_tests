@@ -56,7 +56,7 @@ os.makedirs(CHRONOS_DIR, exist_ok=True)
 # --- HOTKEY ---
 SUMMON_HOTKEY = "ctrl+shift+space"
 IMG_TO_TEXT_HOTKEY = "ctrl+shift+q"
-CHRONOS_HOTKEY = "ctrl+shift+c"
+CHRONOS_HOTKEY = "ctrl+shift+h"  # H for History/Chronos
 
 # --- PROJECT PATHS ---
 ASSETS_DIR = os.path.join(_BUNDLE_ROOT, "assets")
