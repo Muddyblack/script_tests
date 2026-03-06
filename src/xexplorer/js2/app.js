@@ -102,6 +102,20 @@ const App = () => {
         addTab(path);
     }
 
+    function handleFavMove(path, direction) {
+        setFavorites(prev => {
+            const idx = prev.findIndex(f => f.path === path);
+            if (idx === -1) return prev;
+            const nextIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+            const newFavs = [...prev];
+            const [item] = newFavs.splice(idx, 1);
+            newFavs.splice(nextIdx, 0, item);
+            getBridge(br => br.save_favorites(JSON.stringify(newFavs)));
+            return newFavs;
+        });
+    }
+
     function handleFavClick(fav) {
         if (fav.is_dir === false) {
             // it's a file — open it
@@ -961,6 +975,7 @@ const App = () => {
                     favorites={favorites}
                     onFavClick={handleFavClick}
                     onFavRemove={handleRemoveFavorite}
+                    onFavMove={handleFavMove}
                     onFavShowInExplorer={handleFavShowInExplorer}
                     onFavNewTab={handleFavNewTab}
                 />

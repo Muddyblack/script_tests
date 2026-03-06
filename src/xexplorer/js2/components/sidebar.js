@@ -107,7 +107,7 @@ const Breadcrumb = ({ path, onBack, onHome, onNavigate }) => {
 const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder,
     onRemoveFolder, onIndexFolder, onToggleIgnore, onRemoveIgnore, onAddIgnore,
     onScanDrives, onBrowseFolder, onScopeOnly,
-    favorites, onFavClick, onFavRemove, onFavShowInExplorer, onFavNewTab }) => {
+    favorites, onFavClick, onFavRemove, onFavShowInExplorer, onFavNewTab, onFavMove }) => {
     const [bottomTab, setBottomTab] = useState('favs'); // 'favs' | 'ignore'
     const [ignoreQ, setIgnoreQ] = useState('');
     const filteredIgnore = !ignoreQ.trim() ? ignore
@@ -171,7 +171,7 @@ const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder
                 <div style={{ flex: 1, overflowY: 'auto', padding: '2px 6px 4px' }}>
                     {favorites.length === 0
                         ? <div style={{ padding: '14px 8px', fontSize: 11.5, color: 'var(--text-disabled)', textAlign: 'center' }}>Right-click a file and choose<br />⭐ Add to Favorites</div>
-                        : favorites.map(fav => {
+                        : favorites.map((fav, idx) => {
                             const isDir = fav.is_dir !== false;
                             const openCtx = e => {
                                 e.preventDefault(); e.stopPropagation();
@@ -182,6 +182,9 @@ const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder
                                     isDir && { icon: '🎯', label: 'Search only here', action: () => { onScopeOnly && onScopeOnly(fav.path); favCtx.close(); } },
                                     isDir && { icon: '➕', label: 'Open in new tab', action: () => { onFavNewTab && onFavNewTab(fav.path); favCtx.close(); } },
                                     { icon: '📁', label: 'Show in Explorer', action: () => { onFavShowInExplorer && onFavShowInExplorer(fav.path); favCtx.close(); } },
+                                    'sep',
+                                    { icon: '▴', label: 'Move up', action: () => { onFavMove(fav.path, 'up'); favCtx.close(); }, disabled: idx === 0 },
+                                    { icon: '▾', label: 'Move down', action: () => { onFavMove(fav.path, 'down'); favCtx.close(); }, disabled: idx === favorites.length - 1 },
                                     'sep',
                                     { icon: '✕', label: 'Remove from favorites', danger: true, action: () => { onFavRemove(fav.path); favCtx.close(); } },
                                 ].filter(Boolean);
@@ -194,9 +197,17 @@ const Sidebar = ({ folders, ignore, selectedFolders, onFolderToggle, onAddFolder
                                     title={fav.path}>
                                     <FileIcon name={fav.label} path={fav.path} is_dir={isDir} size={14} className="fav-icon" />
                                     <span className="fav-label">{fav.label}</span>
-                                    <button className="fav-remove"
-                                        onMouseDown={e => e.stopPropagation()}
-                                        onClick={e => { e.stopPropagation(); onFavRemove(fav.path); }}>✕</button>
+                                    <div className="fav-actions">
+                                        <button className="fav-move" title="Move up"
+                                            disabled={idx === 0}
+                                            onClick={e => { e.stopPropagation(); onFavMove(fav.path, 'up'); }}>▴</button>
+                                        <button className="fav-move" title="Move down"
+                                            disabled={idx === favorites.length - 1}
+                                            onClick={e => { e.stopPropagation(); onFavMove(fav.path, 'down'); }}>▾</button>
+                                        <button className="fav-remove"
+                                            onMouseDown={e => e.stopPropagation()}
+                                            onClick={e => { e.stopPropagation(); onFavRemove(fav.path); }}>✕</button>
+                                    </div>
                                 </div>
                             );
                         })

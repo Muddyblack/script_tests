@@ -1185,7 +1185,6 @@ class XExplorerBridge(QObject):
                 return ""
             b64 = base64.b64encode(bytes(ba)).decode()
             self._icon_cache[cache_key] = b64
-            print(f"[icon] OK {os.path.basename(path)} → {len(b64)} chars")
             return b64
         except Exception as exc:
             print(f"[icon] EXCEPTION for {path}: {exc}")
@@ -1247,6 +1246,56 @@ class XExplorerBridge(QObject):
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
 
+    def _load_html_sync(self, path: str, cancel: threading.Event | None = None) -> str:
+        """Read an HTML file and return rendered preview JSON. Called off the main thread."""
+        try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            with open(path, encoding="utf-8", errors="replace") as f:
+                content = f.read(512 * 1024)  # 512KB limit for HTML
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            # Light sanitization - allow JS/CSS but prevent dangerous actions
+            # The iframe sandbox will provide the main security layer
+            import re
+
+            # Only remove extremely dangerous patterns, allow most HTML/JS/CSS
+            # Remove form submissions to external URLs (keep sandbox contained)
+            content = re.sub(
+                r'<form[^>]*action\s*=\s*["\']https?://',
+                '<form action="about:blank" data-blocked="',
+                content,
+                flags=re.IGNORECASE,
+            )
+
+            # Inject <base> tag to resolve relative URLs correctly
+            # Get the directory of the HTML file as file:// URL
+            file_dir = os.path.dirname(os.path.abspath(path)).replace("\\", "/")
+            base_url = f"file:///{file_dir}/"
+
+            # Insert base tag after <head> or at the start if no head tag
+            if re.search(r"<head[^>]*>", content, re.IGNORECASE):
+                content = re.sub(
+                    r"(<head[^>]*>)",
+                    rf'\1<base href="{base_url}">',
+                    content,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
+            else:
+                # No head tag, add it
+                content = f'<base href="{base_url}">' + content
+
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            return json.dumps({"type": "html", "content": content, "path": path})
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
     def _load_pdf_sync(
         self, path: str, page: int, cancel: threading.Event | None = None
     ) -> str:
@@ -1262,13 +1311,19 @@ class XExplorerBridge(QObject):
 
             # Load PDF with timeout protection for network drives
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(doc.load, path)
                 try:
                     future.result(timeout=5.0)  # 5 second timeout for network drives
                 except concurrent.futures.TimeoutError:
                     doc.close()
-                    return json.dumps({"type": "error", "content": "PDF load timeout - network drive too slow"})
+                    return json.dumps(
+                        {
+                            "type": "error",
+                            "content": "PDF load timeout - network drive too slow",
+                        }
+                    )
 
             if cancel and cancel.is_set():
                 doc.close()
@@ -1685,8 +1740,11 @@ class XExplorerBridge(QObject):
             try:
                 # Quick check with timeout to avoid hanging on slow network drives
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(lambda: os.path.exists(path) and not os.path.isdir(path))
+                    future = executor.submit(
+                        lambda: os.path.exists(path) and not os.path.isdir(path)
+                    )
                     try:
                         exists_and_file = future.result(timeout=3.0)
                         if not exists_and_file:
@@ -1708,7 +1766,12 @@ class XExplorerBridge(QObject):
                             (
                                 "preview",
                                 _key,
-                                json.dumps({"type": "error", "content": "Network drive timeout - file access too slow"}),
+                                json.dumps(
+                                    {
+                                        "type": "error",
+                                        "content": "Network drive timeout - file access too slow",
+                                    }
+                                ),
                             )
                         )
                         return
@@ -1746,6 +1809,7 @@ class XExplorerBridge(QObject):
         the result is delivered via the preview_ready signal / xex:preview_ready event.
         """
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
+        HTML_EXTS = {".html", ".htm"}
         TEXT_EXTS = {
             ".txt",
             ".md",
@@ -1760,7 +1824,6 @@ class XExplorerBridge(QObject):
             ".toml",
             ".ini",
             ".cfg",
-            ".html",
             ".css",
             ".xml",
             ".csv",
@@ -1792,6 +1855,12 @@ class XExplorerBridge(QObject):
                 path, 0, lambda c: self._load_image_sync(path, ext, c), "Loading image…"
             )
 
+        # HTML files get rendered preview
+        if ext in HTML_EXTS:
+            return self._async_preview(
+                path, 0, lambda c: self._load_html_sync(path, c), "Loading HTML…"
+            )
+
         # For text files we need to peek at the size first — but we must not
         # block the main thread, so we do that check inside the worker too.
         def _text_or_unsupported(cancel=None):
@@ -1814,6 +1883,7 @@ class XExplorerBridge(QObject):
             return False
         ext = os.path.splitext(path)[1].lower()
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
+        HTML_EXTS = {".html", ".htm"}
         TEXT_EXTS = {
             ".txt",
             ".md",
@@ -1828,7 +1898,6 @@ class XExplorerBridge(QObject):
             ".toml",
             ".ini",
             ".cfg",
-            ".html",
             ".css",
             ".xml",
             ".csv",
@@ -1850,6 +1919,7 @@ class XExplorerBridge(QObject):
         VISIO_EXTS = {".vsd", ".vsdx", ".vsdm"}
         if (
             ext in IMAGE_EXTS
+            or ext in HTML_EXTS
             or ext in TEXT_EXTS
             or ext in PDF_EXTS
             or ext in OFFICE_EXTS
@@ -1979,7 +2049,9 @@ class XExplorerBridge(QObject):
                                     return
 
                                 st = os.stat(abs_path)
-                                file_key_src = f"{abs_path}|{st.st_size}|{st.st_mtime_ns}"
+                                file_key_src = (
+                                    f"{abs_path}|{st.st_size}|{st.st_mtime_ns}"
+                                )
                                 file_key = hashlib.sha1(
                                     file_key_src.encode("utf-8", errors="replace")
                                 ).hexdigest()
@@ -2142,7 +2214,9 @@ class XExplorerBridge(QObject):
                 cancel = threading.Event()
                 self._preview_cancel[async_key] = cancel
 
-                def _run_visio(_path=path, _page=page, _key=async_key, _cancel=cancel) -> None:
+                def _run_visio(
+                    _path=path, _page=page, _key=async_key, _cancel=cancel
+                ) -> None:
                     import hashlib
                     import tempfile
 

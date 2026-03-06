@@ -27,7 +27,6 @@ function _iconFlush() {
             let url = '';
             try {
                 const b64 = await br.get_file_icon_b64(path);
-                console.log('[icon]', cacheKey.slice(-30), 'b64len=', b64 ? b64.length : 0);
                 url = b64 ? `data:image/png;base64,${b64}` : '';
             } catch (err) {
                 console.warn('[icon] error', cacheKey, err);

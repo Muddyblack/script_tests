@@ -29,8 +29,8 @@ const CtxMenu = memo(({ items, pos, onClose }) => {
             {items.map((it, i) =>
                 it === 'sep'
                     ? <div key={i} className="ctx-sep" />
-                    : <div key={i} className={`ctx-item ${it.danger ? 'danger' : ''}`}
-                        onClick={() => { it.action(); onClose(); }}>
+                    : <div key={i} className={`ctx-item ${it.danger ? 'danger' : ''} ${it.disabled ? 'disabled' : ''}`}
+                        onClick={() => { if (!it.disabled) { it.action(); onClose(); } }}>
                         <em className="ctx-icon">{it.icon}</em>
                         {it.label}
                         {it.kbd && <span className="kbd">{it.kbd}</span>}

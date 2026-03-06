@@ -60,7 +60,7 @@ const PreviewPane = ({ file, onClose }) => {
                 <span className="preview-filename">{file.name}</span>
                 <button className="btn-icon" onClick={onClose}>✕</button>
             </div>
-            <div className="preview-body" style={{ flex: 1, overflow: 'auto', padding: preview?.type === 'sheet' ? 0 : 14 }}>
+            <div className="preview-body" style={{ flex: 1, overflow: 'auto', padding: preview?.type === 'sheet' || preview?.type === 'html' ? 0 : 14, position: 'relative' }}>
                 {!preview && (
                     <div style={{ color: 'var(--text-disabled)', fontSize: 12, padding: 14 }}>Loading preview…</div>
                 )}
@@ -97,6 +97,43 @@ const PreviewPane = ({ file, onClose }) => {
                     <>
                         <div className="preview-meta">{file.path}</div>
                         <pre className="preview-code">{preview.content}</pre>
+                    </>
+                )}
+                {preview?.type === 'html' && (
+                    <>
+                        <div style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0, 
+                            right: 0, 
+                            padding: '4px 8px', 
+                            background: 'rgba(0,0,0,0.05)', 
+                            fontSize: 10, 
+                            color: 'var(--text-secondary)', 
+                            borderBottom: '1px solid var(--border)',
+                            zIndex: 10,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                        }}>
+                            {file.path}
+                        </div>
+                        <iframe
+                            srcDoc={preview.content}
+                            style={{
+                                position: 'absolute',
+                                top: '24px',
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                width: '100%',
+                                height: 'calc(100% - 24px)',
+                                border: 'none',
+                                background: 'white'
+                            }}
+                            sandbox="allow-scripts allow-same-origin allow-modals allow-popups"
+                            title="HTML Preview"
+                        />
                     </>
                 )}
                 {preview?.type === 'loading' && (
