@@ -12,18 +12,6 @@
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script src="../lib/babel.min.js"></script>
     <script src="../lib/tailwind.min.js"></script>
-    <!-- defaults for preloader until theme CSS loads -->
-    <style>
-        :root {
-            --bg-base: #1b1b1b;
-            --accent: #3a84ff;
-            --text-primary: #e0e0e0;
-            --text-disabled: #888;
-            --border: #444;
-        }
-        @keyframes x-preloader-spin{to{transform:rotate(360deg)}}
-        .x-preloader-ring{position:absolute;inset:0;border-radius:50%;padding:3px;background:conic-gradient(from 0deg,transparent 0%,var(--accent) 50%,transparent 100%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:x-preloader-spin 1.4s cubic-bezier(0.4,0,0.2,1) infinite;opacity:.7}
-    </style>
     <link rel="stylesheet" href="xexplorer.css">
     <script type="text/babel" src="js2/bridge.js"></script>
     <script type="text/babel" src="js2/components/ui.js"></script>
@@ -40,13 +28,17 @@
 <body>
     <div id="root">
         <div class="x-preloader-container">
-            <div class="x-preloader-content">
-                <div class="x-preloader-visual">
-                    <div class="x-preloader-ring"></div>
-                    <div class="x-preloader-inner"></div>
-                    <div class="x-preloader-logo"></div>
+            <div class="x-preloader-bg-glow"></div>
+            <div class="x-preloader-bg-glow-2"></div>
+            <div class="x-preloader-glass">
+                <div class="x-preloader-content">
+                    <div class="x-preloader-visual">
+                        <div class="x-preloader-ring"></div>
+                        <div class="x-preloader-ring-inner"></div>
+                        <div class="x-preloader-logo"></div>
+                    </div>
+                    <div class="x-preloader-text">Loading X-Explorer</div>
                 </div>
-                <div class="x-preloader-text">Loading X-Explorer</div>
             </div>
         </div>
     </div>

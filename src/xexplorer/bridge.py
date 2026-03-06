@@ -1215,10 +1215,8 @@ class XExplorerBridge(QObject):
             "temp.log",
         ]
         for p in common:
-            try:
+            with contextlib.suppress(Exception):
                 self.get_file_icon_b64(p)
-            except Exception:
-                pass
             time.sleep(0.01)  # Cooperate with event loop
 
     # ── Internal sync helpers (run in background thread) ─────────────────────
