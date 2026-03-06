@@ -1,3 +1,18 @@
+// Hide preloader immediately when React app starts
+function hidePreloader() {
+    const preloader = document.querySelector('.x-preloader-container');
+    if (preloader && preloader.style.display !== 'none') {
+        preloader.style.opacity = '0';
+        preloader.style.transition = 'opacity 0.2s ease-out';
+        setTimeout(() => {
+            preloader.style.display = 'none';
+        }, 200);
+    }
+}
+
+// Hide preloader as soon as possible
+hidePreloader();
+
 const App = () => {
     // Config
     const [folders, setFolders] = useState([]);

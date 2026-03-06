@@ -77,7 +77,7 @@ class SearchEngine:
         target_folders=None,
         files_only=False,
         folders_only=False,
-        limit=2000,
+        limit=3000,
     ):
         """
         Standard Search across all databases for files/folders matching ALL query_terms (AND logic)

@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>X-Explorer</title>
+    <link rel="stylesheet" href="xexplorer.css">
     <script crossorigin src="../lib/react.min.js"></script>
     <script crossorigin src="../lib/react-dom.min.js"></script>
     <script src="../lib/framer-motion.js"></script>
@@ -12,7 +13,6 @@
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script src="../lib/babel.min.js"></script>
     <script src="../lib/tailwind.min.js"></script>
-    <link rel="stylesheet" href="xexplorer.css">
     <script type="text/babel" src="js2/bridge.js"></script>
     <script type="text/babel" src="js2/components/ui.js"></script>
     <script type="text/babel" src="js2/components/icons.js"></script>
@@ -41,6 +41,22 @@
                 </div>
             </div>
         </div>
+        <script>
+            // Hide preloader after minimal delay to ensure it's visible briefly
+            (function() {
+                const preloader = document.querySelector('.x-preloader-container');
+                if (preloader) {
+                    // Show preloader briefly, then fade out quickly
+                    setTimeout(() => {
+                        preloader.style.opacity = '0';
+                        preloader.style.transition = 'opacity 0.1s ease-out';
+                        setTimeout(() => {
+                            preloader.style.display = 'none';
+                        }, 100);
+                    }, 200); // Show for 200ms minimum
+                }
+            })();
+        </script>
     </div>
 </body>
 
