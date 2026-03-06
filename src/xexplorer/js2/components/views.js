@@ -1,6 +1,44 @@
 // ── Details View ──────────────────────────────────────────────────────────────
 const SORT_KEYS = { Name: 'name', Type: 'ext', Size: 'size', Modified: 'mtime' };
 
+// Memoized row component to prevent unnecessary re-renders
+const FileRow = React.memo(({ file, isSelected, isDragOver, isCut, onSelect, onDouble, onCtxMenu, onDragStart, onDropOnFolder }) => {
+    const [localDragOver, setLocalDragOver] = useState(false);
+    
+    return (
+        <tr data-path={file.path}
+            className={`file-row ${isSelected ? 'selected' : ''} ${(isDragOver || localDragOver) ? 'drag-over' : ''} ${isCut ? 'cut-item' : ''}`}
+            draggable={true}
+            onDragStart={e => onDragStart && onDragStart(e, file)}
+            onDragOver={file.is_dir ? e => { e.preventDefault(); e.stopPropagation(); setLocalDragOver(true); } : e => e.preventDefault()}
+            onDragLeave={file.is_dir ? () => setLocalDragOver(false) : undefined}
+            onDrop={file.is_dir ? e => { e.preventDefault(); e.stopPropagation(); setLocalDragOver(false); onDropOnFolder && onDropOnFolder(e, file.path); } : undefined}
+            onClick={e => onSelect(file, e)}
+            onDoubleClick={() => onDouble(file)}
+            onContextMenu={e => { e.preventDefault(); onCtxMenu(e, file); }}>
+            <td>
+                <FileIcon name={file.name} path={file.path} is_dir={file.is_dir} size={15} className="file-icon" />
+                <span className="file-name">{file.name}</span>
+                {file.ext && !file.is_dir && <span className="ext-badge">.{file.ext}</span>}
+            </td>
+            <td style={{ color: 'var(--text-disabled)', fontSize: 11 }}>
+                {file.is_dir ? 'Folder' : (file.ext ? file.ext.toUpperCase() : 'File')}
+            </td>
+            <td style={{ color: 'var(--text-disabled)', fontVariantNumeric: 'tabular-nums' }}>{file.size}</td>
+            <td style={{ color: 'var(--text-disabled)', fontVariantNumeric: 'tabular-nums' }}>{file.mtime}</td>
+        </tr>
+    );
+}, (prev, next) => {
+    // Custom comparison to prevent re-renders when nothing changed
+    return prev.file.path === next.file.path &&
+           prev.isSelected === next.isSelected &&
+           prev.isDragOver === next.isDragOver &&
+           prev.isCut === next.isCut &&
+           prev.file.name === next.file.name &&
+           prev.file.size === next.file.size &&
+           prev.file.mtime === next.file.mtime;
+});
+
 const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, sortDir, onSort, onDragStart, onDropOnFolder, cutPaths }) => {
     const [dragOverPath, setDragOverPath] = useState(null);
     const cols = [
@@ -24,32 +62,20 @@ const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, 
                     </tr>
                 </thead>
                 <tbody>
-                    {files.map(f => {
-                        const isSel = selected.has(f.path);
-                        return (
-                            <tr key={f.path} data-path={f.path}
-                                className={`file-row ${isSel ? 'selected' : ''} ${dragOverPath === f.path ? 'drag-over' : ''} ${cutPaths?.has(f.path) ? 'cut-item' : ''}`}
-                                draggable={true}
-                                onDragStart={e => onDragStart && onDragStart(e, f)}
-                                onDragOver={f.is_dir ? e => { e.preventDefault(); e.stopPropagation(); setDragOverPath(f.path); } : e => e.preventDefault()}
-                                onDragLeave={f.is_dir ? () => setDragOverPath(null) : undefined}
-                                onDrop={f.is_dir ? e => { e.preventDefault(); e.stopPropagation(); setDragOverPath(null); onDropOnFolder && onDropOnFolder(e, f.path); } : undefined}
-                                onClick={e => onSelect(f, e)}
-                                onDoubleClick={() => onDouble(f)}
-                                onContextMenu={e => { e.preventDefault(); onCtxMenu(e, f); }}>
-                                <td>
-                                    <FileIcon name={f.name} path={f.path} is_dir={f.is_dir} size={15} className="file-icon" />
-                                    <span className="file-name">{f.name}</span>
-                                    {f.ext && !f.is_dir && <span className="ext-badge">.{f.ext}</span>}
-                                </td>
-                                <td style={{ color: 'var(--text-disabled)', fontSize: 11 }}>
-                                    {f.is_dir ? 'Folder' : (f.ext ? f.ext.toUpperCase() : 'File')}
-                                </td>
-                                <td style={{ color: 'var(--text-disabled)', fontVariantNumeric: 'tabular-nums' }}>{f.size}</td>
-                                <td style={{ color: 'var(--text-disabled)', fontVariantNumeric: 'tabular-nums' }}>{f.mtime}</td>
-                            </tr>
-                        );
-                    })}
+                    {files.map(f => (
+                        <FileRow
+                            key={f.path}
+                            file={f}
+                            isSelected={selected.has(f.path)}
+                            isDragOver={dragOverPath === f.path}
+                            isCut={cutPaths?.has(f.path)}
+                            onSelect={onSelect}
+                            onDouble={onDouble}
+                            onCtxMenu={onCtxMenu}
+                            onDragStart={onDragStart}
+                            onDropOnFolder={onDropOnFolder}
+                        />
+                    ))}
                 </tbody>
             </table>
         </div>
@@ -57,23 +83,37 @@ const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, 
 };
 
 // ── Icons View ────────────────────────────────────────────────────────────────
+const IconItem = React.memo(({ file, isSelected, onSelect, onDouble, onCtxMenu }) => {
+    const short = file.name.length > 15 ? file.name.slice(0, 14) + '…' : file.name;
+    return (
+        <div data-path={file.path} className={`icon-item ${isSelected ? 'selected' : ''}`}
+            onClick={e => onSelect(file, e)}
+            onDoubleClick={() => onDouble(file)}
+            onContextMenu={e => { e.preventDefault(); onCtxMenu(e, file); }}
+            title={file.path}>
+            <FileIcon name={file.name} path={file.path} is_dir={file.is_dir} size={38} className="big-icon" />
+            <span className="icon-name">{short}</span>
+        </div>
+    );
+}, (prev, next) => {
+    return prev.file.path === next.file.path &&
+           prev.isSelected === next.isSelected &&
+           prev.file.name === next.file.name;
+});
+
 const IconsView = ({ files, selected, onSelect, onDouble, onCtxMenu }) => (
     <div style={{ flex: 1, overflowY: 'auto' }}>
         <div className="icons-grid">
-            {files.slice(0, 800).map(f => {
-                const isSel = selected.has(f.path);
-                const short = f.name.length > 15 ? f.name.slice(0, 14) + '…' : f.name;
-                return (
-                    <div key={f.path} data-path={f.path} className={`icon-item ${isSel ? 'selected' : ''}`}
-                        onClick={e => onSelect(f, e)}
-                        onDoubleClick={() => onDouble(f)}
-                        onContextMenu={e => { e.preventDefault(); onCtxMenu(e, f); }}
-                        title={f.path}>
-                        <FileIcon name={f.name} path={f.path} is_dir={f.is_dir} size={38} className="big-icon" />
-                        <span className="icon-name">{short}</span>
-                    </div>
-                );
-            })}
+            {files.slice(0, 800).map(f => (
+                <IconItem
+                    key={f.path}
+                    file={f}
+                    isSelected={selected.has(f.path)}
+                    onSelect={onSelect}
+                    onDouble={onDouble}
+                    onCtxMenu={onCtxMenu}
+                />
+            ))}
         </div>
     </div>
 );
@@ -106,7 +146,7 @@ function buildTree(files) {
     return roots;
 }
 
-const TreeNode = ({ node, depth, selected, onSelect, onDouble, onCtxMenu, expanded, onToggle }) => {
+const TreeNode = React.memo(({ node, depth, selected, onSelect, onDouble, onCtxMenu, expanded, onToggle }) => {
     const hasKids = node.children.length > 0;
     const isExp = expanded.has(node.path);
     const isSel = selected.has(node.path);
@@ -130,7 +170,18 @@ const TreeNode = ({ node, depth, selected, onSelect, onDouble, onCtxMenu, expand
             ))}
         </div>
     );
-};
+}, (prev, next) => {
+    const prevExp = prev.expanded.has(prev.node.path);
+    const nextExp = next.expanded.has(next.node.path);
+    const prevSel = prev.selected.has(prev.node.path);
+    const nextSel = next.selected.has(next.node.path);
+    
+    return prev.node.path === next.node.path &&
+           prev.depth === next.depth &&
+           prevExp === nextExp &&
+           prevSel === nextSel &&
+           prev.node.children.length === next.node.children.length;
+});
 
 const TreeView = ({ files, selected, onSelect, onDouble, onCtxMenu }) => {
     const [expanded, setExpanded] = useState(new Set());
