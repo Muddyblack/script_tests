@@ -53,11 +53,12 @@ def main():
     def _warm_xexplorer_db():
         try:
             engine = SearchEngine(X_EXPLORER_DB)
-            engine.warm_cache()  # Warm in background thread
+            engine.warm_cache(blocking=True)  # Warm in background thread
         except Exception:
             pass  # Best-effort: don't crash if DB doesn't exist yet
 
     import threading
+
     threading.Thread(target=_warm_xexplorer_db, daemon=True).start()
 
     # Start Ghost Typist watcher in background (no UI required)

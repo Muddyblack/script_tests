@@ -26,18 +26,20 @@ class SearchEngine:
         # Keep persistent connections for faster queries
         self._connections = {}
         self._cache_warmed = False
+        self._conn_lock = threading.Lock()
 
     def _get_connection(self, db_path):
         """Get or create a persistent connection with optimizations."""
-        if db_path not in self._connections:
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            # Optimize for read performance
-            conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
-            conn.execute("PRAGMA temp_store = MEMORY")
-            conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
-            conn.execute("PRAGMA journal_mode = WAL")  # Better concurrency
-            self._connections[db_path] = conn
-        return self._connections[db_path]
+        with self._conn_lock:
+            if db_path not in self._connections:
+                conn = sqlite3.connect(db_path, check_same_thread=False)
+                # Optimize for read performance
+                conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
+                conn.execute("PRAGMA temp_store = MEMORY")
+                conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
+                conn.execute("PRAGMA journal_mode = WAL")  # Better concurrency
+                self._connections[db_path] = conn
+            return self._connections[db_path]
 
     def _warm_cache(self):
         """Warm up the database cache for instant first search."""
@@ -50,14 +52,20 @@ class SearchEngine:
                 continue
             try:
                 conn = self._get_connection(db)
-                # Touch the index to load it into memory
-                conn.execute("SELECT COUNT(*) FROM files").fetchone()
+                # Touch the table data to load it into memory
+                # A full scan of the name column ensures we read the data pages, not just the index/sqlite_stat1
+                conn.execute(
+                    "SELECT path FROM files WHERE name = '__warmup__'"
+                ).fetchall()
             except Exception:
                 pass
 
-    def warm_cache(self):
+    def warm_cache(self, blocking=False):
         """Public method to warm cache - can be called from Nexus startup."""
-        threading.Thread(target=self._warm_cache, daemon=True).start()
+        if blocking:
+            self._warm_cache()
+        else:
+            threading.Thread(target=self._warm_cache, daemon=True).start()
 
     def search_files(
         self,
@@ -82,9 +90,7 @@ class SearchEngine:
 
                 if query_terms:
                     f_conds.append(
-                        "("
-                        + " AND ".join(["name LIKE ?" for _ in query_terms])
-                        + ")"
+                        "(" + " AND ".join(["name LIKE ?" for _ in query_terms]) + ")"
                     )
                     f_params.extend([f"%{t}%" for t in query_terms])
 
@@ -116,9 +122,7 @@ class SearchEngine:
 
         return list(unique_cands.values())
 
-    def search_content(
-        self, query_terms, target_folders=None, limit=2000
-    ):
+    def search_content(self, query_terms, target_folders=None, limit=2000):
         """
         Content Search: searches inside text files for query_terms (AND logic)
         """

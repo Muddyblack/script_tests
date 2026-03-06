@@ -145,10 +145,7 @@ class XExplorerBridge(QObject):
 
         # Warm database cache and emit signal when ready
         def _warm_and_signal():
-            self._search_engine.warm_cache()
-            # Wait for warming to complete (it runs in a thread)
-            import time
-            time.sleep(0.5)  # Give it time to warm
+            self._search_engine.warm_cache(blocking=True)
             self.db_ready.emit()
 
         threading.Thread(target=_warm_and_signal, daemon=True).start()
@@ -668,7 +665,6 @@ class XExplorerBridge(QObject):
                 "INSERT OR REPLACE INTO settings VALUES(?,?)", ("favorites", json_str)
             )
             conn.commit()
-
 
     # ── Search ────────────────────────────────────────────────────────────────
 
