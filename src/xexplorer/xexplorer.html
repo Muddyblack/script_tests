@@ -24,6 +24,16 @@
     <script type="text/babel" src="js2/app.js"></script>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <style>
+            @keyframes preloader-pulse {
+                0%, 100% { opacity: 0.3; }
+                50% { opacity: 1; }
+            }
+        </style>
+        <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-base, #18181b); color: var(--text-disabled, #a1a1aa); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;">
+            <div style="animation: preloader-pulse 1.5s infinite ease-in-out;">Loading...</div>
+        </div>
+    </div>
 </body>
 </html>
