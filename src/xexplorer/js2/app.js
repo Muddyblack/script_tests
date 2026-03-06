@@ -1002,10 +1002,6 @@ const App = () => {
                     )}
 
                     {/* Views */}
-                    {activeTab.loading && (
-                        <div style={{ padding: '6px 14px', fontSize: 11, color: 'var(--text-disabled)' }}>Searching…</div>
-                    )}
-
                     {!activeTab.loading && activeTab.results.length === 0 && activeTab.browsePath !== null ? (
                         <div className="empty-state" style={{ flex: 1 }}>
                             <span className="empty-icon" style={{ fontSize: 52 }}>📂</span>
@@ -1058,6 +1054,8 @@ const App = () => {
                         <div className="progress-track"><div className="progress-fill" style={{ width: '40%' }} /></div>
                         <span>Indexing… {indexProgress}</span>
                     </div>
+                ) : activeTab.loading ? (
+                    <span className="status-msg">🔍 Searching…</span>
                 ) : (
                     <span className="status-msg">{statusMsg}</span>
                 )}
