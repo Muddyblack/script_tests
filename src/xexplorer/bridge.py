@@ -135,11 +135,24 @@ class XExplorerBridge(QObject):
     preview_ready = pyqtSignal(str)  # JSON blob (same schema as get_preview_page)
     # Async search
     search_results = pyqtSignal(str, str)  # query, JSON results
+    # Database ready signal
+    db_ready = pyqtSignal()  # emitted when database cache is warmed
 
     def __init__(self, initial_path: str = "") -> None:
         super().__init__()
         init_db()
         self._search_engine = SearchEngine(DB_PATH)
+
+        # Warm database cache and emit signal when ready
+        def _warm_and_signal():
+            self._search_engine.warm_cache()
+            # Wait for warming to complete (it runs in a thread)
+            import time
+            time.sleep(0.5)  # Give it time to warm
+            self.db_ready.emit()
+
+        threading.Thread(target=_warm_and_signal, daemon=True).start()
+
         self._worker: IndexerWorker | None = None
         self._observers: list = []
         self._icon_provider = QFileIconProvider()

@@ -3,12 +3,12 @@
 import os
 import sys
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 from src.common.config import ASSETS_DIR, XEXPLORER_DIR
 from src.common.theme import ThemeManager, WebThemeBridge
@@ -37,8 +37,50 @@ def get_web_profile() -> QWebEngineProfile:
     return _web_profile
 
 
+class LoadingSplash(QWidget):
+    """Simple loading splash screen shown while database warms up."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("X-Explorer")
+        self.resize(400, 200)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(40, 40, 40, 40)
+
+        # Title
+        title = QLabel("X-Explorer")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2196F3;")
+        layout.addWidget(title)
+
+        # Status message
+        self.status = QLabel("Initializing database...")
+        self.status.setStyleSheet("font-size: 14px; color: #666; margin-top: 20px;")
+        layout.addWidget(self.status)
+
+        # Animated dots
+        self.dots = 0
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._update_dots)
+        self.timer.start(500)
+
+        layout.addStretch()
+        self.setLayout(layout)
+
+        # Center on screen
+        screen = QApplication.primaryScreen().geometry()
+        self.move(
+            (screen.width() - self.width()) // 2,
+            (screen.height() - self.height()) // 2
+        )
+
+    def _update_dots(self):
+        self.dots = (self.dots + 1) % 4
+        self.status.setText("Initializing database" + "." * self.dots)
+
+
 class xexplorer(QMainWindow):
-    def __init__(self, initial_path: str = "") -> None:
+    def __init__(self, initial_path: str = "", show_splash: bool = True) -> None:
         super().__init__()
         self.mgr = ThemeManager()
 
@@ -49,6 +91,12 @@ class xexplorer(QMainWindow):
         icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
+
+        # Show splash screen while database warms up (only for first window)
+        self.splash = None
+        if show_splash:
+            self.splash = LoadingSplash()
+            self.splash.show()
 
         # Create persistent profile FIRST, then create page with it
         profile = get_web_profile()
@@ -66,6 +114,11 @@ class xexplorer(QMainWindow):
         self.setCentralWidget(self.view)
 
         self.bridge = XExplorerBridge(initial_path=initial_path)
+
+        # When database is ready, hide splash and show main window
+        if self.splash:
+            self.bridge.db_ready.connect(self._on_db_ready)
+
         self.channel = QWebChannel(self)
         self.channel.registerObject("pyBridge", self.bridge)
         self.view.page().setWebChannel(self.channel)
@@ -83,8 +136,16 @@ class xexplorer(QMainWindow):
         html_path  = os.path.join(script_dir, "xexplorer.html")
         self.view.setUrl(QUrl.fromLocalFile(html_path))
 
+    def _on_db_ready(self):
+        """Called when database cache is warmed up."""
+        if self.splash:
+            self.splash.close()
+            self.splash = None
+        self.show()
+
     def _spawn_window(self, path: str) -> None:
-        win = xexplorer(initial_path=path)
+        # Spawned windows don't need splash (db already warmed)
+        win = xexplorer(initial_path=path, show_splash=False)
         win.resize(self.width(), self.height())
         win.move(self.x() + 40, self.y() + 40)
         win.show()
@@ -139,7 +200,7 @@ def main() -> None:
     app.setQuitOnLastWindowClosed(True)
     win = xexplorer()
     _open_windows.append(win)
-    win.show()
+    # Don't show main window yet - splash will show first, then main window when db ready
     sys.exit(app.exec())
 
 
