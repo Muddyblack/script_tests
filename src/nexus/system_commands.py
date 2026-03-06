@@ -127,6 +127,23 @@ def execute_system_toggle(nexus, cmd: str) -> None:
         elif cmd == "cmd_monitor_dvi":
             start_monitor_selection(nexus, "dvi")
 
+        # --- DISPLAY MODES (Windows DisplaySwitch) ---
+        elif cmd == "cmd_display_internal":
+            subprocess.run(["DisplaySwitch.exe", "/internal"])
+            _set_status(nexus, "🖥️ Display: PC Screen Only")
+
+        elif cmd == "cmd_display_clone":
+            subprocess.run(["DisplaySwitch.exe", "/clone"])
+            _set_status(nexus, "🖥️ Display: Duplicate")
+
+        elif cmd == "cmd_display_extend":
+            subprocess.run(["DisplaySwitch.exe", "/extend"])
+            _set_status(nexus, "🖥️ Display: Extend")
+
+        elif cmd == "cmd_display_external":
+            subprocess.run(["DisplaySwitch.exe", "/external"])
+            _set_status(nexus, "🖥️ Display: Second Screen Only")
+
         elif cmd == "cmd_lock":
             subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"])
             _set_status(nexus, "🔒 Workstation Locked")

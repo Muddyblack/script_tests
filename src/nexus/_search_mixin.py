@@ -166,7 +166,7 @@ class _SearchMixin:
                     if k in prefixes.values():
                         active_modes[k] = False
                 active_modes[mode_key] = True
-                search_term = search[len(pref):].strip()
+                search_term = search[len(pref) :].strip()
                 break
 
         terms = [t for t in search_term.split() if t]
@@ -217,20 +217,104 @@ class _SearchMixin:
             t_terms = [t.strip(">") for t in terms]
 
             mgmt_cmds = [
-                ("xexplorer - File Manager", "Modern explorer with fast search", "xexplorer", "xexplorer.png", "#3b82f6"),
-                ("Re-index Files (X-Explorer)", "Background re-index of search cache", "reindex_files", "refresh.svg", "#60a5fa"),
-                ("Regex Helper", "Offline Pattern Tester", "regex_helper", "regex_sandbox.png", "#f472b6"),
-                ("Color Picker", "Hex & RGB preview + color tool", "color_picker", "color_picker.png", "#8b5cf6"),
-                ("File Ops", "Fast copy • move • delete", "file_ops", "fileops.png", "#22c55e"),
-                ("Chronos Hub", "Achievement & Mission Tracker", "chronos_hub", "chronos.png", "#fbbf24"),
-                ("Archiver", "Zip • tar • 7z compress & extract", "archiver", "package.svg", "#a78bfa"),
-                ("Snip → Text (OCR)", "Select an area on screen and copy text to clipboard", "img_to_text", "ocr_icon.png", "#22c55e"),
-                ("Image → Text (OCR)", "Open file / drag-drop / paste image and extract text", "img_to_text_gui", "ocr_icon.png", "#34d399"),
-                ("Clipboard Manager", "Persistent multi-history clipboard with search & pin", "clipboard_manager", "clipboard_manager.png", "#f472b6"),
-                ("Port Inspector", "Real-time network ports · kill by PID", "port_inspector", "port_inspector.png", "#38bdf8"),
-                ("Hash Tool", "MD5 · SHA-1 · SHA-256 · SHA-512 hashing + Base64 encode/decode", "hash_tool", "hash_tool.png", "#a3e635"),
-                ("Ghost Typist", "Text expansion · snippets · macros", "ghost_typist", "ghost_typist.png", "#a855f7"),
-                ("SQLite Viewer", "Browse & query SQLite databases", "sqlite_viewer", "sqlite_viewer.png", "#0ea5e9"),
+                (
+                    "xexplorer - File Manager",
+                    "Modern explorer with fast search",
+                    "xexplorer",
+                    "xexplorer.png",
+                    "#3b82f6",
+                ),
+                (
+                    "Re-index Files (X-Explorer)",
+                    "Background re-index of search cache",
+                    "reindex_files",
+                    "refresh.svg",
+                    "#60a5fa",
+                ),
+                (
+                    "Regex Helper",
+                    "Offline Pattern Tester",
+                    "regex_helper",
+                    "regex_sandbox.png",
+                    "#f472b6",
+                ),
+                (
+                    "Color Picker",
+                    "Hex & RGB preview + color tool",
+                    "color_picker",
+                    "color_picker.png",
+                    "#8b5cf6",
+                ),
+                (
+                    "File Ops",
+                    "Fast copy • move • delete",
+                    "file_ops",
+                    "fileops.png",
+                    "#22c55e",
+                ),
+                (
+                    "Chronos Hub",
+                    "Achievement & Mission Tracker",
+                    "chronos_hub",
+                    "chronos.png",
+                    "#fbbf24",
+                ),
+                (
+                    "Archiver",
+                    "Zip • tar • 7z compress & extract",
+                    "archiver",
+                    "package.svg",
+                    "#a78bfa",
+                ),
+                (
+                    "Snip → Text (OCR)",
+                    "Select an area on screen and copy text to clipboard",
+                    "img_to_text",
+                    "ocr_icon.png",
+                    "#22c55e",
+                ),
+                (
+                    "Image → Text (OCR)",
+                    "Open file / drag-drop / paste image and extract text",
+                    "img_to_text_gui",
+                    "ocr_icon.png",
+                    "#34d399",
+                ),
+                (
+                    "Clipboard Manager",
+                    "Persistent multi-history clipboard with search & pin",
+                    "clipboard_manager",
+                    "clipboard_manager.png",
+                    "#f472b6",
+                ),
+                (
+                    "Port Inspector",
+                    "Real-time network ports · kill by PID",
+                    "port_inspector",
+                    "port_inspector.png",
+                    "#38bdf8",
+                ),
+                (
+                    "Hash Tool",
+                    "MD5 · SHA-1 · SHA-256 · SHA-512 hashing + Base64 encode/decode",
+                    "hash_tool",
+                    "hash_tool.png",
+                    "#a3e635",
+                ),
+                (
+                    "Ghost Typist",
+                    "Text expansion · snippets · macros",
+                    "ghost_typist",
+                    "ghost_typist.png",
+                    "#a855f7",
+                ),
+                (
+                    "SQLite Viewer",
+                    "Browse & query SQLite databases",
+                    "sqlite_viewer",
+                    "sqlite_viewer.png",
+                    "#0ea5e9",
+                ),
             ]
             for title, path, cmd, icon, color in mgmt_cmds:
                 if not terms or matches_all_terms(title, t_terms):
@@ -246,24 +330,168 @@ class _SearchMixin:
                     )
 
             power_commands = [
-                ("Toggle Nexus Theme (App Only)", "Theme", "toggle_nexus_theme", "moon.svg", ["dark", "light", "nexus", "app"]),
-                ("Toggle Windows Theme (System)", "Theme", "toggle_dark_mode", "moon.svg", ["dark", "light", "theme", "night", "system", "windows"]),
-                ("Toggle Hidden Files", "Explorer", "toggle_hidden_files", "eye.svg", ["hidden", "files", "view", "explorer"]),
-                ("Toggle Desktop Icons", "Desktop", "toggle_desktop_icons", "menu.svg", ["icons", "desktop", "shortcuts"]),
-                ("Toggle System Mute", "Audio", "toggle_mute", "eye.svg", ["mute", "audio", "volume", "sound"]),
-                ("Show / Hide Desktop", "Windows", "toggle_desktop", "file-axis-3d.svg", ["desktop", "reveal", "hide"]),
-                ("Restart Windows Explorer", "System", "restart_explorer", "refresh.svg", ["restart", "explorer", "refresh", "taskbar"]),
-                ("Flush DNS Cache", "Network", "flush_dns", "refresh.svg", ["dns", "flush", "network", "reset"]),
-                ("Switch Monitor -> DisplayPort", "Display", "cmd_monitor_dp", "monitor.svg", ["displayport", "dp", "monitor", "screen", "display", "input", "source"]),
-                ("Switch Monitor -> HDMI", "Display", "cmd_monitor_hdmi", "monitor.svg", ["hdmi", "monitor", "screen", "display", "input", "source"]),
-                ("Switch Monitor -> DVI", "Display", "cmd_monitor_dvi", "monitor.svg", ["dvi", "monitor", "screen", "display", "input", "source"]),
-                ("Lock Workstation", "Security", "cmd_lock", "arrow-right.svg", ["lock", "security", "sign out"]),
-                ("Put PC to Sleep", "Power", "cmd_sleep", "arrow-right.svg", ["sleep", "standby", "power"]),
-                ("Restart Computer", "Power", "cmd_restart", "refresh.svg", ["restart", "reboot", "power"]),
-                ("Shutdown System", "Power", "cmd_shutdown", "power.svg", ["shutdown", "power off", "exit"]),
-                ("Windows Settings", "ms-settings", "ms-settings:default", "arrow-right.svg", ["settings", "config", "windows"]),
-                ("Display Settings", "ms-settings", "ms-settings:display", "arrow-right.svg", ["display", "monitor", "resolution", "brightness"]),
-                ("Wi-Fi Settings", "ms-settings", "ms-settings:network-wifi", "arrow-right.svg", ["wifi", "internet", "wireless"]),
+                (
+                    "Toggle Nexus Theme (App Only)",
+                    "Theme",
+                    "toggle_nexus_theme",
+                    "moon.svg",
+                    ["dark", "light", "nexus", "app"],
+                ),
+                (
+                    "Toggle Windows Theme (System)",
+                    "Theme",
+                    "toggle_dark_mode",
+                    "moon.svg",
+                    ["dark", "light", "theme", "night", "system", "windows"],
+                ),
+                (
+                    "Toggle Hidden Files",
+                    "Explorer",
+                    "toggle_hidden_files",
+                    "eye.svg",
+                    ["hidden", "files", "view", "explorer"],
+                ),
+                (
+                    "Toggle Desktop Icons",
+                    "Desktop",
+                    "toggle_desktop_icons",
+                    "menu.svg",
+                    ["icons", "desktop", "shortcuts"],
+                ),
+                (
+                    "Toggle System Mute",
+                    "Audio",
+                    "toggle_mute",
+                    "eye.svg",
+                    ["mute", "audio", "volume", "sound"],
+                ),
+                (
+                    "Show / Hide Desktop",
+                    "Windows",
+                    "toggle_desktop",
+                    "file-axis-3d.svg",
+                    ["desktop", "reveal", "hide"],
+                ),
+                (
+                    "Restart Windows Explorer",
+                    "System",
+                    "restart_explorer",
+                    "refresh.svg",
+                    ["restart", "explorer", "refresh", "taskbar"],
+                ),
+                (
+                    "Flush DNS Cache",
+                    "Network",
+                    "flush_dns",
+                    "refresh.svg",
+                    ["dns", "flush", "network", "reset"],
+                ),
+                (
+                    "Switch Monitor -> DisplayPort",
+                    "Display",
+                    "cmd_monitor_dp",
+                    "monitor.svg",
+                    [
+                        "displayport",
+                        "dp",
+                        "monitor",
+                        "screen",
+                        "display",
+                        "input",
+                        "source",
+                    ],
+                ),
+                (
+                    "Switch Monitor -> HDMI",
+                    "Display",
+                    "cmd_monitor_hdmi",
+                    "monitor.svg",
+                    ["hdmi", "monitor", "screen", "display", "input", "source"],
+                ),
+                (
+                    "Switch Monitor -> DVI",
+                    "Display",
+                    "cmd_monitor_dvi",
+                    "monitor.svg",
+                    ["dvi", "monitor", "screen", "display", "input", "source"],
+                ),
+                (
+                    "Display Mode -> PC Screen Only",
+                    "Display",
+                    "cmd_display_internal",
+                    "monitor.svg",
+                    ["display", "screen", "pc", "internal", "only"],
+                ),
+                (
+                    "Display Mode -> Duplicate",
+                    "Display",
+                    "cmd_display_clone",
+                    "monitor.svg",
+                    ["display", "screen", "duplicate", "clone", "mirror"],
+                ),
+                (
+                    "Display Mode -> Extend",
+                    "Display",
+                    "cmd_display_extend",
+                    "monitor.svg",
+                    ["display", "screen", "extend"],
+                ),
+                (
+                    "Display Mode -> Second Screen Only",
+                    "Display",
+                    "cmd_display_external",
+                    "monitor.svg",
+                    ["display", "screen", "second", "external", "only"],
+                ),
+                (
+                    "Lock Workstation",
+                    "Security",
+                    "cmd_lock",
+                    "arrow-right.svg",
+                    ["lock", "security", "sign out"],
+                ),
+                (
+                    "Put PC to Sleep",
+                    "Power",
+                    "cmd_sleep",
+                    "arrow-right.svg",
+                    ["sleep", "standby", "power"],
+                ),
+                (
+                    "Restart Computer",
+                    "Power",
+                    "cmd_restart",
+                    "refresh.svg",
+                    ["restart", "reboot", "power"],
+                ),
+                (
+                    "Shutdown System",
+                    "Power",
+                    "cmd_shutdown",
+                    "power.svg",
+                    ["shutdown", "power off", "exit"],
+                ),
+                (
+                    "Windows Settings",
+                    "ms-settings",
+                    "ms-settings:default",
+                    "arrow-right.svg",
+                    ["settings", "config", "windows"],
+                ),
+                (
+                    "Display Settings",
+                    "ms-settings",
+                    "ms-settings:display",
+                    "arrow-right.svg",
+                    ["display", "monitor", "resolution", "brightness"],
+                ),
+                (
+                    "Wi-Fi Settings",
+                    "ms-settings",
+                    "ms-settings:network-wifi",
+                    "arrow-right.svg",
+                    ["wifi", "internet", "wireless"],
+                ),
             ]
             for title, path, cmd, icon, keywords in power_commands:
                 if (
@@ -331,7 +559,8 @@ class _SearchMixin:
                 if info["count"] > 1:
                     candidates.append(
                         {
-                            "score": 750 + (100 if name.lower().startswith(search_term) else 0),
+                            "score": 750
+                            + (100 if name.lower().startswith(search_term) else 0),
                             "title": f"{name} ({info['count']} instances)",
                             "path": f"Total: {mem_mb} MB{desc_suff}",
                             "file_path": info["path"],
@@ -347,8 +576,11 @@ class _SearchMixin:
                     m_val = mem_mb if info["count"] == 1 else "?"
                     candidates.append(
                         {
-                            "score": 700 + (100 if name.lower().startswith(search_term) else 0),
-                            "title": name if info["count"] == 1 else f"{name} (PID: {pid})",
+                            "score": 700
+                            + (100 if name.lower().startswith(search_term) else 0),
+                            "title": name
+                            if info["count"] == 1
+                            else f"{name} (PID: {pid})",
                             "path": f"PID: {pid} • {m_val} MB{desc_suff}",
                             "file_path": info["path"],
                             "icon": "power.svg",
@@ -401,8 +633,14 @@ class _SearchMixin:
         """Run the SQLite file search off the main thread and merge results in."""
         search = self.search_input.text().strip().lower()
 
-        prefixes = {":b": "bookmarks", ":f": "files", ":p": "processes",
-                    ":t": "toggles", ":ssh": "ssh", ":a": "apps"}
+        prefixes = {
+            ":b": "bookmarks",
+            ":f": "files",
+            ":p": "processes",
+            ":t": "toggles",
+            ":ssh": "ssh",
+            ":a": "apps",
+        }
         active_modes = self.modes.copy()
         search_term = search
         for pref, mode_key in prefixes.items():
@@ -411,7 +649,7 @@ class _SearchMixin:
                     if k in prefixes.values():
                         active_modes[k] = False
                 active_modes[mode_key] = True
-                search_term = search[len(pref):].strip()
+                search_term = search[len(pref) :].strip()
                 break
 
         if not active_modes.get("files"):
@@ -424,13 +662,20 @@ class _SearchMixin:
         _gen = self._search_gen
 
         def _do_file_search(
-            _terms=terms, _tf=target_folders, _fo=files_only,
-            _fdo=folders_only, _st=search_term, _gen=_gen,
+            _terms=terms,
+            _tf=target_folders,
+            _fo=files_only,
+            _fdo=folders_only,
+            _st=search_term,
+            _gen=_gen,
         ):
             try:
                 results = self.search_engine.search_files(
-                    query_terms=_terms, target_folders=_tf,
-                    files_only=_fo, folders_only=_fdo, limit=100,
+                    query_terms=_terms,
+                    target_folders=_tf,
+                    files_only=_fo,
+                    folders_only=_fdo,
+                    limit=100,
                 )
             except Exception:
                 results = []
@@ -442,18 +687,22 @@ class _SearchMixin:
                     score += 500
                 score += self.get_usage_boost(f"file_{f_path}")
                 icon = (
-                    "globe.svg" if self._is_unc_path(f_path)
-                    else "folder.svg" if is_dir
+                    "globe.svg"
+                    if self._is_unc_path(f_path)
+                    else "folder.svg"
+                    if is_dir
                     else "file.svg"
                 )
-                file_candidates.append({
-                    "score": score,
-                    "title": format_display_name(f_name),
-                    "path": f_path,
-                    "file_path": f_path,
-                    "icon": icon,
-                    "data": {"type": "file", "path": f_path},
-                })
+                file_candidates.append(
+                    {
+                        "score": score,
+                        "title": format_display_name(f_name),
+                        "path": f_path,
+                        "file_path": f_path,
+                        "icon": icon,
+                        "data": {"type": "file", "path": f_path},
+                    }
+                )
 
             def _apply(_fc=file_candidates, _g=_gen):
                 if self._search_gen != _g:
