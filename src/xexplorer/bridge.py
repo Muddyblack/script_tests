@@ -1579,21 +1579,44 @@ class XExplorerBridge(QObject):
                 self._preview_cancel.pop(_key, None)
                 return
 
-            # Do existence and abspath check INSIDE the thread
+            # Do existence and abspath check INSIDE the thread with timeout for network drives
             try:
-                if not os.path.exists(path) or os.path.isdir(path):
-                    self._preview_in_flight.discard(_key)
-                    self._preview_cancel.pop(_key, None)
-                    self._op_emit_queue.put(
-                        (
-                            "preview",
-                            _key,
-                            json.dumps({"type": "unsupported", "content": ""}),
+                # Quick check with timeout to avoid hanging on slow network drives
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(lambda: os.path.exists(path) and not os.path.isdir(path))
+                    try:
+                        exists_and_file = future.result(timeout=3.0)
+                        if not exists_and_file:
+                            self._preview_in_flight.discard(_key)
+                            self._preview_cancel.pop(_key, None)
+                            self._op_emit_queue.put(
+                                (
+                                    "preview",
+                                    _key,
+                                    json.dumps({"type": "unsupported", "content": ""}),
+                                )
+                            )
+                            return
+                    except concurrent.futures.TimeoutError:
+                        # Network drive too slow, abort
+                        self._preview_in_flight.discard(_key)
+                        self._preview_cancel.pop(_key, None)
+                        self._op_emit_queue.put(
+                            (
+                                "preview",
+                                _key,
+                                json.dumps({"type": "error", "content": "Network drive timeout - file access too slow"}),
+                            )
                         )
-                    )
-                    return
+                        return
             except Exception:
                 pass
+
+            if _cancel.is_set():
+                self._preview_in_flight.discard(_key)
+                self._preview_cancel.pop(_key, None)
+                return
 
             result = _loader(_cancel)
             if _cancel.is_set():
@@ -1781,6 +1804,11 @@ class XExplorerBridge(QObject):
                         if async_key in self._preview_cache:
                             return self._preview_cache[async_key]
 
+                        # Cancel every in-flight render that isn't for this exact key
+                        for key, flag in list(self._preview_cancel.items()):
+                            if key != async_key:
+                                flag.set()
+
                         # Already rendering — tell the caller to wait
                         if async_key in self._preview_in_flight:
                             return json.dumps(
@@ -1793,9 +1821,11 @@ class XExplorerBridge(QObject):
 
                         # Kick off background render
                         self._preview_in_flight.add(async_key)
+                        cancel = threading.Event()
+                        self._preview_cancel[async_key] = cancel
 
                         def _run_ppt_com(
-                            _path=abs_path, _page=page, _key=async_key
+                            _path=abs_path, _page=page, _key=async_key, _cancel=cancel
                         ) -> None:
                             import hashlib
                             import tempfile
@@ -1803,19 +1833,40 @@ class XExplorerBridge(QObject):
                             import pythoncom
                             import win32com.client
 
+                            # Check cancellation before starting COM
+                            if _cancel.is_set():
+                                self._preview_in_flight.discard(_key)
+                                self._preview_cancel.pop(_key, None)
+                                return
+
                             pythoncom.CoInitialize()
                             app = None
                             prs = None
                             result: str
                             try:
+                                # Check cancellation before expensive operations
+                                if _cancel.is_set():
+                                    return
+
                                 app = win32com.client.DispatchEx(
                                     "PowerPoint.Application"
                                 )
+
+                                if _cancel.is_set():
+                                    return
+
                                 prs = app.Presentations.Open(
                                     _path, WithWindow=False, ReadOnly=True
                                 )
+
+                                if _cancel.is_set():
+                                    return
+
                                 n = int(prs.Slides.Count)
                                 idx = max(0, min(_page, n - 1))
+
+                                if _cancel.is_set():
+                                    return
 
                                 st = os.stat(_path)
                                 file_key_src = f"{_path}|{st.st_size}|{st.st_mtime_ns}"
@@ -1832,13 +1883,23 @@ class XExplorerBridge(QObject):
                                 img_path = os.path.join(
                                     cache_dir, f"slide_{idx + 1:04d}.png"
                                 )
+
+                                if _cancel.is_set():
+                                    return
+
                                 if not os.path.exists(img_path):
                                     prs.Slides(idx + 1).Export(
                                         img_path, "PNG", 1600, 900
                                     )
 
+                                if _cancel.is_set():
+                                    return
+
                                 with open(img_path, "rb") as f:
                                     data = base64.b64encode(f.read()).decode()
+
+                                if _cancel.is_set():
+                                    return
 
                                 title_text = ""
                                 with contextlib.suppress(Exception):
@@ -1867,6 +1928,9 @@ class XExplorerBridge(QObject):
                                     }
                                 )
                             except Exception as exc:
+                                # Don't emit error if cancelled
+                                if _cancel.is_set():
+                                    return
                                 result = json.dumps(
                                     {
                                         "type": "error",
@@ -1883,8 +1947,12 @@ class XExplorerBridge(QObject):
                                         app.Quit()
                                 with contextlib.suppress(Exception):
                                     pythoncom.CoUninitialize()
+                                self._preview_in_flight.discard(_key)
+                                self._preview_cancel.pop(_key, None)
 
-                            self._op_emit_queue.put(("preview", _key, result))
+                            # Only emit if not cancelled
+                            if not _cancel.is_set():
+                                self._op_emit_queue.put(("preview", _key, result))
 
                         threading.Thread(target=_run_ppt_com, daemon=True).start()
                         return json.dumps(
@@ -1946,6 +2014,12 @@ class XExplorerBridge(QObject):
                 async_key = f"{abs_path}|{page}"
                 if async_key in self._preview_cache:
                     return self._preview_cache[async_key]
+
+                # Cancel every in-flight render that isn't for this exact key
+                for key, flag in list(self._preview_cancel.items()):
+                    if key != async_key:
+                        flag.set()
+
                 if async_key in self._preview_in_flight:
                     return json.dumps(
                         {
@@ -1955,26 +2029,48 @@ class XExplorerBridge(QObject):
                         }
                     )
                 self._preview_in_flight.add(async_key)
+                cancel = threading.Event()
+                self._preview_cancel[async_key] = cancel
 
-                def _run_visio(_path=abs_path, _page=page, _key=async_key) -> None:
+                def _run_visio(_path=abs_path, _page=page, _key=async_key, _cancel=cancel) -> None:
                     import hashlib
                     import tempfile
 
                     import pythoncom
                     import win32com.client
 
+                    # Check cancellation before starting COM
+                    if _cancel.is_set():
+                        self._preview_in_flight.discard(_key)
+                        self._preview_cancel.pop(_key, None)
+                        return
+
                     pythoncom.CoInitialize()
                     app = None
                     doc = None
                     result: str
                     try:
+                        if _cancel.is_set():
+                            return
+
                         app = win32com.client.DispatchEx("Visio.Application")
                         app.Visible = False
+
+                        if _cancel.is_set():
+                            return
+
                         doc = app.Documents.OpenEx(_path, 64)  # 64 = visOpenRO
+
+                        if _cancel.is_set():
+                            return
+
                         n = int(doc.Pages.Count)
                         idx = max(0, min(_page, n - 1))
                         pg = doc.Pages.Item(idx + 1)
                         pg_name = str(pg.Name) if pg.Name else ""
+
+                        if _cancel.is_set():
+                            return
 
                         st = os.stat(_path)
                         key_src = f"{_path}|{st.st_size}|{st.st_mtime_ns}|p{idx}"
@@ -1986,11 +2082,19 @@ class XExplorerBridge(QObject):
                         )
                         os.makedirs(cache_dir, exist_ok=True)
                         img_path = os.path.join(cache_dir, f"page_{idx + 1:04d}.png")
+
+                        if _cancel.is_set():
+                            return
+
                         if not os.path.exists(img_path):
                             pg.Export(img_path)
 
+                        if _cancel.is_set():
+                            return
+
                         with open(img_path, "rb") as f:
                             data = base64.b64encode(f.read()).decode()
+
                         result = json.dumps(
                             {
                                 "type": "slide_image",
@@ -2004,6 +2108,9 @@ class XExplorerBridge(QObject):
                             }
                         )
                     except Exception as exc:
+                        # Don't emit error if cancelled
+                        if _cancel.is_set():
+                            return
                         result = json.dumps(
                             {"type": "error", "key": _key, "content": str(exc)}
                         )
@@ -2016,7 +2123,12 @@ class XExplorerBridge(QObject):
                                 app.Quit()
                         with contextlib.suppress(Exception):
                             pythoncom.CoUninitialize()
-                    self._op_emit_queue.put(("preview", _key, result))
+                        self._preview_in_flight.discard(_key)
+                        self._preview_cancel.pop(_key, None)
+
+                    # Only emit if not cancelled
+                    if not _cancel.is_set():
+                        self._op_emit_queue.put(("preview", _key, result))
 
                 threading.Thread(target=_run_visio, daemon=True).start()
                 return json.dumps(
