@@ -37,6 +37,7 @@ try:
     from watchdog.observers.polling import PollingObserver
 
     from src.xexplorer.watcher import LiveCacheUpdater
+
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
@@ -44,22 +45,25 @@ except ImportError:
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _is_network_path(path: str) -> bool:
     """Return True if *path* lives on a network / UNC share."""
     if sys.platform != "win32" or not path:
         return False
     norm = path.replace("/", "\\")
-    if norm.startswith("\\\\"):          # already a UNC path
+    if norm.startswith("\\\\"):  # already a UNC path
         return True
     if len(norm) >= 2 and norm[1] == ":":
         drive_root = norm[0].upper() + ":\\"
         try:
             import ctypes
+
             DRIVE_REMOTE = 4
             return ctypes.windll.kernel32.GetDriveTypeW(drive_root) == DRIVE_REMOTE
         except Exception:
             pass
     return False
+
 
 def _fmt_size(path: str, is_dir: bool) -> str:
     if is_dir:
@@ -111,21 +115,26 @@ def _db_size_mb() -> float:
 
 # ── Bridge ─────────────────────────────────────────────────────────────────────────────────
 
+
 class XExplorerBridge(QObject):
     # Signals → JS
-    indexing_progress    = pyqtSignal(int, str)   # count, current_path
-    indexing_done        = pyqtSignal(int, float) # count, seconds
-    stats_updated        = pyqtSignal(str)        # JSON stats blob
-    live_changed         = pyqtSignal()           # watcher detected FS change
+    indexing_progress = pyqtSignal(int, str)  # count, current_path
+    indexing_done = pyqtSignal(int, float)  # count, seconds
+    stats_updated = pyqtSignal(str)  # JSON stats blob
+    live_changed = pyqtSignal()  # watcher detected FS change
     # Signal → Python (caught by xexplorer window to spawn child)
-    open_window_requested = pyqtSignal(str)       # path to pre-navigate
+    open_window_requested = pyqtSignal(str)  # path to pre-navigate
     # Signal → JS (sent to a target window when a tab is dropped onto it)
-    tab_incoming          = pyqtSignal(str)       # JSON {path, title}
+    tab_incoming = pyqtSignal(str)  # JSON {path, title}
     # Async file-op progress/done
-    file_op_progress      = pyqtSignal(str, int, int, str)  # op_id, done, total, current_name
-    file_op_done          = pyqtSignal(str, str)            # op_id, JSON {errors:[]}
+    file_op_progress = pyqtSignal(
+        str, int, int, str
+    )  # op_id, done, total, current_name
+    file_op_done = pyqtSignal(str, str)  # op_id, JSON {errors:[]}
     # Async preview (heavy renderers like win32com PPT)
-    preview_ready         = pyqtSignal(str)                 # JSON blob (same schema as get_preview_page)
+    preview_ready = pyqtSignal(str)  # JSON blob (same schema as get_preview_page)
+    # Async search
+    search_results = pyqtSignal(str, str)  # query, JSON results
 
     def __init__(self, initial_path: str = "") -> None:
         super().__init__()
@@ -156,6 +165,7 @@ class XExplorerBridge(QObject):
         self._preview_cache: dict[str, str] = {}
         self._preview_in_flight: set[str] = set()
         self._preview_cancel: dict[str, threading.Event] = {}  # key → cancel flag
+        self._preview_lock = threading.Lock()  # Serialize heavy renders
         self._op_flush_timer = QTimer(self)
         self._op_flush_timer.setInterval(50)  # flush 20×/s
         self._op_flush_timer.timeout.connect(self._flush_op_queue)
@@ -183,6 +193,9 @@ class XExplorerBridge(QObject):
                     self._preview_cache[key] = json_str
                     self._preview_in_flight.discard(key)
                     self.preview_ready.emit(json_str)
+                elif kind == "search_results":
+                    _, query_str, json_results = item
+                    self.search_results.emit(query_str, json_results)
         except _queue.Empty:
             pass
 
@@ -243,6 +256,7 @@ class XExplorerBridge(QObject):
     def close_window(self) -> None:
         """Close the host Qt window (used when the last tab is torn off)."""
         from src.xexplorer.xexplorer import _open_windows
+
         for win in list(_open_windows) + list(QApplication.topLevelWidgets()):
             if hasattr(win, "bridge") and win.bridge is self:
                 win.close()
@@ -262,6 +276,7 @@ class XExplorerBridge(QObject):
         from PyQt6.QtGui import QCursor
 
         from src.xexplorer.xexplorer import _open_windows  # lazy to avoid circular
+
         cursor = QCursor.pos()
         candidates: list = []
         seen_ids: set[int] = set()
@@ -276,7 +291,9 @@ class XExplorerBridge(QObject):
             if not win.isVisible():
                 continue
             candidates.append(win)
-            if win.frameGeometry().contains(cursor) or win.geometry().contains(win.mapFromGlobal(cursor)):
+            if win.frameGeometry().contains(cursor) or win.geometry().contains(
+                win.mapFromGlobal(cursor)
+            ):
                 win.bridge.tab_incoming.emit(json.dumps({"path": path, "title": title}))
                 return
         # Fallback: snap to the nearest other window if cursor is very close
@@ -311,47 +328,105 @@ class XExplorerBridge(QObject):
             if res:
                 try:
                     for f in json.loads(res[0]):
-                        path  = f.get("path", "")
+                        path = f.get("path", "")
                         label = f.get("label", path)
                         folders.append({"path": path, "label": label})
                 except (json.JSONDecodeError, TypeError):
                     pass
 
             # Ignore rules
-            win_dir    = os.environ.get("SYSTEMROOT",       "C:\\Windows")
-            prog_files = os.environ.get("PROGRAMFILES",     "C:\\Program Files")
-            prog_x86   = os.environ.get("PROGRAMFILES(X86)","C:\\Program Files (x86)")
+            win_dir = os.environ.get("SYSTEMROOT", "C:\\Windows")
+            prog_files = os.environ.get("PROGRAMFILES", "C:\\Program Files")
+            prog_x86 = os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")
             defaults = [
                 # ── Python ───────────────────────────────────────────────────
-                "venv", ".venv", "env", ".env", "__pycache__", ".mypy_cache",
-                ".pytest_cache", ".ruff_cache", ".tox", ".nox", "eggs",
-                ".eggs", "*.egg-info", "*.pyc", "*.pyo", "*.pyd",
+                "venv",
+                ".venv",
+                "env",
+                ".env",
+                "__pycache__",
+                ".mypy_cache",
+                ".pytest_cache",
+                ".ruff_cache",
+                ".tox",
+                ".nox",
+                "eggs",
+                ".eggs",
+                "*.egg-info",
+                "*.pyc",
+                "*.pyo",
+                "*.pyd",
                 # ── JS / Node ─────────────────────────────────────────────────
-                "node_modules", ".pnp", ".yarn", ".npm", ".pnpm-store",
+                "node_modules",
+                ".pnp",
+                ".yarn",
+                ".npm",
+                ".pnpm-store",
                 # ── Version control ──────────────────────────────────────────
-                ".git", ".svn", ".hg", ".bzr",
+                ".git",
+                ".svn",
+                ".hg",
+                ".bzr",
                 # ── IDEs & editors ────────────────────────────────────────────
-                ".idea", ".vscode", ".vs", ".fleet", ".eclipse",
+                ".idea",
+                ".vscode",
+                ".vs",
+                ".fleet",
+                ".eclipse",
                 # ── Build & dist outputs ──────────────────────────────────────
-                "dist", "build", "out", "target", "bin", "obj",
-                "__pycache__", ".next", ".nuxt", ".svelte-kit",
-                ".parcel-cache", ".turbo", ".gradle", ".m2",
+                "dist",
+                "build",
+                "out",
+                "target",
+                "bin",
+                "obj",
+                "__pycache__",
+                ".next",
+                ".nuxt",
+                ".svelte-kit",
+                ".parcel-cache",
+                ".turbo",
+                ".gradle",
+                ".m2",
                 # ── Compiled / binary extensions ──────────────────────────────
-                ".exe", ".dll", ".so", ".dylib", ".sys", ".pdb",
-                ".o", ".a", ".lib", ".class", ".jar",
+                ".exe",
+                ".dll",
+                ".so",
+                ".dylib",
+                ".sys",
+                ".pdb",
+                ".o",
+                ".a",
+                ".lib",
+                ".class",
+                ".jar",
                 # ── Temp / generated ─────────────────────────────────────────
-                ".tmp", ".temp", ".cache", ".pyc", ".log",
-                "thumbs.db", "desktop.ini",
+                ".tmp",
+                ".temp",
+                ".cache",
+                ".pyc",
+                ".log",
+                "thumbs.db",
+                "desktop.ini",
                 # ── macOS noise ───────────────────────────────────────────────
-                ".DS_Store", ".Spotlight-V100", ".Trashes",
-                ".fseventsd", "__MACOSX",
+                ".DS_Store",
+                ".Spotlight-V100",
+                ".Trashes",
+                ".fseventsd",
+                "__MACOSX",
                 # ── Linux noise ───────────────────────────────────────────────
-                ".Trash-1000", ".thumbnails",
+                ".Trash-1000",
+                ".thumbnails",
                 # ── Windows system ────────────────────────────────────────────
-                "AppData", "Local Settings",
-                "System Volume Information", "$RECYCLE.BIN",
-                win_dir, prog_files, prog_x86,
-                "C:\\MSOCache", "C:\\$Recycle.Bin",
+                "AppData",
+                "Local Settings",
+                "System Volume Information",
+                "$RECYCLE.BIN",
+                win_dir,
+                prog_files,
+                prog_x86,
+                "C:\\MSOCache",
+                "C:\\$Recycle.Bin",
                 # ── Docker / containers ───────────────────────────────────────
                 ".docker",
                 # ── Rust ─────────────────────────────────────────────────────
@@ -359,9 +434,14 @@ class XExplorerBridge(QObject):
                 # ── Go ────────────────────────────────────────────────────────
                 "vendor",
                 # ── Coverage / reports ────────────────────────────────────────
-                ".coverage", "coverage", "htmlcov", ".nyc_output",
+                ".coverage",
+                "coverage",
+                "htmlcov",
+                ".nyc_output",
                 # ── Secrets / env files ───────────────────────────────────────
-                ".env.local", ".env.production", ".env.development",
+                ".env.local",
+                ".env.production",
+                ".env.development",
             ]
             c.execute("SELECT value FROM settings WHERE key='ignore'")
             res2 = c.fetchone()
@@ -376,7 +456,10 @@ class XExplorerBridge(QObject):
             for d in defaults:
                 if d not in current:
                     current[d] = True
-            ignore = [{"rule": k, "enabled": v} for k, v in sorted(current.items(), key=lambda x: x[0].lower())]
+            ignore = [
+                {"rule": k, "enabled": v}
+                for k, v in sorted(current.items(), key=lambda x: x[0].lower())
+            ]
 
         # Start filesystem watchers on first config load (and whenever config is re-read)
         if folders and not self._observers:
@@ -389,11 +472,19 @@ class XExplorerBridge(QObject):
     def save_config(self, json_str: str) -> None:
         data = json.loads(json_str)
         folders_json = json.dumps(data.get("folders", []))
-        ignore_parts  = [f"{r['rule']}:{'1' if r['enabled'] else '0'}" for r in data.get("ignore", [])]
+        ignore_parts = [
+            f"{r['rule']}:{'1' if r['enabled'] else '0'}"
+            for r in data.get("ignore", [])
+        ]
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
-            c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("folders", folders_json))
-            c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("ignore",  "|".join(ignore_parts)))
+            c.execute(
+                "INSERT OR REPLACE INTO settings VALUES(?,?)", ("folders", folders_json)
+            )
+            c.execute(
+                "INSERT OR REPLACE INTO settings VALUES(?,?)",
+                ("ignore", "|".join(ignore_parts)),
+            )
             conn.commit()
         # _restart_watchers is async — returns immediately, work happens in a thread
         self._restart_watchers(data.get("folders", []))
@@ -413,6 +504,7 @@ class XExplorerBridge(QObject):
         if sys.platform == "win32":
             try:
                 import ctypes
+
                 bitmask = ctypes.windll.kernel32.GetLogicalDrives()
                 for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
                     if bitmask & (1 << (ord(letter) - 65)):
@@ -436,28 +528,37 @@ class XExplorerBridge(QObject):
         items: list[dict] = []
         try:
             with os.scandir(path) as it:
-                entries = sorted(it, key=lambda e: (not e.is_dir(follow_symlinks=True), e.name.lower()))
+                entries = sorted(
+                    it,
+                    key=lambda e: (not e.is_dir(follow_symlinks=True), e.name.lower()),
+                )
             for entry in entries:
                 try:
                     is_dir = entry.is_dir(follow_symlinks=True)
-                    ext = "" if is_dir else os.path.splitext(entry.name)[1].lstrip(".").lower()
+                    ext = (
+                        ""
+                        if is_dir
+                        else os.path.splitext(entry.name)[1].lstrip(".").lower()
+                    )
                     # Reuse the stat that scandir already fetched via FindNextFile
                     # (on Windows this is free — no extra syscall, even on network shares).
                     # Avoids a separate getsize()+getmtime() round-trip per file.
                     try:
                         st = entry.stat(follow_symlinks=False)
-                        size  = _fmt_size_stat(st.st_size, is_dir)
+                        size = _fmt_size_stat(st.st_size, is_dir)
                         mtime = _fmt_mtime_stat(st.st_mtime)
                     except OSError:
                         size, mtime = "", ""
-                    items.append({
-                        "path":   entry.path,
-                        "name":   entry.name,
-                        "is_dir": is_dir,
-                        "ext":    ext,
-                        "size":   size,
-                        "mtime":  mtime,
-                    })
+                    items.append(
+                        {
+                            "path": entry.path,
+                            "name": entry.name,
+                            "is_dir": is_dir,
+                            "ext": ext,
+                            "size": size,
+                            "mtime": mtime,
+                        }
+                    )
                 except (OSError, PermissionError):
                     continue
         except (OSError, PermissionError):
@@ -471,25 +572,33 @@ class XExplorerBridge(QObject):
         if sys.platform == "win32":
             try:
                 import ctypes
-                free_bytes  = ctypes.c_ulonglong(0)
+
+                free_bytes = ctypes.c_ulonglong(0)
                 total_bytes = ctypes.c_ulonglong(0)
                 ctypes.windll.kernel32.GetDiskFreeSpaceExW(
-                    ctypes.c_wchar_p(path), None,
+                    ctypes.c_wchar_p(path),
+                    None,
                     ctypes.byref(total_bytes),
                     ctypes.byref(free_bytes),
                 )
-                total_gb = total_bytes.value / (1024 ** 3)
-                free_gb  = free_bytes.value  / (1024 ** 3)
+                total_gb = total_bytes.value / (1024**3)
+                free_gb = free_bytes.value / (1024**3)
                 used_pct = round((1 - free_gb / total_gb) * 100) if total_gb else 0
                 label_buf = ctypes.create_unicode_buffer(256)
                 ctypes.windll.kernel32.GetVolumeInformationW(
-                    ctypes.c_wchar_p(path), label_buf, 256,
-                    None, None, None, None, 0,
+                    ctypes.c_wchar_p(path),
+                    label_buf,
+                    256,
+                    None,
+                    None,
+                    None,
+                    None,
+                    0,
                 )
                 info = {
-                    "label":    label_buf.value,
+                    "label": label_buf.value,
                     "total_gb": round(total_gb, 1),
-                    "free_gb":  round(free_gb,  1),
+                    "free_gb": round(free_gb, 1),
                     "used_pct": used_pct,
                 }
             except Exception:
@@ -508,13 +617,17 @@ class XExplorerBridge(QObject):
             existing = {r.rsplit(":", 1)[0] for r in current.split("|") if r}
             if rule not in existing:
                 new_val = (current + "|" if current else "") + f"{rule}:1"
-                c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("ignore", new_val))
+                c.execute(
+                    "INSERT OR REPLACE INTO settings VALUES(?,?)", ("ignore", new_val)
+                )
                 conn.commit()
 
     @pyqtSlot(result=str)
     def prompt_ignore_rule(self) -> str:
         """Open a Qt dialog to ask for a rule string; returns it or empty string."""
-        rule, ok = QInputDialog.getText(None, "Add Ignore Rule", "Folder name, extension, or path:")
+        rule, ok = QInputDialog.getText(
+            None, "Add Ignore Rule", "Folder name, extension, or path:"
+        )
         return rule if ok and rule else ""
 
     # ── Favorites ─────────────────────────────────────────────────────────────
@@ -538,7 +651,9 @@ class XExplorerBridge(QObject):
         """Persist the favorites list."""
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
-            c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("favorites", json_str))
+            c.execute(
+                "INSERT OR REPLACE INTO settings VALUES(?,?)", ("favorites", json_str)
+            )
             conn.commit()
 
     @pyqtSlot(result=str)
@@ -557,10 +672,24 @@ class XExplorerBridge(QObject):
         """Persist the open tabs."""
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
-            c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("saved_tabs", json_str))
+            c.execute(
+                "INSERT OR REPLACE INTO settings VALUES(?,?)", ("saved_tabs", json_str)
+            )
             conn.commit()
 
     # ── Search ────────────────────────────────────────────────────────────────
+
+    @pyqtSlot(str, str, str)
+    def search_async(self, query: str, filter_type: str, folders_json: str) -> None:
+        """Kicks off a search in a background thread to avoid freezing the UI.
+        Emits search_results(query, results_json) when done.
+        """
+
+        def _run():
+            res = self.search(query, filter_type, folders_json)
+            self._op_emit_queue.put(("search_results", query, res))
+
+        threading.Thread(target=_run, daemon=True).start()
 
     @pyqtSlot(str, str, str, result=str)
     def search(self, query: str, filter_type: str, folders_json: str) -> str:
@@ -578,21 +707,25 @@ class XExplorerBridge(QObject):
             return "[]"
 
         if filter_type == "content":
-            raw = self._search_engine.search_content(query_terms=terms, target_folders=folder_paths)
+            raw = self._search_engine.search_content(
+                query_terms=terms, target_folders=folder_paths
+            )
             # content search returns (path, is_dir, ...) — no size column
             results = []
             for r in raw[:3000]:
                 path, is_dir = r[0], r[1]
                 name = os.path.basename(path) or path
                 _, ext = os.path.splitext(name)
-                results.append({
-                    "path":   path,
-                    "name":   name,
-                    "is_dir": bool(is_dir),
-                    "size":   "",
-                    "mtime":  "",
-                    "ext":    ext.lower().lstrip("."),
-                })
+                results.append(
+                    {
+                        "path": path,
+                        "name": name,
+                        "is_dir": bool(is_dir),
+                        "size": "",
+                        "mtime": "",
+                        "ext": ext.lower().lstrip("."),
+                    }
+                )
             return json.dumps(results)
 
         raw = self._search_engine.search_files(
@@ -606,14 +739,16 @@ class XExplorerBridge(QObject):
         for r in raw[:3000]:
             path, is_dir, name, size = r[0], r[1], r[2], r[3]
             _, ext = os.path.splitext(name)
-            results.append({
-                "path":   path,
-                "name":   name,
-                "is_dir": bool(is_dir),
-                "size":   _fmt_size_stat(size or 0, bool(is_dir)),
-                "mtime":  "",  # not stored in DB; avoids per-file stat
-                "ext":    ext.lower().lstrip("."),
-            })
+            results.append(
+                {
+                    "path": path,
+                    "name": name,
+                    "is_dir": bool(is_dir),
+                    "size": _fmt_size_stat(size or 0, bool(is_dir)),
+                    "mtime": "",  # not stored in DB; avoids per-file stat
+                    "ext": ext.lower().lstrip("."),
+                }
+            )
         return json.dumps(results)
 
     # ── Indexing ──────────────────────────────────────────────────────────────
@@ -661,8 +796,12 @@ class XExplorerBridge(QObject):
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
             for root in self._current_roots:
-                c.execute("INSERT OR REPLACE INTO folder_stats VALUES(?,?)", (root, now_str))
-            c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", ("last_indexed", now_str))
+                c.execute(
+                    "INSERT OR REPLACE INTO folder_stats VALUES(?,?)", (root, now_str)
+                )
+            c.execute(
+                "INSERT OR REPLACE INTO settings VALUES(?,?)", ("last_indexed", now_str)
+            )
             conn.commit()
         self.indexing_done.emit(count, dur)
         self._emit_stats()
@@ -727,7 +866,9 @@ class XExplorerBridge(QObject):
                 c.execute("SELECT value FROM settings WHERE key='last_indexed'")
                 res = c.fetchone()
                 last = res[0] if res else "Never"
-            return json.dumps({"count": count, "last_indexed": last, "db_mb": round(_db_size_mb(), 1)})
+            return json.dumps(
+                {"count": count, "last_indexed": last, "db_mb": round(_db_size_mb(), 1)}
+            )
         except Exception:
             return json.dumps({"count": 0, "last_indexed": "Never", "db_mb": 0})
 
@@ -782,7 +923,9 @@ class XExplorerBridge(QObject):
                         else:
                             shutil.copy2(src, dst)
                     except RecursionError:
-                        errors.append(f"{name}: directory tree is too deeply nested to copy")
+                        errors.append(
+                            f"{name}: directory tree is too deeply nested to copy"
+                        )
                     except Exception as exc:
                         errors.append(f"{name}: {exc}")
             finally:
@@ -844,6 +987,7 @@ class XExplorerBridge(QObject):
                     try:
                         try:
                             import send2trash  # type: ignore
+
                             send2trash.send2trash(path)
                         except ImportError:
                             if os.path.isdir(path):
@@ -851,7 +995,9 @@ class XExplorerBridge(QObject):
                             else:
                                 os.unlink(path)
                     except RecursionError:
-                        errors.append(f"{name}: directory tree is too deeply nested to delete")
+                        errors.append(
+                            f"{name}: directory tree is too deeply nested to delete"
+                        )
                     except Exception as exc:
                         errors.append(f"{name}: {exc}")
             finally:
@@ -925,9 +1071,11 @@ class XExplorerBridge(QObject):
                 os.startfile(path)
             elif sys.platform == "darwin":
                 import subprocess
+
                 subprocess.Popen(["open", path])
             else:
                 import subprocess
+
                 subprocess.Popen(["xdg-open", path])
 
     @pyqtSlot(str)
@@ -936,12 +1084,21 @@ class XExplorerBridge(QObject):
         if os.path.exists(d):
             if sys.platform == "win32":
                 import subprocess
-                subprocess.Popen(["explorer", "/select,", path] if os.path.isfile(path) else ["explorer", d])
+
+                subprocess.Popen(
+                    ["explorer", "/select,", path]
+                    if os.path.isfile(path)
+                    else ["explorer", d]
+                )
             elif sys.platform == "darwin":
                 import subprocess
-                subprocess.Popen(["open", "-R", path] if os.path.isfile(path) else ["open", d])
+
+                subprocess.Popen(
+                    ["open", "-R", path] if os.path.isfile(path) else ["open", d]
+                )
             else:
                 import subprocess
+
                 subprocess.Popen(["xdg-open", d])
 
     @pyqtSlot(str)
@@ -953,6 +1110,7 @@ class XExplorerBridge(QObject):
         """Open File Tools window with the given paths pre-loaded."""
         try:
             from src.file_ops.file_ops import FileToolsWindow
+
             paths = json.loads(paths_json)
             win = FileToolsWindow()
             win.source_paths = list(paths)
@@ -967,6 +1125,7 @@ class XExplorerBridge(QObject):
         """Open File Tools window on the Archiver tab with the given paths pre-loaded."""
         try:
             from src.file_ops.file_ops import FileToolsWindow
+
             paths = json.loads(paths_json)
             win = FileToolsWindow()
             win.arc_sources = list(paths)
@@ -980,14 +1139,14 @@ class XExplorerBridge(QObject):
     @pyqtSlot(str, result=str)
     def get_file_icon_b64(self, path: str) -> str:
         """Return a base64-encoded PNG of the system file icon (high-res)."""
-        ext = os.path.splitext(path)[1].lower() if not os.path.isdir(path) else "__DIR__"
+        ext = (
+            os.path.splitext(path)[1].lower() if not os.path.isdir(path) else "__DIR__"
+        )
         # Per-file cache key for exe/lnk/url (each has a unique icon),
         # extension-based key for everything else (same as Nexus logic).
         is_dir = os.path.isdir(path)
         cache_key = (
-            "__DIR__"
-            if is_dir
-            else (path if ext in (".exe", ".lnk", ".url") else ext)
+            "__DIR__" if is_dir else (path if ext in (".exe", ".lnk", ".url") else ext)
         )
         if cache_key in self._icon_cache:
             return self._icon_cache[cache_key]
@@ -995,10 +1154,14 @@ class XExplorerBridge(QObject):
             from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 
             fi = QFileInfo(path) if os.path.exists(path) else None
-            icon = self._icon_provider.icon(fi) if fi else (
-                self._icon_provider.icon(QFileIconProvider.IconType.Folder)
-                if is_dir
-                else self._icon_provider.icon(QFileIconProvider.IconType.File)
+            icon = (
+                self._icon_provider.icon(fi)
+                if fi
+                else (
+                    self._icon_provider.icon(QFileIconProvider.IconType.Folder)
+                    if is_dir
+                    else self._icon_provider.icon(QFileIconProvider.IconType.File)
+                )
             )
             # Render at 256×256 then scale down for sharp icons (Nexus approach)
             pm: QPixmap = icon.pixmap(256, 256)
@@ -1006,7 +1169,8 @@ class XExplorerBridge(QObject):
                 print(f"[icon] pixmap null for {path}")
                 return ""
             pm = pm.scaled(
-                48, 48,
+                48,
+                48,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -1029,35 +1193,47 @@ class XExplorerBridge(QObject):
 
     # ── Internal sync helpers (run in background thread) ─────────────────────
 
-    def _load_image_sync(self, path: str, ext: str, cancel: threading.Event | None = None) -> str:
+    def _load_image_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
         """Read an image file and return preview JSON. Called off the main thread."""
         try:
             size = os.path.getsize(path)
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
             if size > 8 * 1024 * 1024:
-                return json.dumps({"type": "unsupported", "content": "Image too large to preview."})
+                return json.dumps(
+                    {"type": "unsupported", "content": "Image too large to preview."}
+                )
             with open(path, "rb") as f:
                 data = base64.b64encode(f.read()).decode()
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
             mime = {".svg": "image/svg+xml", ".gif": "image/gif"}.get(ext, "image/png")
-            return json.dumps({"type": "image", "content": f"data:{mime};base64,{data}", "ext": ext})
+            return json.dumps(
+                {"type": "image", "content": f"data:{mime};base64,{data}", "ext": ext}
+            )
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
 
-    def _load_text_sync(self, path: str, ext: str, cancel: threading.Event | None = None) -> str:
+    def _load_text_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
         """Read a text file and return preview JSON. Called off the main thread."""
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
                 content = f.read(64 * 1024)
             if cancel and cancel.is_set():
                 return json.dumps({"type": "unsupported", "content": ""})
-            return json.dumps({"type": "text", "content": content, "ext": ext.lstrip(".")})
+            return json.dumps(
+                {"type": "text", "content": content, "ext": ext.lstrip(".")}
+            )
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
 
-    def _load_pdf_sync(self, path: str, page: int, cancel: threading.Event | None = None) -> str:
+    def _load_pdf_sync(
+        self, path: str, page: int, cancel: threading.Event | None = None
+    ) -> str:
         """Render a PDF page and return preview JSON. Called off the main thread."""
         try:
             from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QSize
@@ -1072,15 +1248,26 @@ class XExplorerBridge(QObject):
                 return json.dumps({"type": "unsupported", "content": ""})
             n = doc.pageCount()
             if n == 0:
-                return json.dumps({"type": "unsupported", "content": "Cannot open PDF."})
+                return json.dumps(
+                    {"type": "unsupported", "content": "Cannot open PDF."}
+                )
             idx = max(0, min(page, n - 1))
             page_size = doc.pagePointSize(idx)
             scale = 1.5
             w = max(1, int(page_size.width() * scale))
             h = max(1, int(page_size.height() * scale))
-            img = doc.render(idx, QSize(w, h))
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            # Heavy render lock to prevent concurrent pdfium usage (prevents freezing/crashes)
+            with self._preview_lock:
+                if cancel and cancel.is_set():
+                    return json.dumps({"type": "unsupported", "content": ""})
+                img = doc.render(idx, QSize(w, h))
+
             doc.close()
             from PyQt6.QtGui import QColor, QImage, QPainter
+
             white = QImage(img.size(), QImage.Format.Format_RGB32)
             white.fill(QColor("white"))
             p = QPainter(white)
@@ -1093,17 +1280,23 @@ class XExplorerBridge(QObject):
             img.save(buf, "PNG")
             buf.close()
             data = base64.b64encode(bytes(ba)).decode()
-            return json.dumps({
-                "type":       "pdf",
-                "content":    f"data:image/png;base64,{data}",
-                "page_count": n,
-                "page":       idx,
-                "label":      f"Page {idx + 1} of {n}",
-            })
+            return json.dumps(
+                {
+                    "type": "pdf",
+                    "content": f"data:image/png;base64,{data}",
+                    "page_count": n,
+                    "page": idx,
+                    "label": f"Page {idx + 1} of {n}",
+                }
+            )
         except Exception as exc:
-            return json.dumps({"type": "unsupported", "content": f"Cannot preview PDF: {exc}"})
+            return json.dumps(
+                {"type": "unsupported", "content": f"Cannot preview PDF: {exc}"}
+            )
 
-    def _load_pptx_xml_sync(self, path: str, page: int, cancel: threading.Event | None = None) -> str:
+    def _load_pptx_xml_sync(
+        self, path: str, page: int, cancel: threading.Event | None = None
+    ) -> str:
         """Parse a .pptx file with stdlib XML and return slide preview JSON. Off main thread."""
         try:
             if cancel and cancel.is_set():
@@ -1113,16 +1306,24 @@ class XExplorerBridge(QObject):
             import zipfile as _zf
 
             if not _zf.is_zipfile(path):
-                raise ValueError(".ppt legacy binary format is not supported; save as .pptx first")
+                raise ValueError(
+                    ".ppt legacy binary format is not supported; save as .pptx first"
+                )
             _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
             with _zf.ZipFile(path) as _z:
                 _slides = sorted(
-                    (s for s in _z.namelist() if _re2.match(r"ppt/slides/slide\d+\.xml$", s)),
+                    (
+                        s
+                        for s in _z.namelist()
+                        if _re2.match(r"ppt/slides/slide\d+\.xml$", s)
+                    ),
                     key=lambda s: int(_re2.search(r"\d+", s.split("/")[-1]).group()),
                 )
                 n = len(_slides)
                 if n == 0:
-                    return json.dumps({"type": "unsupported", "content": "No slides found in file."})
+                    return json.dumps(
+                        {"type": "unsupported", "content": "No slides found in file."}
+                    )
                 idx = max(0, min(page, n - 1))
                 _root = _ET.fromstring(_z.read(_slides[idx]))
             parts: list[str] = []
@@ -1137,18 +1338,32 @@ class XExplorerBridge(QObject):
                     title_text = _line
                 _tag = "h2" if _lvl == 0 and not parts else "p"
                 _style = f"margin-left:{_lvl * 16}px"
-                parts.append(f'<{_tag} class="sl-text sl-l{_lvl}" style="{_style}">{html.escape(_line)}</{_tag}>')
-            return json.dumps({
-                "type":       "slide",
-                "content":    "\n".join(parts) or '<p class="sl-empty">Empty slide</p>',
-                "page_count": n,
-                "page":       idx,
-                "label":      f"Slide {idx + 1}/{n}: {title_text}" if title_text else f"Slide {idx + 1}/{n}",
-            })
+                parts.append(
+                    f'<{_tag} class="sl-text sl-l{_lvl}" style="{_style}">{html.escape(_line)}</{_tag}>'
+                )
+            return json.dumps(
+                {
+                    "type": "slide",
+                    "content": "\n".join(parts)
+                    or '<p class="sl-empty">Empty slide</p>',
+                    "page_count": n,
+                    "page": idx,
+                    "label": f"Slide {idx + 1}/{n}: {title_text}"
+                    if title_text
+                    else f"Slide {idx + 1}/{n}",
+                }
+            )
         except Exception as _exc:
-            return json.dumps({"type": "unsupported", "content": f"Cannot preview this presentation: {_exc}"})
+            return json.dumps(
+                {
+                    "type": "unsupported",
+                    "content": f"Cannot preview this presentation: {_exc}",
+                }
+            )
 
-    def _load_xlsx_sync(self, path: str, page: int, cancel: threading.Event | None = None) -> str:
+    def _load_xlsx_sync(
+        self, path: str, page: int, cancel: threading.Event | None = None
+    ) -> str:
         """Parse a .xlsx/.xlsm file and return sheet preview JSON. Off main thread."""
         try:
             if cancel and cancel.is_set():
@@ -1156,7 +1371,7 @@ class XExplorerBridge(QObject):
             import xml.etree.ElementTree as _ET
             import zipfile as _zf
 
-            _SS  = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            _SS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             _REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
             def _col_idx(ref: str) -> int:
@@ -1168,21 +1383,27 @@ class XExplorerBridge(QObject):
 
             with _zf.ZipFile(path) as _z:
                 _names = _z.namelist()
-                _wb    = _ET.fromstring(_z.read("xl/workbook.xml"))
-                _sels  = _wb.findall(f".//{{{_SS}}}sheet")
-                _sheet_names = [s.get("name", f"Sheet{i+1}") for i, s in enumerate(_sels)]
-                _rids        = [s.get(f"{{{_REL}}}id") for s in _sels]
-                n   = len(_sheet_names)
+                _wb = _ET.fromstring(_z.read("xl/workbook.xml"))
+                _sels = _wb.findall(f".//{{{_SS}}}sheet")
+                _sheet_names = [
+                    s.get("name", f"Sheet{i + 1}") for i, s in enumerate(_sels)
+                ]
+                _rids = [s.get(f"{{{_REL}}}id") for s in _sels]
+                n = len(_sheet_names)
                 idx = max(0, min(page, n - 1))
-                _rels    = _ET.fromstring(_z.read("xl/_rels/workbook.xml.rels"))
+                _rels = _ET.fromstring(_z.read("xl/_rels/workbook.xml.rels"))
                 _rid_map = {r.get("Id"): r.get("Target") for r in _rels}
-                _target  = _rid_map.get(_rids[idx], f"worksheets/sheet{idx + 1}.xml")
+                _target = _rid_map.get(_rids[idx], f"worksheets/sheet{idx + 1}.xml")
                 _sheet_path = "xl/" + _target.lstrip("/")
                 _sst: list[str] = []
                 if "xl/sharedStrings.xml" in _names:
-                    for _si in _ET.fromstring(_z.read("xl/sharedStrings.xml")).findall(f"{{{_SS}}}si"):
-                        _sst.append("".join(e.text or "" for e in _si.iter(f"{{{_SS}}}t")))
-                _ws   = _ET.fromstring(_z.read(_sheet_path))
+                    for _si in _ET.fromstring(_z.read("xl/sharedStrings.xml")).findall(
+                        f"{{{_SS}}}si"
+                    ):
+                        _sst.append(
+                            "".join(e.text or "" for e in _si.iter(f"{{{_SS}}}t"))
+                        )
+                _ws = _ET.fromstring(_z.read(_sheet_path))
                 rows: list[list] = []
                 for _row_el in _ws.findall(f".//{{{_SS}}}row"):
                     if len(rows) >= 200:
@@ -1193,10 +1414,10 @@ class XExplorerBridge(QObject):
                     _max_c = max(_col_idx(_c.get("r", "A")) for _c in _cs) + 1
                     _row: list = [None] * _max_c
                     for _c in _cs:
-                        _ci  = _col_idx(_c.get("r", "A"))
-                        _t   = _c.get("t", "")
+                        _ci = _col_idx(_c.get("r", "A"))
+                        _t = _c.get("t", "")
                         _v_e = _c.find(f"{{{_SS}}}v")
-                        _v   = _v_e.text if _v_e is not None else None
+                        _v = _v_e.text if _v_e is not None else None
                         if _t == "s" and _v is not None:
                             _v = _sst[int(_v)] if int(_v) < len(_sst) else ""
                         elif _t == "b":
@@ -1221,15 +1442,22 @@ class XExplorerBridge(QObject):
                 h += "</tbody></table></div>"
                 return h
 
-            return json.dumps({
-                "type":       "sheet",
-                "content":    _table_html(rows),
-                "page_count": n,
-                "page":       idx,
-                "label":      f"{_sheet_names[idx]} ({idx + 1}/{n})",
-            })
+            return json.dumps(
+                {
+                    "type": "sheet",
+                    "content": _table_html(rows),
+                    "page_count": n,
+                    "page": idx,
+                    "label": f"{_sheet_names[idx]} ({idx + 1}/{n})",
+                }
+            )
         except Exception as _exc:
-            return json.dumps({"type": "unsupported", "content": f"Cannot preview this spreadsheet: {_exc}"})
+            return json.dumps(
+                {
+                    "type": "unsupported",
+                    "content": f"Cannot preview this spreadsheet: {_exc}",
+                }
+            )
 
     def _load_docx_sync(self, path: str, cancel: threading.Event | None = None) -> str:
         """Parse a .docx file and return document preview JSON. Off main thread."""
@@ -1245,15 +1473,21 @@ class XExplorerBridge(QObject):
             blocks: list[str] = []
 
             _HEADING_MAP = [
-                ("heading1", "h1"), ("heading2", "h2"), ("heading3", "h3"), ("heading4", "h4"),
-                ("title", "h1"), ("subtitle", "h2"),
+                ("heading1", "h1"),
+                ("heading2", "h2"),
+                ("heading3", "h3"),
+                ("heading4", "h4"),
+                ("title", "h1"),
+                ("subtitle", "h2"),
             ]
 
             _body = _doc.find(f"{{{_W}}}body") or _doc
             for _child in _body:
                 _local = _child.tag.split("}")[-1] if "}" in _child.tag else _child.tag
                 if _local == "p":
-                    _text = "".join(t.text or "" for t in _child.iter(f"{{{_W}}}t")).strip()
+                    _text = "".join(
+                        t.text or "" for t in _child.iter(f"{{{_W}}}t")
+                    ).strip()
                     if not _text:
                         continue
                     _pPr = _child.find(f"{{{_W}}}pPr")
@@ -1272,10 +1506,16 @@ class XExplorerBridge(QObject):
                     _rows_html: list[str] = []
                     for _tr in _child.findall(f".//{{{_W}}}tr"):
                         _cells = [
-                            html.escape("".join(t.text or "" for t in _tc.iter(f"{{{_W}}}t")).strip())
+                            html.escape(
+                                "".join(
+                                    t.text or "" for t in _tc.iter(f"{{{_W}}}t")
+                                ).strip()
+                            )
                             for _tc in _tr.findall(f"{{{_W}}}tc")
                         ]
-                        _rows_html.append("<tr>" + "".join(f"<td>{c}</td>" for c in _cells) + "</tr>")
+                        _rows_html.append(
+                            "<tr>" + "".join(f"<td>{c}</td>" for c in _cells) + "</tr>"
+                        )
                     if _rows_html:
                         blocks.append(
                             '<div class="sheet-wrap"><table class="sheet-table"><tbody>'
@@ -1286,26 +1526,35 @@ class XExplorerBridge(QObject):
             if not blocks:
                 blocks.append('<p class="sl-empty">Empty document</p>')
 
-            return json.dumps({
-                "type": "docx",
-                "content": "\n".join(blocks),
-                "page_count": 1,
-                "page": 0,
-                "label": "Word document",
-            })
+            return json.dumps(
+                {
+                    "type": "docx",
+                    "content": "\n".join(blocks),
+                    "page_count": 1,
+                    "page": 0,
+                    "label": "Word document",
+                }
+            )
         except Exception as _exc:
-            return json.dumps({"type": "unsupported", "content": f"Cannot preview this document: {_exc}"})
+            return json.dumps(
+                {
+                    "type": "unsupported",
+                    "content": f"Cannot preview this document: {_exc}",
+                }
+            )
 
     # ── Async preview dispatch ────────────────────────────────────────────────
 
-    def _async_preview(self, path: str, page: int, loader_fn, loading_msg: str = "Loading…") -> str:
+    def _async_preview(
+        self, path: str, page: int, loader_fn, loading_msg: str = "Loading…"
+    ) -> str:
         """Generic async preview helper using the existing op-queue pattern.
 
         Cancels any in-flight render for a *different* file so switching files
         is instant — the old thread stops as soon as it checks the flag.
         """
-        abs_path = os.path.abspath(path)
-        async_key = f"{abs_path}|{page}"
+        # NO heavy os.path.abspath or os.path.exists here — those block the main thread!
+        async_key = f"{path}|{page}"
 
         if async_key in self._preview_cache:
             return self._preview_cache[async_key]
@@ -1316,7 +1565,9 @@ class XExplorerBridge(QObject):
                 flag.set()
 
         if async_key in self._preview_in_flight:
-            return json.dumps({"type": "loading", "key": async_key, "content": loading_msg})
+            return json.dumps(
+                {"type": "loading", "key": async_key, "content": loading_msg}
+            )
 
         self._preview_in_flight.add(async_key)
         cancel = threading.Event()
@@ -1327,6 +1578,23 @@ class XExplorerBridge(QObject):
                 self._preview_in_flight.discard(_key)
                 self._preview_cancel.pop(_key, None)
                 return
+
+            # Do existence and abspath check INSIDE the thread
+            try:
+                if not os.path.exists(path) or os.path.isdir(path):
+                    self._preview_in_flight.discard(_key)
+                    self._preview_cancel.pop(_key, None)
+                    self._op_emit_queue.put(
+                        (
+                            "preview",
+                            _key,
+                            json.dumps({"type": "unsupported", "content": ""}),
+                        )
+                    )
+                    return
+            except Exception:
+                pass
+
             result = _loader(_cancel)
             if _cancel.is_set():
                 self._preview_in_flight.discard(_key)
@@ -1353,15 +1621,40 @@ class XExplorerBridge(QObject):
         the result is delivered via the preview_ready signal / xex:preview_ready event.
         """
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
-        TEXT_EXTS  = {
-            ".txt", ".md", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".yaml",
-            ".yml", ".toml", ".ini", ".cfg", ".html", ".css", ".xml", ".csv",
-            ".sh", ".bat", ".ps1", ".rs", ".go", ".java", ".c", ".cpp", ".h",
-            ".log", ".env", ".gitignore",
+        TEXT_EXTS = {
+            ".txt",
+            ".md",
+            ".py",
+            ".js",
+            ".ts",
+            ".jsx",
+            ".tsx",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".ini",
+            ".cfg",
+            ".html",
+            ".css",
+            ".xml",
+            ".csv",
+            ".sh",
+            ".bat",
+            ".ps1",
+            ".rs",
+            ".go",
+            ".java",
+            ".c",
+            ".cpp",
+            ".h",
+            ".log",
+            ".env",
+            ".gitignore",
         }
-        PDF_EXTS    = {".pdf"}
+        PDF_EXTS = {".pdf"}
         OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
-        VISIO_EXTS  = {".vsd", ".vsdx", ".vsdm"}
+        VISIO_EXTS = {".vsd", ".vsdx", ".vsdm"}
 
         ext = os.path.splitext(path)[1].lower()
 
@@ -1370,8 +1663,9 @@ class XExplorerBridge(QObject):
             return self.get_preview_page(path, 0)
 
         if ext in IMAGE_EXTS:
-            return self._async_preview(path, 0,
-                lambda c: self._load_image_sync(path, ext, c), "Loading image…")
+            return self._async_preview(
+                path, 0, lambda c: self._load_image_sync(path, ext, c), "Loading image…"
+            )
 
         # For text files we need to peek at the size first — but we must not
         # block the main thread, so we do that check inside the worker too.
@@ -1395,16 +1689,47 @@ class XExplorerBridge(QObject):
             return False
         ext = os.path.splitext(path)[1].lower()
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
-        TEXT_EXTS  = {
-            ".txt", ".md", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".yaml",
-            ".yml", ".toml", ".ini", ".cfg", ".html", ".css", ".xml", ".csv",
-            ".sh", ".bat", ".ps1", ".rs", ".go", ".java", ".c", ".cpp", ".h",
-            ".log", ".env", ".gitignore",
+        TEXT_EXTS = {
+            ".txt",
+            ".md",
+            ".py",
+            ".js",
+            ".ts",
+            ".jsx",
+            ".tsx",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".ini",
+            ".cfg",
+            ".html",
+            ".css",
+            ".xml",
+            ".csv",
+            ".sh",
+            ".bat",
+            ".ps1",
+            ".rs",
+            ".go",
+            ".java",
+            ".c",
+            ".cpp",
+            ".h",
+            ".log",
+            ".env",
+            ".gitignore",
         }
-        PDF_EXTS    = {".pdf"}
+        PDF_EXTS = {".pdf"}
         OFFICE_EXTS = {".pptx", ".ppt", ".xlsx", ".xls", ".xlsm", ".docx"}
-        VISIO_EXTS  = {".vsd", ".vsdx", ".vsdm"}
-        if ext in IMAGE_EXTS or ext in TEXT_EXTS or ext in PDF_EXTS or ext in OFFICE_EXTS or ext in VISIO_EXTS:
+        VISIO_EXTS = {".vsd", ".vsdx", ".vsdm"}
+        if (
+            ext in IMAGE_EXTS
+            or ext in TEXT_EXTS
+            or ext in PDF_EXTS
+            or ext in OFFICE_EXTS
+            or ext in VISIO_EXTS
+        ):
             return True
         # Check size for generic text preview
         try:
@@ -1421,15 +1746,16 @@ class XExplorerBridge(QObject):
         Handles: PDF (.pdf), PowerPoint (.pptx/.ppt), Excel (.xlsx/.xls/.xlsm), Word (.docx),
         Visio (.vsd/.vsdx/.vsdm).
         """
-        if not os.path.exists(path) or os.path.isdir(path):
-            return json.dumps({"type": "unsupported", "content": ""})
+        # Moved os.path.exists / isdir check inside _async_preview / _loader_fn
+        # to prevent main-thread stalls on slow network drives.
 
         ext = os.path.splitext(path)[1].lower()
         try:
             # ── PDF ──────────────────────────────────────────────────────────
             if ext == ".pdf":
                 return self._async_preview(
-                    path, page,
+                    path,
+                    page,
                     lambda c: self._load_pdf_sync(path, page, c),
                     "Rendering PDF…",
                 )
@@ -1442,6 +1768,7 @@ class XExplorerBridge(QObject):
                 if sys.platform == "win32":
                     try:
                         import importlib
+
                         importlib.import_module("pythoncom")
                         importlib.import_module("win32com.client")
                     except ImportError:
@@ -1456,11 +1783,13 @@ class XExplorerBridge(QObject):
 
                         # Already rendering — tell the caller to wait
                         if async_key in self._preview_in_flight:
-                            return json.dumps({
-                                "type": "loading",
-                                "key": async_key,
-                                "content": "Rendering slide…",
-                            })
+                            return json.dumps(
+                                {
+                                    "type": "loading",
+                                    "key": async_key,
+                                    "content": "Rendering slide…",
+                                }
+                            )
 
                         # Kick off background render
                         self._preview_in_flight.add(async_key)
@@ -1479,8 +1808,12 @@ class XExplorerBridge(QObject):
                             prs = None
                             result: str
                             try:
-                                app = win32com.client.DispatchEx("PowerPoint.Application")
-                                prs = app.Presentations.Open(_path, WithWindow=False, ReadOnly=True)
+                                app = win32com.client.DispatchEx(
+                                    "PowerPoint.Application"
+                                )
+                                prs = app.Presentations.Open(
+                                    _path, WithWindow=False, ReadOnly=True
+                                )
                                 n = int(prs.Slides.Count)
                                 idx = max(0, min(_page, n - 1))
 
@@ -1490,13 +1823,19 @@ class XExplorerBridge(QObject):
                                     file_key_src.encode("utf-8", errors="replace")
                                 ).hexdigest()
                                 cache_dir = os.path.join(
-                                    tempfile.gettempdir(), "xexplorer_ppt_cache", file_key
+                                    tempfile.gettempdir(),
+                                    "xexplorer_ppt_cache",
+                                    file_key,
                                 )
                                 os.makedirs(cache_dir, exist_ok=True)
 
-                                img_path = os.path.join(cache_dir, f"slide_{idx + 1:04d}.png")
+                                img_path = os.path.join(
+                                    cache_dir, f"slide_{idx + 1:04d}.png"
+                                )
                                 if not os.path.exists(img_path):
-                                    prs.Slides(idx + 1).Export(img_path, "PNG", 1600, 900)
+                                    prs.Slides(idx + 1).Export(
+                                        img_path, "PNG", 1600, 900
+                                    )
 
                                 with open(img_path, "rb") as f:
                                     data = base64.b64encode(f.read()).decode()
@@ -1504,26 +1843,37 @@ class XExplorerBridge(QObject):
                                 title_text = ""
                                 with contextlib.suppress(Exception):
                                     title_shape = prs.Slides(idx + 1).Shapes.Title
-                                    if title_shape and title_shape.TextFrame and title_shape.TextFrame.HasText:
-                                        title_text = str(title_shape.TextFrame.TextRange.Text or "").strip()
+                                    if (
+                                        title_shape
+                                        and title_shape.TextFrame
+                                        and title_shape.TextFrame.HasText
+                                    ):
+                                        title_text = str(
+                                            title_shape.TextFrame.TextRange.Text or ""
+                                        ).strip()
 
-                                result = json.dumps({
-                                    "type": "slide_image",
-                                    "key": _key,
-                                    "content": f"data:image/png;base64,{data}",
-                                    "page_count": n,
-                                    "page": idx,
-                                    "label": (
-                                        f"Slide {idx + 1}/{n}: {title_text}"
-                                        if title_text else f"Slide {idx + 1}/{n}"
-                                    ),
-                                })
+                                result = json.dumps(
+                                    {
+                                        "type": "slide_image",
+                                        "key": _key,
+                                        "content": f"data:image/png;base64,{data}",
+                                        "page_count": n,
+                                        "page": idx,
+                                        "label": (
+                                            f"Slide {idx + 1}/{n}: {title_text}"
+                                            if title_text
+                                            else f"Slide {idx + 1}/{n}"
+                                        ),
+                                    }
+                                )
                             except Exception as exc:
-                                result = json.dumps({
-                                    "type": "error",
-                                    "key": _key,
-                                    "content": str(exc),
-                                })
+                                result = json.dumps(
+                                    {
+                                        "type": "error",
+                                        "key": _key,
+                                        "content": str(exc),
+                                    }
+                                )
                             finally:
                                 with contextlib.suppress(Exception):
                                     if prs is not None:
@@ -1537,42 +1887,73 @@ class XExplorerBridge(QObject):
                             self._op_emit_queue.put(("preview", _key, result))
 
                         threading.Thread(target=_run_ppt_com, daemon=True).start()
-                        return json.dumps({
-                            "type": "loading",
-                            "key": async_key,
-                            "content": "Rendering slide…",
-                        })
+                        return json.dumps(
+                            {
+                                "type": "loading",
+                                "key": async_key,
+                                "content": "Rendering slide…",
+                            }
+                        )
 
-                return self._async_preview(path, page,
-                    lambda c: self._load_pptx_xml_sync(path, page, c), "Loading presentation…")
+                return self._async_preview(
+                    path,
+                    page,
+                    lambda c: self._load_pptx_xml_sync(path, page, c),
+                    "Loading presentation…",
+                )
 
             # ── Excel ────────────────────────────────────────────────────────
             if ext in {".xlsx", ".xls", ".xlsm"}:
-                return self._async_preview(path, page,
-                    lambda c: self._load_xlsx_sync(path, page, c), "Loading spreadsheet…")
+                return self._async_preview(
+                    path,
+                    page,
+                    lambda c: self._load_xlsx_sync(path, page, c),
+                    "Loading spreadsheet…",
+                )
 
             # ── Word (DOCX) ───────────────────────────────────────────────────
             if ext == ".docx":
-                return self._async_preview(path, page,
-                    lambda c: self._load_docx_sync(path, c), "Loading document…")
+                return self._async_preview(
+                    path,
+                    page,
+                    lambda c: self._load_docx_sync(path, c),
+                    "Loading document…",
+                )
 
             # ── Visio ─────────────────────────────────────────────────────────
             if ext in {".vsd", ".vsdx", ".vsdm"}:
                 if sys.platform != "win32":
-                    return json.dumps({"type": "unsupported", "content": "Visio preview requires Windows + Visio installed."})
+                    return json.dumps(
+                        {
+                            "type": "unsupported",
+                            "content": "Visio preview requires Windows + Visio installed.",
+                        }
+                    )
                 import importlib as _ilv
+
                 try:
                     _ilv.import_module("pythoncom")
                     _ilv.import_module("win32com.client")
                 except ImportError:
-                    return json.dumps({"type": "unsupported", "content": "Visio preview requires pywin32:\npip install pywin32"})
+                    return json.dumps(
+                        {
+                            "type": "unsupported",
+                            "content": "Visio preview requires pywin32:\npip install pywin32",
+                        }
+                    )
 
-                abs_path  = os.path.abspath(path)
+                abs_path = os.path.abspath(path)
                 async_key = f"{abs_path}|{page}"
                 if async_key in self._preview_cache:
                     return self._preview_cache[async_key]
                 if async_key in self._preview_in_flight:
-                    return json.dumps({"type": "loading", "key": async_key, "content": "Rendering diagram\u2026"})
+                    return json.dumps(
+                        {
+                            "type": "loading",
+                            "key": async_key,
+                            "content": "Rendering diagram\u2026",
+                        }
+                    )
                 self._preview_in_flight.add(async_key)
 
                 def _run_visio(_path=abs_path, _page=page, _key=async_key) -> None:
@@ -1590,14 +1971,16 @@ class XExplorerBridge(QObject):
                         app = win32com.client.DispatchEx("Visio.Application")
                         app.Visible = False
                         doc = app.Documents.OpenEx(_path, 64)  # 64 = visOpenRO
-                        n   = int(doc.Pages.Count)
+                        n = int(doc.Pages.Count)
                         idx = max(0, min(_page, n - 1))
-                        pg  = doc.Pages.Item(idx + 1)
+                        pg = doc.Pages.Item(idx + 1)
                         pg_name = str(pg.Name) if pg.Name else ""
 
-                        st       = os.stat(_path)
-                        key_src  = f"{_path}|{st.st_size}|{st.st_mtime_ns}|p{idx}"
-                        file_key = hashlib.sha1(key_src.encode("utf-8", errors="replace")).hexdigest()
+                        st = os.stat(_path)
+                        key_src = f"{_path}|{st.st_size}|{st.st_mtime_ns}|p{idx}"
+                        file_key = hashlib.sha1(
+                            key_src.encode("utf-8", errors="replace")
+                        ).hexdigest()
                         cache_dir = os.path.join(
                             tempfile.gettempdir(), "xexplorer_visio_cache", file_key
                         )
@@ -1608,16 +1991,22 @@ class XExplorerBridge(QObject):
 
                         with open(img_path, "rb") as f:
                             data = base64.b64encode(f.read()).decode()
-                        result = json.dumps({
-                            "type":       "slide_image",
-                            "key":        _key,
-                            "content":    f"data:image/png;base64,{data}",
-                            "page_count": n,
-                            "page":       idx,
-                            "label":      f"{pg_name} ({idx + 1}/{n})" if pg_name else f"Page {idx + 1}/{n}",
-                        })
+                        result = json.dumps(
+                            {
+                                "type": "slide_image",
+                                "key": _key,
+                                "content": f"data:image/png;base64,{data}",
+                                "page_count": n,
+                                "page": idx,
+                                "label": f"{pg_name} ({idx + 1}/{n})"
+                                if pg_name
+                                else f"Page {idx + 1}/{n}",
+                            }
+                        )
                     except Exception as exc:
-                        result = json.dumps({"type": "error", "key": _key, "content": str(exc)})
+                        result = json.dumps(
+                            {"type": "error", "key": _key, "content": str(exc)}
+                        )
                     finally:
                         with contextlib.suppress(Exception):
                             if doc is not None:
@@ -1630,7 +2019,13 @@ class XExplorerBridge(QObject):
                     self._op_emit_queue.put(("preview", _key, result))
 
                 threading.Thread(target=_run_visio, daemon=True).start()
-                return json.dumps({"type": "loading", "key": async_key, "content": "Rendering diagram\u2026"})
+                return json.dumps(
+                    {
+                        "type": "loading",
+                        "key": async_key,
+                        "content": "Rendering diagram\u2026",
+                    }
+                )
 
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
@@ -1679,8 +2074,8 @@ class XExplorerBridge(QObject):
             handler = LiveCacheUpdater(ignore_rules)
             handler.file_changed = lambda: self.live_changed.emit()  # type: ignore
 
-            local_paths   = [p for p in paths if not _is_network_path(p)]
-            network_paths = [p for p in paths if     _is_network_path(p)]
+            local_paths = [p for p in paths if not _is_network_path(p)]
+            network_paths = [p for p in paths if _is_network_path(p)]
 
             new_obs: list = []
 
@@ -1700,7 +2095,7 @@ class XExplorerBridge(QObject):
                     except Exception as e:
                         print(f"Failed to start observer: {e}")
 
-            _make_observer(local_paths,   Observer)
+            _make_observer(local_paths, Observer)
             # Poll every 30 s for network paths — frequent enough to notice
             # changes without hammering the share or spamming live_changed
             # (each live_changed triggers a full UI re-list AND re-search).
@@ -1711,7 +2106,6 @@ class XExplorerBridge(QObject):
             self._observers.extend(new_obs)
 
         threading.Thread(target=_bg, daemon=True, name="xexplorer-watchers").start()
-
 
     @pyqtSlot(result=bool)
     def is_watchdog_available(self) -> bool:

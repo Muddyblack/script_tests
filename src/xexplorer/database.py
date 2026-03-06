@@ -19,5 +19,7 @@ def init_db():
     # Migrate existing DBs that lack the size column
     with contextlib.suppress(Exception):
         c.execute("ALTER TABLE files ADD COLUMN size INTEGER DEFAULT 0")
+    # Add index for faster search if it doesn't exist
+    c.execute("CREATE INDEX IF NOT EXISTS idx_files_name ON files(name)")
     conn.commit()
     conn.close()

@@ -2,7 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QDialog, QLabel, QVBoxLayout, QWidget
 
-from src.common.monitor_ctrl import set_monitor_input
+from src.common.monitor_kvm import set_monitor_input
 
 
 class MonitorOverlay(QWidget):

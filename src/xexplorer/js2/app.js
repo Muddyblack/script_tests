@@ -217,6 +217,11 @@ const App = () => {
                     window.dispatchEvent(new CustomEvent('xex:preview_ready', { detail: JSON.parse(raw) }));
                 });
             }
+            if (br.search_results?.connect) {
+                br.search_results.connect((query, resultsJson) => {
+                    window.dispatchEvent(new CustomEvent('xex:search_results', { detail: { query, results: JSON.parse(resultsJson) } }));
+                });
+            }
 
             const watchdog = await br.is_watchdog_available();
             setLiveOn(!!watchdog);
@@ -333,36 +338,41 @@ const App = () => {
             patchActive({ browsePath: null, browseStack: [] });
         }
         clearTimeout(searchTimer.current);
-        searchTimer.current = setTimeout(() => doSearch(), 130);
+        searchTimer.current = setTimeout(() => doSearch(), 250);
         return () => clearTimeout(searchTimer.current);
     }, [activeTab.query, filter, selectedFolders, activeTabId, liveRefreshTick]);
 
     async function doSearch() {
-        if (activeTab.browsePath !== null) return; // skip when in browse mode
+        if (activeTab.browsePath !== null) return;
         const br = b.current;
         if (!br) return;
         const tabId = activeTabId;
         const q = activeTab.query.trim();
-        patchTab(tabId, { selected: new Set() });
         if (q.length < 2 && filter !== 'recent') {
-            patchTab(tabId, { results: [] });
+            patchTab(tabId, { results: [], loading: false, selected: new Set() });
             setStatusMsg(stats.count ? `${stats.count.toLocaleString()} items indexed · type to search` : 'Add folders and index to start');
             return;
         }
-        patchTab(tabId, { loading: true });
-        const t0 = performance.now();
-        try {
-            const activeFolders = selectedFolders.length ? selectedFolders : folders.map(f => f.path);
-            const raw = await br.search(q, filter, JSON.stringify(activeFolders));
-            const list = JSON.parse(raw);
-            patchTab(tabId, { results: list, loading: false });
-            const ms = (performance.now() - t0).toFixed(1);
-            setStatusMsg(`⚡ ${list.length.toLocaleString()} results in ${ms}ms`);
-        } catch (e) {
-            console.error('search error', e);
-            patchTab(tabId, { loading: false });
-        }
+        patchTab(tabId, { loading: true, selected: new Set(), searchStartTime: performance.now() });
+        const activeFolders = selectedFolders.length ? selectedFolders : folders.map(f => f.path);
+        br.search_async(q, filter, JSON.stringify(activeFolders));
     }
+
+    useEffect(() => {
+        function onResults(e) {
+            const { query, results } = e.detail;
+            setTabs(prev => prev.map(t => {
+                if (t.query.trim() === query) {
+                    const ms = t.searchStartTime ? (performance.now() - t.searchStartTime).toFixed(1) : '?';
+                    if (t.id === activeTabId) setStatusMsg(`⚡ ${results.length.toLocaleString()} results in ${ms}ms`);
+                    return { ...t, results, loading: false };
+                }
+                return t;
+            }));
+        }
+        window.addEventListener('xex:search_results', onResults);
+        return () => window.removeEventListener('xex:search_results', onResults);
+    }, [activeTabId]);
 
     // ── Sorted results ────────────────────────────────────────────────────────
     const sortedResults = useMemo(() => {
