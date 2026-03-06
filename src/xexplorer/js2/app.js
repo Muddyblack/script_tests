@@ -256,7 +256,6 @@ const App = () => {
             } else if (br.get_tabs) {
                 try {
                     const rawTabs = await br.get_tabs();
-                    console.log('[xexplorer] Loaded tabs:', rawTabs);
                     const state = JSON.parse(rawTabs);
                     if (state && state.tabs && state.tabs.length > 0) {
                         const newTabs = state.tabs.map((t, i) => {
@@ -273,7 +272,6 @@ const App = () => {
                         setTabs(newTabs);
                         const activeIdx = Math.max(0, Math.min((state.activeIdx || 0), newTabs.length - 1));
                         setActiveTabId(newTabs[activeIdx].id);
-                        console.log('[xexplorer] Restored', newTabs.length, 'tabs');
                     } else {
                         console.log('[xexplorer] No tabs to restore');
                     }
