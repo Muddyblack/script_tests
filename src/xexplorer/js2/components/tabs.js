@@ -6,6 +6,7 @@ const INIT_TAB = (id, browsePath = null) => ({
         : 'New Tab',
     browsePath,
     browseStack: [],
+    forwardStack: [],
     query: '',
     results: [],
     loading: false,

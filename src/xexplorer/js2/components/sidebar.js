@@ -73,7 +73,7 @@ const DriveCard = memo(({ folder, isSelected, onToggle, onIndex, onRemove, onBro
 });
 
 // ── Breadcrumb ─────────────────────────────────────────────────────────────────
-const Breadcrumb = ({ path, onBack, onHome, onNavigate }) => {
+const Breadcrumb = ({ path, onBack, onForward, onHome, onNavigate, canGoBack, canGoForward }) => {
     if (!path) return null;
     const parts = path.replace(/\//g, '\\').split('\\').filter(Boolean);
 
@@ -85,8 +85,10 @@ const Breadcrumb = ({ path, onBack, onHome, onNavigate }) => {
 
     return (
         <div className="breadcrumb">
-            <button className="bc-btn" title="Exit to search" onClick={onHome}>🔍 Search</button>
+            <button className="bc-btn" title="Back" onClick={onBack} disabled={!canGoBack}>← Back</button>
+            <button className="bc-btn" title="Forward" onClick={onForward} disabled={!canGoForward}>Forward →</button>
             <button className="bc-btn" title="Up one level" onClick={onBack}>↑ Up</button>
+            <button className="bc-btn" title="Exit to search" onClick={onHome}>🔍 Search</button>
             <button className="bc-btn" title="Copy current path" onClick={() => getBridge(br => { br.copy_to_clipboard(path); showToast('Path copied'); })}>📋 Copy</button>
             {parts.map((part, i) => (
                 <React.Fragment key={i}>

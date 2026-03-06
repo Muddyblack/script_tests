@@ -34,7 +34,6 @@ os.makedirs(APPDATA, exist_ok=True)
 
 # --- Per-module databases & settings ---
 DB_PATH = os.path.join(APPDATA, "context_switcher.db")
-X_EXPLORER_DB = os.path.join(APPDATA, "x_explorer_cache.db")
 GHOST_TYPIST_DB = os.path.join(APPDATA, "ghost_typist.db")
 CLIPBOARD_DB = os.path.join(APPDATA, "nexus_clipboard.db")
 CLIPBOARD_SETTINGS_FILE = os.path.join(APPDATA, "nexus_clipboard.json")
@@ -52,6 +51,12 @@ CHRONOS_DIR = os.path.join(APPDATA, "chronos")
 CHRONOS_DB = os.path.join(CHRONOS_DIR, "chronos_data.db")
 CHRONOS_SETTINGS = os.path.join(CHRONOS_DIR, "chronos_settings.json")
 os.makedirs(CHRONOS_DIR, exist_ok=True)
+
+# XExplorer sub-folder
+XEXPLORER_DIR = os.path.join(APPDATA, "xexplorer")
+X_EXPLORER_DB = os.path.join(XEXPLORER_DIR, "xexplorer_cache.db")
+XEXPLORER_SETTINGS = os.path.join(XEXPLORER_DIR, "xexplorer_settings.json")
+os.makedirs(XEXPLORER_DIR, exist_ok=True)
 
 # --- HOTKEY ---
 SUMMON_HOTKEY = "ctrl+shift+space"

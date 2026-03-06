@@ -6,16 +6,35 @@ import sys
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEngineSettings
+from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile, QWebEnginePage
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-from src.common.config import ASSETS_DIR
+from src.common.config import ASSETS_DIR, XEXPLORER_DIR
 from src.common.theme import ThemeManager, WebThemeBridge
 from src.xexplorer.bridge import XExplorerBridge
 
 # Keep references so windows aint garbage-collected
 _open_windows: list = []
+
+# Persistent web profile for session restore
+_web_profile: QWebEngineProfile | None = None
+
+
+def get_web_profile() -> QWebEngineProfile:
+    """Get or create the persistent web profile for xexplorer."""
+    global _web_profile
+    if _web_profile is None:
+        profile_dir = os.path.join(XEXPLORER_DIR, "webprofile")
+        os.makedirs(profile_dir, exist_ok=True)
+        _web_profile = QWebEngineProfile("xexplorer", None)
+        _web_profile.setPersistentStoragePath(profile_dir)
+        _web_profile.setCachePath(os.path.join(profile_dir, "cache"))
+        # Enable persistent cookies and local storage
+        _web_profile.setPersistentCookiesPolicy(
+            QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
+        )
+    return _web_profile
 
 
 class xexplorer(QMainWindow):
@@ -31,7 +50,12 @@ class xexplorer(QMainWindow):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
+        # Create persistent profile FIRST, then create page with it
+        profile = get_web_profile()
+        page = QWebEnginePage(profile, self)
         self.view = QWebEngineView()
+        self.view.setPage(page)
+        
         s = self.view.settings()
         for attr in ("DeveloperExtrasEnabled", "LocalContentCanAccessFileUrls",
                      "LocalContentCanAccessRemoteUrls"):

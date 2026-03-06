@@ -350,19 +350,42 @@ const App = () => {
     }, [activeTabId, activeTab.browsePath, liveRefreshTick]);
 
     async function handleNavUp() {
-        const { browseStack, browsePath } = activeTab;
+        const { browseStack, browsePath, forwardStack } = activeTab;
         if (browseStack.length > 0) {
             const prev = browseStack[browseStack.length - 1];
             const title = prev.split(/[/\\]/).filter(Boolean).pop() || prev;
-            patchActive({ browseStack: browseStack.slice(0, -1), browsePath: prev, title });
+            // Add current to forward stack when going back
+            const newForward = browsePath ? [...(forwardStack || []), browsePath] : (forwardStack || []);
+            patchActive({
+                browseStack: browseStack.slice(0, -1),
+                browsePath: prev,
+                forwardStack: newForward,
+                title
+            });
         } else {
-            patchActive({ browsePath: null, browseStack: [], results: [], title: 'New Tab' });
+            patchActive({ browsePath: null, browseStack: [], forwardStack: [], results: [], title: 'New Tab' });
             setStatusMsg('Ready');
         }
     }
 
+    function handleNavForward() {
+        const { forwardStack, browsePath, browseStack } = activeTab;
+        if (forwardStack && forwardStack.length > 0) {
+            const next = forwardStack[forwardStack.length - 1];
+            const title = next.split(/[/\\]/).filter(Boolean).pop() || next;
+            // Add current to back stack when going forward
+            const newBack = browsePath ? [...browseStack, browsePath] : browseStack;
+            patchActive({
+                browsePath: next,
+                browseStack: newBack,
+                forwardStack: forwardStack.slice(0, -1),
+                title
+            });
+        }
+    }
+
     function handleBrowseHome() {
-        patchActive({ browsePath: null, browseStack: [], results: [], title: 'New Tab' });
+        patchActive({ browsePath: null, browseStack: [], forwardStack: [], results: [], title: 'New Tab' });
         setStatusMsg('Ready');
     }
 
@@ -389,12 +412,23 @@ const App = () => {
         if (!br) return;
         const tabId = activeTabId;
         const q = activeTab.query.trim();
+        const filterStr = filter + '|' + selectedFolders.join(',');
+
+        const isLiveRefresh = (activeTab.lastSearchQuery === q && activeTab.lastSearchFilter === filterStr);
+
         if (q.length < 2 && filter !== 'recent') {
-            patchTab(tabId, { results: [], loading: false, selected: new Set() });
+            patchTab(tabId, { results: [], loading: false, selected: new Set(), lastSearchQuery: q, lastSearchFilter: filterStr });
             setStatusMsg(stats.count ? `${stats.count.toLocaleString()} items indexed · type to search` : 'Add folders and index to start');
             return;
         }
-        patchTab(tabId, { loading: true, selected: new Set(), searchStartTime: performance.now() });
+
+        patchTab(tabId, {
+            loading: !isLiveRefresh,
+            searchStartTime: performance.now(),
+            lastSearchQuery: q,
+            lastSearchFilter: filterStr
+        });
+
         const activeFolders = selectedFolders.length ? selectedFolders : folders.map(f => f.path);
         br.search_async(q, filter, JSON.stringify(activeFolders));
     }
@@ -406,7 +440,22 @@ const App = () => {
                 if (t.query.trim() === query) {
                     const ms = t.searchStartTime ? (performance.now() - t.searchStartTime).toFixed(1) : '?';
                     if (t.id === activeTabId) setStatusMsg(`⚡ ${results.length.toLocaleString()} results in ${ms}ms`);
-                    return { ...t, results, loading: false };
+
+                    let newSelected = t.selected;
+                    if (t.selected && t.selected.size > 0) {
+                        const newSel = new Set();
+                        const oldSelLower = new Set([...t.selected].map(x => x.toLowerCase()));
+                        results.forEach(f => {
+                            if (oldSelLower.has(f.path.toLowerCase())) {
+                                newSel.add(f.path);
+                            }
+                        });
+                        newSelected = newSel;
+                    } else {
+                        newSelected = new Set();
+                    }
+
+                    return { ...t, results, loading: false, selected: newSelected };
                 }
                 return t;
             }));
@@ -515,6 +564,7 @@ const App = () => {
                 ...t,
                 browseStack: t.browsePath !== null ? [...t.browseStack, t.browsePath] : t.browseStack,
                 browsePath: file.path,
+                forwardStack: [], // Clear forward stack on new navigation
                 query: '',
                 title,
             } : t));
@@ -778,10 +828,16 @@ const App = () => {
                 if (e.key === 'Delete' && activeTab.selected.size > 0) { e.preventDefault(); handleDelete(); return; }
                 if (e.key === 'F2') { e.preventDefault(); handleRenameStart(); return; }
             }
-            // Alt+Left or Backspace (outside input) = navigate up in browse mode
+            // Alt+Left or Backspace (outside input) = navigate back in browse mode
             if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Backspace' && !e.target.matches('input,textarea') && activeTab.browsePath)) {
                 e.preventDefault();
                 handleNavUp();
+                return;
+            }
+            // Alt+Right = navigate forward in browse mode
+            if (e.altKey && e.key === 'ArrowRight' && activeTab.forwardStack && activeTab.forwardStack.length > 0) {
+                e.preventDefault();
+                handleNavForward();
                 return;
             }
             // Arrow key navigation through the file list
@@ -992,11 +1048,17 @@ const App = () => {
 
                     {/* Breadcrumb — shown when navigating a folder */}
                     {activeTab.browsePath && (
-                        <Breadcrumb path={activeTab.browsePath} onBack={handleNavUp} onHome={handleBrowseHome}
+                        <Breadcrumb
+                            path={activeTab.browsePath}
+                            onBack={handleNavUp}
+                            onForward={handleNavForward}
+                            onHome={handleBrowseHome}
+                            canGoBack={activeTab.browseStack && activeTab.browseStack.length > 0}
+                            canGoForward={activeTab.forwardStack && activeTab.forwardStack.length > 0}
                             onNavigate={path => {
                                 const title = path.replace(/\\$/, '').split(/[/\\]/).filter(Boolean).pop() || path;
                                 setTabs(prev => prev.map(t => t.id === activeTabId
-                                    ? { ...t, browsePath: path, browseStack: [], query: '', title }
+                                    ? { ...t, browsePath: path, browseStack: [], forwardStack: [], query: '', title }
                                     : t));
                             }} />
                     )}
