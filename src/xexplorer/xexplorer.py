@@ -27,10 +27,14 @@ def get_web_profile() -> QWebEngineProfile:
     if _web_profile is None:
         profile_dir = os.path.join(XEXPLORER_DIR, "webprofile")
         os.makedirs(profile_dir, exist_ok=True)
-        _web_profile = QWebEngineProfile("xexplorer", None)
+        # Use a versioned name to avoid legacy lock issues
+        _web_profile = QWebEngineProfile("xexplorer_v2", None)
         _web_profile.setPersistentStoragePath(profile_dir)
-        _web_profile.setCachePath(os.path.join(profile_dir, "cache"))
-        # Enable persistent cookies and local storage
+
+        # Use Memory Cache to avoid 'Access Denied' on disk cache files
+        # when multiple instances / windows are running.
+        _web_profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
+
         _web_profile.setPersistentCookiesPolicy(
             QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
         )
@@ -56,15 +60,18 @@ class xexplorer(QMainWindow):
         self.view = QWebEngineView()
         self.view.setPage(page)
 
-        s = self.view.settings()
-        for attr in (
+        s = page.settings()
+        _enable = {
             "DeveloperExtrasEnabled",
             "LocalContentCanAccessFileUrls",
             "LocalContentCanAccessRemoteUrls",
-        ):
+            "AllowRunningInsecureContent",
+        }
+        _disable = {"PlaybackRequiresUserGesture"}
+        for attr in _enable | _disable:
             a = getattr(QWebEngineSettings.WebAttribute, attr, None)
             if a:
-                s.setAttribute(a, True)
+                s.setAttribute(a, attr in _enable)
 
         self.setCentralWidget(self.view)
 
@@ -140,6 +147,11 @@ def main() -> None:
         import ctypes
 
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nexus.xexplorer")
+
+    # Critical: Disable GPU shader disk cache to prevent 'Access is denied' (0x5)
+    # errors when multiple instances try to write to the same folder.
+    sys.argv.append("--disable-gpu-shader-disk-cache")
+    sys.argv.append("--disable-gpu-program-cache")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(True)

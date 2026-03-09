@@ -1,4 +1,3 @@
-/* X-Explorer 2 — stylesheet */
 
 *,
 *::before,
@@ -945,6 +944,20 @@ button {
     background: var(--bg-base);
     border-left: 1px solid var(--border);
     overflow: hidden;
+}
+
+.preview-pane.video-preview {
+    width: var(--preview-w, 340px);
+}
+
+.preview-pane.video-preview .preview-body {
+    padding: 0;
+    position: relative;
+    flex: 1;
+}
+
+.preview-pane.video-preview .preview-header {
+    flex-shrink: 0;
 }
 
 .preview-header {
@@ -2266,130 +2279,130 @@ button {
 /* ── Startup Preloader (Modern & High-Fidelity) ────────────────────────────── */
 /* Minimal critical CSS for instant boot */
 .x-preloader-container {
-    position: fixed;
-    inset: 0;
-    background: var(--bg_base);
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    overflow: hidden;
+position: fixed;
+inset: 0;
+background: var(--bg-base);
+z-index: 9999;
+display: flex;
+align-items: center;
+justify-content: center;
+font-family: 'Segoe UI', system-ui, sans-serif;
+overflow: hidden;
 }
 
 .x-preloader-bg-glow {
-    position: absolute;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
-    top: -10%;
-    left: -10%;
-    filter: blur(100px);
-    opacity: 0.6;
+position: absolute;
+width: 600px;
+height: 600px;
+background: radial-gradient(circle, color-mix(in srgb, var(--accent, #0EADCF) 0.15, transparent) 0%, transparent 70%);
+top: -10%;
+left: -10%;
+filter: blur(100px);
+opacity: 0.6;
 }
 
 .x-preloader-bg-glow-2 {
-    position: absolute;
-    width: 700px;
-    height: 700px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
-    bottom: -10%;
-    right: -10%;
-    filter: blur(120px);
-    opacity: 0.5;
+position: absolute;
+width: 700px;
+height: 700px;
+background: radial-gradient(circle, color-mix(in srgb, var(--accent-secondary, var(--info, #22D4FF)) 0.1, transparent) 0%, transparent 70%);
+bottom: -10%;
+right: -10%;
+filter: blur(120px);
+opacity: 0.5;
 }
 
 .x-preloader-glass {
-    position: relative;
-    z-index: 20;
-    padding: 60px 80px;
-    background: rgba(18, 18, 22, 0.7);
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 32px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+position: relative;
+z-index: 20;
+padding: 60px 80px;
+background: color-mix(in srgb, var(--bg-overlay, var(--bg-sidebar)) 0.7, transparent);
+backdrop-filter: blur(25px);
+-webkit-backdrop-filter: blur(25px);
+border: 1px solid color-mix(in srgb, var(--border) 0.3, transparent);
+border-radius: 32px;
+box-shadow: var(--shadow-lg, 0 25px 50px -12px rgba(0, 0, 0, 0.5));
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
 }
 
 .x-preloader-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 32px;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 32px;
 }
 
 .x-preloader-visual {
-    position: relative;
-    width: 100px;
-    height: 100px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+position: relative;
+width: 100px;
+height: 100px;
+display: flex;
+align-items: center;
+justify-content: center;
 }
 
 .x-preloader-ring {
-    position: absolute;
-    inset: -5px;
-    border-radius: 50%;
-    padding: 3px;
-    background: conic-gradient(from 0deg, transparent 0%, #3b82f6 30%, #8b5cf6 60%, transparent 100%);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: x-spin 1.2s cubic-bezier(0.445, 0.05, 0.55, 0.95) infinite;
-    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.4));
+position: absolute;
+inset: -5px;
+border-radius: 50%;
+padding: 3px;
+background: conic-gradient(from 0deg, transparent 0%, var(--accent) 30%, var(--accent-secondary, var(--accent_glow, #22D4FF)) 60%, transparent 100%);
+-webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+-webkit-mask-composite: xor;
+mask-composite: exclude;
+animation: x-spin 1.2s cubic-bezier(0.445, 0.05, 0.55, 0.95) infinite;
+filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 0.4, transparent));
 }
 
 .x-preloader-ring-inner {
-    position: absolute;
-    inset: 5px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 50%;
+position: absolute;
+inset: 5px;
+border: 1px solid color-mix(in srgb, var(--text, var(--text-primary)) 0.05, transparent);
+border-radius: 50%;
 }
 
 .x-preloader-logo {
-    width: 44px;
-    height: 44px;
-    background: #fff;
-    mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 6L6 18M6 6L18 18' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;
-    -webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 6L6 18M6 6L18 18' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;
-    animation: x-pulse-logo 2s ease-in-out infinite;
-    opacity: 0.9;
+width: 44px;
+height: 44px;
+background: var(--text, var(--text-primary));
+mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 6L6 18M6 6L18 18' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;
+-webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 6L6 18M6 6L18 18' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;
+animation: x-pulse-logo 2s ease-in-out infinite;
+opacity: 0.9;
 }
 
 .x-preloader-text {
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.5em;
-    text-transform: uppercase;
-    opacity: 0.5;
-    position: relative;
-    white-space: nowrap;
-    margin-left: 0.5em;
-    /* compensatory for letter-spacing on last char */
+color: var(--text, var(--text-primary));
+font-size: 13px;
+font-weight: 700;
+letter-spacing: 0.5em;
+text-transform: uppercase;
+opacity: 0.7;
+position: relative;
+white-space: nowrap;
+margin-left: 0.5em;
+/* compensatory for letter-spacing on last char */
 }
 
 .x-preloader-text::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    bottom: -12px;
-    width: 0%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, #3b82f6, transparent);
-    animation: x-loading-bar 2.5s infinite ease-in-out;
+content: '';
+position: absolute;
+left: 0;
+bottom: -12px;
+width: 0%;
+height: 1px;
+background: linear-gradient(90deg, transparent, var(--accent, #0EADCF), transparent);
+animation: x-loading-bar 2.5s infinite ease-in-out;
 }
 
 @keyframes x-spin {
-    from {
-        transform: rotate(0deg);
-    }
+from {
+transform: rotate(0deg);
+}
 
     to {
         transform: rotate(360deg);

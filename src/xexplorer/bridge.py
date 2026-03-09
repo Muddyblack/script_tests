@@ -16,6 +16,9 @@ import sqlite3
 import sys
 import threading
 import time
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
+from urllib.parse import urlparse
 
 from PyQt6.QtCore import QFileInfo, QObject, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPixmap
@@ -43,7 +46,152 @@ except ImportError:
     WATCHDOG_AVAILABLE = False
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+
+class MediaFileHandler(SimpleHTTPRequestHandler):
+    """Custom handler to serve media files with proper CORS headers."""
+
+    def log_message(self, format, *args):
+        print(f"[media] {self.address_string()} {format % args}")
+
+    def log_request(self, code="-", size="-"):
+        range_hdr = self.headers.get("Range", "none")
+        print(f"[media] {self.command} {self.path} Range={range_hdr} -> {code}")
+
+    def do_OPTIONS(self):
+        """Handle CORS pre-flight requests."""
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Range, Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
+    def do_HEAD(self):
+        """Handle HEAD requests for media files."""
+        self._handle_request(is_head=True)
+
+    def do_GET(self):
+        """Handle GET requests for media files with Range header support."""
+        self._handle_request(is_head=False)
+
+    def _handle_request(self, is_head=False):
+        """Shared logic for GET and HEAD requests."""
+        # file_map is attached to the server instance
+        file_map = getattr(self.server, "file_map", {})
+        parsed_path = urlparse(self.path)
+        rel_path = parsed_path.path.lstrip("/")
+        file_path = file_map.get(rel_path)
+
+        if file_path and os.path.isfile(file_path):
+            try:
+                # Resolve to absolute path for certainty
+                file_path = os.path.abspath(file_path)
+                file_size = os.path.getsize(file_path)
+
+                # Get MIME type
+                ext = os.path.splitext(file_path)[1].lower()
+                mime_types = {
+                    ".mp4": "video/mp4",
+                    ".webm": "video/webm",
+                    ".ogv": "video/ogg",
+                    ".avi": "video/x-msvideo",
+                    ".mov": "video/quicktime",
+                    ".mkv": "video/x-matroska",
+                    ".wmv": "video/x-ms-wmv",
+                    ".flv": "video/x-flv",
+                    ".m4v": "video/mp4",
+                    ".wav": "audio/wav",
+                    ".mp3": "audio/mpeg",
+                    ".ogg": "audio/ogg",
+                    ".aac": "audio/aac",
+                    ".flac": "audio/flac",
+                    ".m4a": "audio/mp4",
+                    ".wma": "audio/x-ms-wma",
+                }
+                mime_type = mime_types.get(ext, "application/octet-stream")
+
+                # Handle Range requests
+                range_header = self.headers.get("Range")
+                if range_header and not is_head:
+                    try:
+                        range_str = range_header.replace("bytes=", "")
+                        start_str, end_str = range_str.split("-")
+                        start = int(start_str) if start_str else 0
+                        end = int(end_str) if end_str else file_size - 1
+                    except Exception:
+                        start, end = 0, file_size - 1
+
+                    end = min(end, file_size - 1)
+                    if start > end or start >= file_size:
+                        self.send_response(416)
+                        self.send_header("Content-Range", f"bytes */{file_size}")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        return
+
+                    content_length = end - start + 1
+
+                    self.send_response(206)
+                    self.send_header("Content-Type", mime_type)
+                    self.send_header("Content-Length", str(content_length))
+                    self.send_header(
+                        "Content-Range", f"bytes {start}-{end}/{file_size}"
+                    )
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+
+                    with open(file_path, "rb") as f:
+                        f.seek(start)
+                        remaining = content_length
+                        while remaining > 0:
+                            chunk = f.read(min(64 * 1024, remaining))
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            remaining -= len(chunk)
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", mime_type)
+                    self.send_header("Content-Length", str(file_size))
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+
+                    if not is_head:
+                        with open(file_path, "rb") as f:
+                            shutil.copyfileobj(f, self.wfile, length=64 * 1024)
+                return
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+                pass
+            except OSError as e:
+                if e.winerror in (10053, 10054):  # WSAECONNABORTED, WSAECONNRESET
+                    pass
+                else:
+                    print(f"[media] Unexpected error serving file: {e}")
+                    with contextlib.suppress(Exception):
+                        self.send_error(500)
+            except Exception as e:
+                print(f"[media] Unexpected error serving file: {e}")
+                with contextlib.suppress(Exception):
+                    self.send_error(500)
+        else:
+            self.send_error(404)
+
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Threaded HTTP server for serving media files."""
+
+    daemon_threads = True
+
+    def shutdown(self):
+        """Properly shutdown the server."""
+        self.socket.close()
+        HTTPServer.shutdown(self)
 
 
 def _is_network_path(path: str) -> bool:
@@ -141,7 +289,13 @@ class XExplorerBridge(QObject):
     def __init__(self, initial_path: str = "") -> None:
         super().__init__()
         init_db()
+
         self._search_engine = SearchEngine(DB_PATH)
+
+        # HTTP server for large media files
+        self._media_server = None
+        self._media_server_port = 8765  # Random port for media serving
+        self._media_files = {}  # Maps URL paths to actual file paths
 
         # Warm database cache and emit signal when ready
         def _warm_and_signal():
@@ -1255,6 +1409,118 @@ class XExplorerBridge(QObject):
         except Exception as e:
             return json.dumps({"type": "error", "content": str(e)})
 
+    def _load_audio_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
+        """Load audio file and return preview JSON. Called off the main thread."""
+        try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            size = os.path.getsize(path)
+            self._ensure_media_server()
+
+            # Use a stable hash for the path
+            import hashlib
+
+            url_hash = hashlib.md5(path.encode("utf-8")).hexdigest()[:12]
+            url_path = f"media/{url_hash}{ext}"
+            self._media_files[url_path] = path
+
+            stream_url = f"http://127.0.0.1:{self._media_server_port}/{url_path}"
+            print(
+                f"[audio] Streaming {os.path.basename(path)} ({size / 1e6:.1f} MB) via {stream_url}"
+            )
+
+            return json.dumps(
+                {
+                    "type": "audio",
+                    "content": stream_url,
+                    "format": ext[1:],
+                    "size": size,
+                }
+            )
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
+    def _load_video_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
+        """Return video stream URL for HTML5 <video> tag preview."""
+        try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            size = os.path.getsize(path)
+            self._ensure_media_server()
+
+            import hashlib
+
+            url_hash = hashlib.md5(path.encode("utf-8")).hexdigest()[:12]
+            url_path = f"media/{url_hash}{ext}"
+            self._media_files[url_path] = path
+
+            stream_url = f"http://127.0.0.1:{self._media_server_port}/{url_path}"
+            fmt_map = {".m4v": "mp4", ".ogv": "ogg"}
+            fmt = fmt_map.get(ext, ext[1:])
+
+            return json.dumps(
+                {
+                    "type": "video",
+                    "content": stream_url,
+                    "format": fmt,
+                    "size": size,
+                }
+            )
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
+    def _ensure_media_server(self) -> None:
+        """Ensure HTTP server is running for serving large media files."""
+        if self._media_server is None:
+            try:
+                # Find available port
+                import socket
+
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+                sock.close()
+
+                # Start server in background thread
+                # Note: We pass the Class, not an instance.
+                self._media_server = ThreadedHTTPServer(
+                    ("127.0.0.1", port), MediaFileHandler
+                )
+                self._media_server.file_map = self._media_files
+
+                server_thread = threading.Thread(
+                    target=self._media_server.serve_forever,
+                    daemon=True,
+                    name="media-server",
+                )
+                server_thread.start()
+
+                self._media_server_port = port
+                print(f"[media] Streaming server started on http://127.0.0.1:{port}")
+            except Exception as e:
+                print(f"[media] Failed to start HTTP server: {e}")
+
+    def _shutdown_media_server(self) -> None:
+        """Shutdown the media server if running."""
+        if self._media_server:
+            try:
+                self._media_server.shutdown()
+                self._media_server = None
+                print("[media] HTTP server stopped")
+            except Exception as e:
+                print(f"[media] Error stopping HTTP server: {e}")
+
+    def __del__(self):
+        """Cleanup when bridge is destroyed."""
+        with contextlib.suppress(Exception):
+            self._shutdown_media_server()
+
     def _load_text_sync(
         self, path: str, ext: str, cancel: threading.Event | None = None
     ) -> str:
@@ -1729,6 +1995,249 @@ class XExplorerBridge(QObject):
                 }
             )
 
+    def _load_font_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
+        """Load font file and create a preview with sample text."""
+        try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            # Read font file to get basic info
+            with open(path, "rb") as f:
+                header = f.read(36)  # Read enough for basic font info
+
+            font_name = os.path.basename(path)
+            font_size = len(header)
+
+            # Create HTML preview with CSS font-face
+            css_url = f"file://{path.replace(os.sep, '/')}"
+            preview_html = f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h3>Font Preview: {font_name}</h3>
+                <p>Size: {font_size} bytes</p>
+                <style>
+                    @font-face {{
+                        font-family: 'PreviewFont';
+                        src: url('{css_url}');
+                    }}
+                </style>
+                <div style="font-family: 'PreviewFont', fallback; font-size: 24px; line-height: 1.4;">
+                    <p>The quick brown fox jumps over the lazy dog</p>
+                    <p>ABCDEFGHIJKLMNOPQRSTUVWXYZ</p>
+                    <p>abcdefghijklmnopqrstuvwxyz</p>
+                    <p>0123456789 !@#$%^&*()</p>
+                </div>
+            </div>
+            """
+
+            return json.dumps({"type": "html", "content": preview_html})
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
+    def _load_archive_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
+        """Load archive file and list its contents."""
+        try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            files = []
+            total_size = 0
+
+            if ext == ".zip":
+                import zipfile
+
+                with zipfile.ZipFile(path, "r") as zf:
+                    for info in zf.infolist():
+                        if cancel and cancel.is_set():
+                            return json.dumps({"type": "unsupported", "content": ""})
+                        files.append(
+                            {
+                                "name": info.filename,
+                                "size": info.file_size,
+                                "compressed": info.compress_size,
+                                "is_dir": info.is_dir(),
+                            }
+                        )
+                        total_size += info.file_size
+
+            elif ext in [".gz", ".bz2", ".xz"]:
+                # Single file compression
+                files.append(
+                    {
+                        "name": os.path.basename(path[: -len(ext)]),
+                        "size": os.path.getsize(path),
+                        "compressed": os.path.getsize(path),
+                        "is_dir": False,
+                    }
+                )
+                total_size = os.path.getsize(path)
+
+            elif ext == ".tar":
+                import tarfile
+
+                with tarfile.open(path, "r:*") as tf:
+                    for member in tf.getmembers():
+                        if cancel and cancel.is_set():
+                            return json.dumps({"type": "unsupported", "content": ""})
+                        files.append(
+                            {
+                                "name": member.name,
+                                "size": member.size,
+                                "compressed": member.size,
+                                "is_dir": member.isdir(),
+                            }
+                        )
+                        total_size += member.size
+
+            else:
+                # For other formats (7z, rar, cab), just show basic info
+                files.append(
+                    {
+                        "name": f"[{ext.upper()} Archive]",
+                        "size": os.path.getsize(path),
+                        "compressed": os.path.getsize(path),
+                        "is_dir": False,
+                    }
+                )
+                total_size = os.path.getsize(path)
+
+            # Create HTML table of contents
+            html_content = f"""
+            <div style="font-family: monospace; padding: 20px;">
+                <h3>Archive Contents: {os.path.basename(path)}</h3>
+                <p>Files: {len(files)} | Total Size: {_fmt_size_stat(total_size, False)}</p>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f0f0f0;">
+                            <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Name</th>
+                            <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Size</th>
+                            <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Compressed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+
+            for file_info in files[:100]:  # Limit to first 100 files
+                html_content += f"""
+                    <tr>
+                        <td style="padding: 4px 8px; border: 1px solid #ddd;">{"📁" if file_info["is_dir"] else "📄"} {html.escape(file_info["name"])}</td>
+                        <td style="padding: 4px 8px; text-align: right; border: 1px solid #ddd;">{_fmt_size_stat(file_info["size"], False)}</td>
+                        <td style="padding: 4px 8px; text-align: right; border: 1px solid #ddd;">{_fmt_size_stat(file_info["compressed"], False)}</td>
+                    </tr>
+                """
+
+            if len(files) > 100:
+                html_content += f"<tr><td colspan='3' style='padding: 8px; text-align: center;'>... and {len(files) - 100} more files</td></tr>"
+
+            html_content += "</tbody></table></div>"
+
+            return json.dumps({"type": "html", "content": html_content})
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
+    def _load_executable_sync(
+        self, path: str, ext: str, cancel: threading.Event | None = None
+    ) -> str:
+        """Load executable file and show metadata."""
+        try:
+            if cancel and cancel.is_set():
+                return json.dumps({"type": "unsupported", "content": ""})
+
+            import datetime
+            import struct
+
+            info = {
+                "name": os.path.basename(path),
+                "size": os.path.getsize(path),
+                "modified": time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(path))
+                ),
+            }
+
+            with open(path, "rb") as f:
+                # Read first few bytes to determine format
+                header = f.read(64)
+
+                if ext in [".exe", ".dll"] and header.startswith(b"MZ"):
+                    # PE (Windows executable)
+                    f.seek(60)  # PE header offset
+                    pe_offset = struct.unpack("<I", f.read(4))[0]
+                    f.seek(pe_offset + 4)
+                    machine = struct.unpack("<H", f.read(2))[0]
+                    f.seek(pe_offset + 20)
+                    num_sections = struct.unpack("<H", f.read(2))[0]
+                    f.seek(pe_offset + 24)
+                    timestamp = struct.unpack("<I", f.read(4))[0]
+
+                    machine_types = {0x14C: "x86", 0x8664: "x64", 0xAA64: "ARM64"}
+                    info["type"] = "PE (Windows)"
+                    info["architecture"] = machine_types.get(
+                        machine, f"Unknown ({machine:#x})"
+                    )
+                    info["sections"] = num_sections
+                    info["compiled"] = datetime.datetime.fromtimestamp(
+                        timestamp
+                    ).strftime("%Y-%m-%d %H:%M:%S")
+
+                elif ext == ".so" and header[:4] in [b"\x7fELF"]:
+                    # ELF (Linux)
+                    info["type"] = "ELF (Linux)"
+                    if len(header) > 5:
+                        class_type = header[4]
+                        arch_types = {1: "32-bit", 2: "64-bit"}
+                        info["architecture"] = arch_types.get(
+                            class_type, f"Unknown ({class_type})"
+                        )
+
+                elif ext == ".dylib" and header[:4] in [
+                    b"\xfe\xed\xfa\xce",
+                    b"\xfe\xed\xfa\xcf",
+                    b"\xcf\xfa\xed\xfe",
+                    b"\xce\xfa\xed\xfe",
+                ]:
+                    # Mach-O (macOS)
+                    info["type"] = "Mach-O (macOS)"
+                    if len(header) > 1:
+                        arch_types = {
+                            0x07: "x86",
+                            0x01000007: "x64",
+                            0x0C: "ARM64",
+                            0x0100000C: "ARM64",
+                        }
+                        cpu_type = struct.unpack(
+                            ">I", header[4:8] if header[0] == 0xFE else header[4:8]
+                        )[0]
+                        info["architecture"] = arch_types.get(
+                            cpu_type, f"Unknown ({cpu_type:#x})"
+                        )
+                else:
+                    info["type"] = "Unknown executable format"
+
+            # Create HTML info display
+            html_content = f"""
+            <div style="font-family: monospace; padding: 20px;">
+                <h3>Executable Information: {info["name"]}</h3>
+                <table style="border-collapse: collapse;">
+                    <tr><td style="padding: 4px 8px; font-weight: bold;">Type:</td><td style="padding: 4px 8px;">{info.get("type", "Unknown")}</td></tr>
+                    <tr><td style="padding: 4px 8px; font-weight: bold;">Architecture:</td><td style="padding: 4px 8px;">{info.get("architecture", "Unknown")}</td></tr>
+                    <tr><td style="padding: 4px 8px; font-weight: bold;">Size:</td><td style="padding: 4px 8px;">{_fmt_size_stat(info["size"], False)}</td></tr>
+                    <tr><td style="padding: 4px 8px; font-weight: bold;">Modified:</td><td style="padding: 4px 8px;">{info["modified"]}</td></tr>
+            """
+
+            if "sections" in info:
+                html_content += f"<tr><td style='padding: 4px 8px; font-weight: bold;'>Sections:</td><td style='padding: 4px 8px;'>{info['sections']}</td></tr>"
+            if "compiled" in info:
+                html_content += f"<tr><td style='padding: 4px 8px; font-weight: bold;'>Compiled:</td><td style='padding: 4px 8px;'>{info['compiled']}</td></tr>"
+
+            html_content += "</table></div>"
+
+            return json.dumps({"type": "html", "content": html_content})
+        except Exception as e:
+            return json.dumps({"type": "error", "content": str(e)})
+
     # ── Async preview dispatch ────────────────────────────────────────────────
 
     def _async_preview(
@@ -1837,8 +2346,33 @@ class XExplorerBridge(QObject):
         Always returns immediately — heavy work runs in a background thread and
         the result is delivered via the preview_ready signal / xex:preview_ready event.
         """
-        IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
+        IMAGE_EXTS = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".webp",
+            ".svg",
+            ".ico",
+            ".pic",
+        }
         HTML_EXTS = {".html", ".htm"}
+        AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".aac", ".flac", ".m4a", ".wma"}
+        VIDEO_EXTS = {
+            ".mp4",
+            ".webm",
+            ".ogv",
+            ".avi",
+            ".mov",
+            ".mkv",
+            ".wmv",
+            ".flv",
+            ".m4v",
+        }
+        FONT_EXTS = {".ttf", ".otf", ".woff", ".woff2", ".eot"}
+        ARCHIVE_EXTS = {".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar", ".cab"}
+        EXECUTABLE_EXTS = {".exe", ".dll", ".so", ".dylib", ".app"}
         TEXT_EXTS = {
             ".txt",
             ".md",
@@ -1890,6 +2424,42 @@ class XExplorerBridge(QObject):
                 path, 0, lambda c: self._load_html_sync(path, c), "Loading HTML…"
             )
 
+        # Audio files - use HTML5 audio player
+        if ext in AUDIO_EXTS:
+            return self._async_preview(
+                path, 0, lambda c: self._load_audio_sync(path, ext, c), "Loading audio…"
+            )
+
+        # Video files - use HTML5 video player
+        if ext in VIDEO_EXTS:
+            return self._async_preview(
+                path, 0, lambda c: self._load_video_sync(path, ext, c), "Loading video…"
+            )
+
+        # Font files - preview with sample text
+        if ext in FONT_EXTS:
+            return self._async_preview(
+                path, 0, lambda c: self._load_font_sync(path, ext, c), "Loading font…"
+            )
+
+        # Archive files - list contents
+        if ext in ARCHIVE_EXTS:
+            return self._async_preview(
+                path,
+                0,
+                lambda c: self._load_archive_sync(path, ext, c),
+                "Loading archive…",
+            )
+
+        # Executable files - show metadata
+        if ext in EXECUTABLE_EXTS:
+            return self._async_preview(
+                path,
+                0,
+                lambda c: self._load_executable_sync(path, ext, c),
+                "Loading executable…",
+            )
+
         # For text files we need to peek at the size first — but we must not
         # block the main thread, so we do that check inside the worker too.
         def _text_or_unsupported(cancel=None):
@@ -1911,8 +2481,33 @@ class XExplorerBridge(QObject):
         if not path or not os.path.isfile(path):
             return False
         ext = os.path.splitext(path)[1].lower()
-        IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
+        IMAGE_EXTS = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".webp",
+            ".svg",
+            ".ico",
+            ".pic",
+        }
         HTML_EXTS = {".html", ".htm"}
+        AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".aac", ".flac", ".m4a", ".wma"}
+        VIDEO_EXTS = {
+            ".mp4",
+            ".webm",
+            ".ogv",
+            ".avi",
+            ".mov",
+            ".mkv",
+            ".wmv",
+            ".flv",
+            ".m4v",
+        }
+        FONT_EXTS = {".ttf", ".otf", ".woff", ".woff2", ".eot"}
+        ARCHIVE_EXTS = {".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar", ".cab"}
+        EXECUTABLE_EXTS = {".exe", ".dll", ".so", ".dylib", ".app"}
         TEXT_EXTS = {
             ".txt",
             ".md",
@@ -1953,6 +2548,11 @@ class XExplorerBridge(QObject):
             or ext in PDF_EXTS
             or ext in OFFICE_EXTS
             or ext in VISIO_EXTS
+            or ext in AUDIO_EXTS
+            or ext in VIDEO_EXTS
+            or ext in FONT_EXTS
+            or ext in ARCHIVE_EXTS
+            or ext in EXECUTABLE_EXTS
         ):
             return True
         # Check size for generic text preview

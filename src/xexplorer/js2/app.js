@@ -1,11 +1,11 @@
 // Hide preloader immediately when React app starts
 function hidePreloader() {
     const preloader = document.querySelector('.x-preloader-container');
-    if (preloader && preloader.style.display !== 'none') {
+    if (preloader && preloader.style) {
         preloader.style.opacity = '0';
         preloader.style.transition = 'opacity 0.2s ease-out';
         setTimeout(() => {
-            preloader.style.display = 'none';
+            if (preloader && preloader.style) preloader.style.display = 'none';
         }, 200);
     }
 }

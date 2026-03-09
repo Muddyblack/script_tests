@@ -50,11 +50,12 @@ const PreviewPane = ({ file, onClose }) => {
         fetchPage(file.path, next);
     }
 
+
     if (!file) return null;
     const canPage = preview?.page_count > 1;
 
     return (
-        <aside className="preview-pane">
+        <aside className={`preview-pane ${preview?.type === 'video' ? 'video-preview' : ''}`} data-preview-type={preview?.type || 'none'}>
             <div className="preview-header">
                 <FileIcon name={file.name} path={file.path} is_dir={file.is_dir} size={18} />
                 <span className="preview-filename">{file.name}</span>
@@ -112,15 +113,15 @@ const PreviewPane = ({ file, onClose }) => {
                 )}
                 {preview?.type === 'html' && (
                     <>
-                        <div style={{ 
-                            position: 'absolute', 
-                            top: 0, 
-                            left: 0, 
-                            right: 0, 
-                            padding: '4px 8px', 
-                            background: 'rgba(0,0,0,0.05)', 
-                            fontSize: 10, 
-                            color: 'var(--text-secondary)', 
+                        <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            padding: '4px 8px',
+                            background: 'rgba(0,0,0,0.05)',
+                            fontSize: 10,
+                            color: 'var(--text-secondary)',
                             borderBottom: '1px solid var(--border)',
                             zIndex: 10,
                             overflow: 'hidden',
@@ -146,6 +147,31 @@ const PreviewPane = ({ file, onClose }) => {
                             title="HTML Preview"
                         />
                     </>
+                )}
+                {preview?.type === 'audio' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20 }}>
+                        <div style={{ fontSize: 48 }}>🎵</div>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>{file.name}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                                Audio Format: {preview.format?.toUpperCase()} {preview.size ? `(${Math.round(preview.size / 1024 / 1024 * 100) / 100} MB)` : ''}
+                            </div>
+                            <audio
+                                key={preview.content}
+                                controls
+                                style={{ width: '100%', maxWidth: 400 }}
+                                src={preview.content}
+                                preload="metadata"
+                            >
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                    </div>
+                )}
+                {preview?.type === 'video' && (
+                    <div ref={videoContainerRef}
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: '#000' }}
+                    />
                 )}
                 {preview?.type === 'loading' && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingTop: 40, color: 'var(--text-disabled)', fontSize: 12 }}>

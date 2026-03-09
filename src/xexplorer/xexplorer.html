@@ -12,6 +12,26 @@
     <script src="../lib/lucide.min.js"></script>
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script src="../lib/babel.min.js"></script>
+    <script>
+        // Console filter for common dev-mode noise
+        (function () {
+            const patterns = [
+                'in-browser Babel transformer',
+                'babeljs.io/docs/setup',
+                'Loading model weights',
+                'cdn.tailwindcss.com should not be used in production'
+            ];
+            const filter = (orig) => function (...args) {
+                if (args[0] && typeof args[0] === 'string' &&
+                    patterns.some(p => args[0].includes(p))) return;
+                orig.apply(window.console, args);
+            };
+            if (window.console) {
+                if (window.console.warn) window.console.warn = filter(window.console.warn);
+                if (window.console.log) window.console.log = filter(window.console.log);
+            }
+        })();
+    </script>
     <script src="../lib/tailwind.min.js"></script>
     <script type="text/babel" src="js2/bridge.js"></script>
     <script type="text/babel" src="js2/components/ui.js"></script>
@@ -43,17 +63,18 @@
         </div>
         <script>
             // Hide preloader after minimal delay to ensure it's visible briefly
-            (function() {
+            (function () {
                 const preloader = document.querySelector('.x-preloader-container');
-                if (preloader) {
-                    // Show preloader briefly, then fade out quickly
+                if (preloader && preloader.style) {
                     setTimeout(() => {
-                        preloader.style.opacity = '0';
-                        preloader.style.transition = 'opacity 0.1s ease-out';
-                        setTimeout(() => {
-                            preloader.style.display = 'none';
-                        }, 100);
-                    }, 200); // Show for 200ms minimum
+                        if (preloader && preloader.style) {
+                            preloader.style.opacity = '0';
+                            preloader.style.transition = 'opacity 0.1s ease-out';
+                            setTimeout(() => {
+                                if (preloader && preloader.style) preloader.style.display = 'none';
+                            }, 100);
+                        }
+                    }, 200);
                 }
             })();
         </script>

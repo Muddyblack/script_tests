@@ -4,7 +4,7 @@ const SORT_KEYS = { Name: 'name', Type: 'ext', Size: 'size', Modified: 'mtime' }
 // Memoized row component to prevent unnecessary re-renders
 const FileRow = React.memo(({ file, isSelected, isDragOver, isCut, onSelect, onDouble, onCtxMenu, onDragStart, onDropOnFolder }) => {
     const [localDragOver, setLocalDragOver] = useState(false);
-    
+
     return (
         <tr data-path={file.path}
             className={`file-row ${isSelected ? 'selected' : ''} ${(isDragOver || localDragOver) ? 'drag-over' : ''} ${isCut ? 'cut-item' : ''}`}
@@ -31,12 +31,12 @@ const FileRow = React.memo(({ file, isSelected, isDragOver, isCut, onSelect, onD
 }, (prev, next) => {
     // Custom comparison to prevent re-renders when nothing changed
     return prev.file.path === next.file.path &&
-           prev.isSelected === next.isSelected &&
-           prev.isDragOver === next.isDragOver &&
-           prev.isCut === next.isCut &&
-           prev.file.name === next.file.name &&
-           prev.file.size === next.file.size &&
-           prev.file.mtime === next.file.mtime;
+        prev.isSelected === next.isSelected &&
+        prev.isDragOver === next.isDragOver &&
+        prev.isCut === next.isCut &&
+        prev.file.name === next.file.name &&
+        prev.file.size === next.file.size &&
+        prev.file.mtime === next.file.mtime;
 });
 
 const DetailsView = ({ files, selected, onSelect, onDouble, onCtxMenu, sortKey, sortDir, onSort, onDragStart, onDropOnFolder, cutPaths, loading }) => {
@@ -107,8 +107,8 @@ const IconItem = React.memo(({ file, isSelected, onSelect, onDouble, onCtxMenu }
     );
 }, (prev, next) => {
     return prev.file.path === next.file.path &&
-           prev.isSelected === next.isSelected &&
-           prev.file.name === next.file.name;
+        prev.isSelected === next.isSelected &&
+        prev.file.name === next.file.name;
 });
 
 const IconsView = ({ files, selected, onSelect, onDouble, onCtxMenu, loading }) => (
@@ -195,12 +195,12 @@ const TreeNode = React.memo(({ node, depth, selected, onSelect, onDouble, onCtxM
     const nextExp = next.expanded.has(next.node.path);
     const prevSel = prev.selected.has(prev.node.path);
     const nextSel = next.selected.has(next.node.path);
-    
+
     return prev.node.path === next.node.path &&
-           prev.depth === next.depth &&
-           prevExp === nextExp &&
-           prevSel === nextSel &&
-           prev.node.children.length === next.node.children.length;
+        prev.depth === next.depth &&
+        prevExp === nextExp &&
+        prevSel === nextSel &&
+        prev.node.children.length === next.node.children.length;
 });
 
 const TreeView = ({ files, selected, onSelect, onDouble, onCtxMenu }) => {
