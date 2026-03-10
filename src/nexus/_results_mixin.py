@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 import webbrowser
 
 from PyQt6.QtCore import QByteArray, QSize, Qt
@@ -64,9 +65,15 @@ class _ResultsMixin:
         norm = os.path.normpath(path)
         if os.path.exists(norm):
             if os.path.isdir(norm):
-                os.startfile(norm)
+                from .utils import open_path
+                open_path(norm)
             else:
-                subprocess.Popen(f'explorer /select,"{norm}"')
+                if sys.platform == "win32":
+                    subprocess.Popen(f'explorer /select,"{norm}"')
+                else:
+                    # On Linux, opening the directory of the file is the best fallback
+                    from .utils import open_path
+                    open_path(os.path.dirname(norm))
         else:
             self.status_lbl.setText("Path not found on disk")
 

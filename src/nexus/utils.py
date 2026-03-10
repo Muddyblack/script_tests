@@ -112,3 +112,20 @@ def parse_chronos_input(text: str):
         content = content.replace(date_match.group(0), "")
 
     return content.strip(), priority, tags, due_date
+
+
+def open_path(path: str) -> None:
+    """Open a file or directory using the system default handler, cross-platform."""
+    if not path:
+        return
+
+    if sys.platform == "win32":
+        try:
+            os.startfile(path)
+        except AttributeError:
+            subprocess.Popen(["explorer", path])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    else:
+        # Linux/bsd
+        subprocess.Popen(["xdg-open", path])

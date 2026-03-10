@@ -273,11 +273,13 @@ class _LaunchMixin:
                 self.save_settings()
                 self.show_folder_picker()
                 return
-            elif data.get("type") == "app":
+            elif data["type"] == "app":
                 self.record_usage(f"app_{data['path']}")
-                if not os.path.exists(data["path"]):
-                    raise FileNotFoundError(f"App not found: {data['path']}")
-                os.startfile(data["path"])
+                f_path = data["path"]
+                if not os.path.exists(f_path):
+                    raise FileNotFoundError(f"App not found: {f_path}")
+                from .utils import open_path
+                open_path(f_path)
             elif data["type"] == "cmd":
                 self.record_usage(f"cmd_{data['cmd']}")
                 cmd = data["cmd"]
@@ -319,10 +321,16 @@ class _LaunchMixin:
                 else:
                     subprocess.Popen([sys.executable, f_path])
             elif data["type"] == "file":
-                self.record_usage(f"file_{data['path']}")
-                if not os.path.exists(data["path"]):
-                    raise FileNotFoundError(f"File not found: {data['path']}")
-                os.startfile(data["path"])
+                f_path = data["path"]
+                self.record_usage(f"file_{f_path}")
+                # For UNC/network paths, we try to open even if existence check fails
+                # (might be unmounted, requires auth, etc.)
+                is_unc = f_path.startswith("\\\\") or f_path.startswith("//")
+                if not os.path.exists(f_path) and not is_unc:
+                    raise FileNotFoundError(f"File not found: {f_path}")
+
+                from .utils import open_path
+                open_path(f_path)
             elif data["type"] == "process":
                 _kill_proc(self, data["pid"], data["name"])
             elif data["type"] == "process_kill_all":

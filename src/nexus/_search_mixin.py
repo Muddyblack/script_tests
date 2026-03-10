@@ -129,26 +129,60 @@ class _SearchMixin:
             self.populate_list_results(candidates)
             return
 
-        # 0.1. DIRECT PATH DETECTION (e.g. C:\Windows or /etc/passwd)
-        if raw_search and (
-            raw_search.startswith("\\\\")
-            or (
-                len(raw_search) >= 2
-                and raw_search[1] == ":"
-                and raw_search[0].isalpha()
-            )
-            or (raw_search.startswith("/") and not raw_search.startswith("//"))
-        ):
-            is_dir = os.path.isdir(raw_search)
-            if os.path.exists(raw_search):
+        # 0.1. DIRECT PATH DETECTION (e.g. C:\Windows or /etc/passwd or \\server\share)
+        path_input = raw_search
+        is_file_uri = False
+        if raw_search.lower().startswith("file:"):
+            is_file_uri = True
+            # Strip file: or file:// or file:///
+            # Handle file:///C:/path (Windows), file:///etc/passwd (Unix), file://server/share (UNC)
+            path_input = raw_search[5:]
+            if path_input.startswith("///"):
+                path_input = path_input[3:]
+                # Check for Windows drive letter: file:///C:/...
+                if len(path_input) > 2 and path_input[1] == ":" and path_input[0].isalpha():
+                    pass # Keep as is, it's a win path
+                elif path_input.startswith("/"):
+                    pass # Unix absolute path starting with double slash? No, usually it's just /path
+                else:
+                    # On Unix, file:///etc/passwd results in etc/passwd after stripping ///
+                    # We want to restore the leading slash
+                    if not (len(path_input) > 2 and path_input[1] == ":"):
+                        path_input = "/" + path_input
+            elif path_input.startswith("//"):
+                # Potential UNC: file://server/share
+                path_input = "\\\\" + path_input[2:]
+            elif path_input.startswith("/") and len(path_input) > 2 and path_input[2] == ":":
+                path_input = path_input[1:]  # /C:/... -> C:/...
+
+            # Normalize separators if it looks like a Windows path or UNC
+            if "\\" in path_input or (len(path_input) > 2 and path_input[1] == ":") or path_input.startswith("\\\\"):
+                path_input = path_input.replace("/", "\\")
+
+        is_unc = path_input.startswith("\\\\") or path_input.startswith("//")
+        is_win_path = (
+            len(path_input) >= 2
+            and path_input[1] == ":"
+            and path_input[0].isalpha()
+        )
+        # Unix path is absolute if it starts with / (after URI stripping)
+        is_unix_path = path_input.startswith("/") and not is_unc
+
+        if path_input and (is_unc or is_win_path or is_unix_path or is_file_uri):
+            # For UNC, we allow it even if not exists locally (network location)
+            exists = os.path.exists(path_input)
+            is_dir = os.path.isdir(path_input) if exists else False
+
+            if exists or is_unc:
+                title_name = os.path.basename(path_input) or path_input
                 add_candidate(
                     {
-                        "score": 5000,
-                        "title": f"Open {'Folder' if is_dir else 'File'}: {os.path.basename(raw_search) or raw_search}",
-                        "path": raw_search,
-                        "icon": "folder.svg" if is_dir else "file.svg",
-                        "file_path": raw_search,
-                        "data": {"type": "file", "path": raw_search},
+                        "score": 5000 if exists else 4500,
+                        "title": f"Open {'Folder' if is_dir else 'Path'}: {title_name}",
+                        "path": path_input,
+                        "icon": "folder.svg" if is_dir else ("globe.svg" if is_unc else "file.svg"),
+                        "file_path": path_input,
+                        "data": {"type": "file", "path": path_input},
                     }
                 )
 
