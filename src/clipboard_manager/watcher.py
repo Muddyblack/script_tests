@@ -17,13 +17,13 @@ import sqlite3
 import subprocess
 import time
 
-from PyQt6.QtCore import QObject, QTimer
+from PyQt6.QtCore import QObject, QSocketNotifier, QTimer
 from PyQt6.QtWidgets import QApplication
 
 # Detect Wayland — on Wayland the compositor won't deliver clipboard events to
 # unfocused windows, so Qt's dataChanged / mimeData() return stale/empty data
-# when Nexus has no focused window.  wl-paste reads the Wayland clipboard
-# directly and bypasses this restriction.
+# when Nexus has no focused window.  wl-paste --watch streams changes without
+# spawning a new process every poll interval (which caused GUI interference).
 _WL_PASTE = shutil.which("wl-paste") if os.environ.get("WAYLAND_DISPLAY") else None
 
 
@@ -158,14 +158,22 @@ class ClipboardWatcher(QObject):
         cb = QApplication.clipboard()
         cb.dataChanged.connect(self._on_changed)
 
-        # Poll timer: on Wayland use wl-paste so we catch copies from any app
-        # even when Nexus has no focused window.
-        self._timer = QTimer(self)
-        self._timer.setInterval(POLL_MS)
-        self._timer.timeout.connect(
-            self._poll_wayland if _WL_PASTE else self._on_changed
-        )
-        self._timer.start()
+        # On Wayland: use wl-paste --watch (single persistent process that
+        # prints to stdout whenever the clipboard changes).  This avoids
+        # spawning a new subprocess every 500 ms, which was causing the
+        # compositor to repeatedly claim the clipboard selection and
+        # interrupt right-click menus / constantly refresh the GUI.
+        self._wl_proc: subprocess.Popen | None = None
+        self._wl_notifier: QSocketNotifier | None = None
+
+        if _WL_PASTE:
+            self._start_wl_watch()
+        else:
+            self._timer = QTimer(self)
+            self._timer.setInterval(POLL_MS)
+            self._timer.timeout.connect(self._on_changed)
+            self._timer.start()
+
         self._running = True
 
         # Background settings sync: pick up enable/disable written by the
@@ -185,7 +193,10 @@ class ClipboardWatcher(QObject):
         """Pause clipboard monitoring without destroying the watcher."""
         if not self._running:
             return
-        self._timer.stop()
+        if _WL_PASTE:
+            self._stop_wl_watch()
+        else:
+            self._timer.stop()
         with contextlib.suppress(RuntimeError, TypeError):
             QApplication.clipboard().dataChanged.disconnect(self._on_changed)
         self._running = False
@@ -196,8 +207,64 @@ class ClipboardWatcher(QObject):
             return
         cb = QApplication.clipboard()
         cb.dataChanged.connect(self._on_changed)
-        self._timer.start()
+        if _WL_PASTE:
+            self._start_wl_watch()
+        else:
+            self._timer.start()
         self._running = True
+
+    # ── wl-paste --watch helpers ──────────────────────────────────────────────
+
+    def _start_wl_watch(self) -> None:
+        """Spawn wl-paste --watch once; use QSocketNotifier to read lines."""
+        try:
+            self._wl_proc = subprocess.Popen(
+                [str(_WL_PASTE), "--watch", "cat"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            assert self._wl_proc.stdout is not None
+            fd = self._wl_proc.stdout.fileno()
+            self._wl_notifier = QSocketNotifier(
+                fd, QSocketNotifier.Type.Read, self
+            )
+            self._wl_notifier.activated.connect(self._on_wl_data)
+        except Exception:
+            self._wl_proc = None
+            self._wl_notifier = None
+
+    def _stop_wl_watch(self) -> None:
+        if self._wl_notifier:
+            self._wl_notifier.setEnabled(False)
+            self._wl_notifier = None
+        if self._wl_proc:
+            with contextlib.suppress(Exception):
+                self._wl_proc.terminate()
+            self._wl_proc = None
+
+    def _on_wl_data(self) -> None:
+        """Called by QSocketNotifier when wl-paste --watch writes a line."""
+        try:
+            if not self._wl_proc or self._wl_proc.stdout is None:
+                return
+            # Read whatever is available without blocking
+            import select
+            ready, _, _ = select.select([self._wl_proc.stdout], [], [], 0)
+            if not ready:
+                return
+            chunk = os.read(self._wl_proc.stdout.fileno(), 65536)
+            if not chunk:
+                return
+            text = chunk.decode("utf-8", errors="replace").rstrip("\n")
+            if not text:
+                return
+            h = hashlib.sha256(text.encode()).hexdigest()
+            if h == self._last_hash:
+                return
+            self._last_hash = h
+            self._save_text(text, h)
+        except Exception:
+            pass
 
     def _sync_enabled_state(self) -> None:
         """Called every 2 s (main thread) to honour enable/disable written by

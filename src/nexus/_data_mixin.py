@@ -35,28 +35,73 @@ class _DataMixin:
             pass
 
     def scan_installed_apps(self):
-        """Scan Windows Start Menu and Desktop for application shortcuts."""
-        paths = [
-            os.path.join(
-                os.environ.get("PROGRAMDATA", "C:\\ProgramData"),
-                r"Microsoft\Windows\Start Menu",
-            ),
-            os.path.join(
-                os.environ.get("APPDATA", ""),
-                r"Microsoft\Windows\Start Menu",
-            ),
-            os.path.join(os.environ.get("PUBLIC", "C:\\Users\\Public"), "Desktop"),
-            os.path.join(os.environ.get("USERPROFILE", ""), "Desktop"),
-        ]
+        """Scan for installed applications (Windows: Start Menu shortcuts; Linux/Mac: .desktop files)."""
+        import sys
+
         apps = []
-        for p in paths:
-            if not os.path.exists(p):
-                continue
-            for root, _, files in os.walk(p):
-                for f in files:
-                    if f.lower().endswith((".lnk", ".url")):
-                        name = f.rsplit(".", 1)[0]
-                        apps.append({"name": name, "path": os.path.join(root, f)})
+
+        if sys.platform == "win32":
+            paths = [
+                os.path.join(
+                    os.environ.get("PROGRAMDATA", "C:\\ProgramData"),
+                    r"Microsoft\Windows\Start Menu",
+                ),
+                os.path.join(
+                    os.environ.get("APPDATA", ""),
+                    r"Microsoft\Windows\Start Menu",
+                ),
+                os.path.join(os.environ.get("PUBLIC", "C:\\Users\\Public"), "Desktop"),
+                os.path.join(os.environ.get("USERPROFILE", ""), "Desktop"),
+            ]
+            for p in paths:
+                if not os.path.exists(p):
+                    continue
+                for root, _, files in os.walk(p):
+                    for f in files:
+                        if f.lower().endswith((".lnk", ".url")):
+                            name = f.rsplit(".", 1)[0]
+                            apps.append({"name": name, "path": os.path.join(root, f)})
+        else:
+            # XDG .desktop file locations (Linux / macOS via XDG)
+            xdg_data_dirs = os.environ.get(
+                "XDG_DATA_DIRS", "/usr/local/share:/usr/share"
+            ).split(":")
+            desktop_dirs = [
+                os.path.join(d, "applications") for d in xdg_data_dirs
+            ] + [os.path.expanduser("~/.local/share/applications")]
+
+            for d in desktop_dirs:
+                if not os.path.isdir(d):
+                    continue
+                for fname in os.listdir(d):
+                    if not fname.endswith(".desktop"):
+                        continue
+                    fpath = os.path.join(d, fname)
+                    name = exec_cmd = None
+                    try:
+                        with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                            in_entry = False
+                            for line in fh:
+                                line = line.strip()
+                                if line == "[Desktop Entry]":
+                                    in_entry = True
+                                elif line.startswith("[") and line != "[Desktop Entry]":
+                                    in_entry = False
+                                if not in_entry:
+                                    continue
+                                if line.startswith("NoDisplay=true") or line.startswith("Hidden=true"):
+                                    name = None
+                                    break
+                                if line.startswith("Name=") and name is None:
+                                    name = line[5:].strip()
+                                elif line.startswith("Exec=") and exec_cmd is None:
+                                    # Strip field codes like %u %f %F etc.
+                                    exec_cmd = line[5:].strip().split("%")[0].strip()
+                    except Exception:
+                        pass
+                    if name and exec_cmd:
+                        apps.append({"name": name, "path": exec_cmd})
+
         self.installed_apps = apps
 
     # ------------------------------------------------------------------

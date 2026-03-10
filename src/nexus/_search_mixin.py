@@ -253,7 +253,11 @@ class _SearchMixin:
                 _map = {"apps": "app", "files": "file", "toggles": "cmd"}
                 f_type = _map.get(active_ones[0])
 
-            frequent = self.get_frequent_candidates(limit=10, filter_type=f_type)
+            # Limit favorites when searching OR when an explicit filter is active
+            # (default has apps + toggles active in major_srcs)
+            is_filtered = len(active_ones) == 1
+            fav_limit = 3 if (search or is_filtered) else 10
+            frequent = self.get_frequent_candidates(limit=fav_limit, filter_type=f_type)
 
             # Determine display filtering terms (strip > if present)
             display_terms = (
@@ -349,9 +353,10 @@ class _SearchMixin:
                             "path": p["path"],
                             "desc": p["desc"],
                         }
-                    grouped[name]["count"] += 1
+                    # Use int() to satisfy type checking although it's redundant at runtime
+                    grouped[name]["count"] = int(grouped[name]["count"]) + 1
                     grouped[name]["pids"].append(p["pid"])
-                    grouped[name]["mem_sum"] += p["mem_bytes"]
+                    grouped[name]["mem_sum"] = int(grouped[name]["mem_sum"]) + int(p["mem_bytes"])
 
             for name, info in grouped.items():
                 mem_mb = info["mem_sum"] // 1024 // 1024

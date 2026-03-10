@@ -45,6 +45,7 @@ FILE_OPS_SETTINGS = os.path.join(APPDATA, "nexus_file_ops.json")
 ARCHIVER_SETTINGS = os.path.join(APPDATA, "nexus_archiver.json")
 WORKSPACES_FILE = os.path.join(APPDATA, "nexus_workspaces.json")
 COLOR_PICKER_CONFIG = os.path.join(APPDATA, "nexus_color_picker.json")
+HASH_TOOL_SETTINGS = os.path.join(APPDATA, "nexus_hash_tool.json")
 
 # Chronos sub-folder
 CHRONOS_DIR = os.path.join(APPDATA, "chronos")

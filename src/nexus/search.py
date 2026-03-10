@@ -58,6 +58,7 @@ from .system_commands import (
     update_process_cache as _update_procs,
 )
 from .themes import get_nexus_theme
+from .utils import is_opacity_supported
 
 
 class NexusSearch(
@@ -124,6 +125,7 @@ class NexusSearch(
         self.icon_provider = QFileIconProvider()
         self.icon_cache = {}
         self.search_engine = SearchEngine([X_EXPLORER_DB, DB_PATH])
+        self.search_engine.warm_cache()  # warm DB connections in background for fast first :f search
         self.thread_pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(2)
         self.pending_icons = set()
@@ -412,7 +414,8 @@ class NexusSearch(
         self.search_input.clear()
         self.perform_search()
 
-        self.setWindowOpacity(0)
+        if is_opacity_supported():
+            self.setWindowOpacity(0)
         self.show()
         self.raise_()
         self.show()
@@ -424,12 +427,13 @@ class NexusSearch(
         QTimer.singleShot(100, self.summon_and_focus)
         QTimer.singleShot(300, self.summon_and_focus)
 
-        self.anim = QPropertyAnimation(self, b"windowOpacity")
-        self.anim.setDuration(250)
-        self.anim.setStartValue(0)
-        self.anim.setEndValue(1)
-        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.anim.start()
+        if is_opacity_supported():
+            self.anim = QPropertyAnimation(self, b"windowOpacity")
+            self.anim.setDuration(250)
+            self.anim.setStartValue(0)
+            self.anim.setEndValue(1)
+            self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self.anim.start()
 
         self.rainbow_frame.trigger_animation()
 
