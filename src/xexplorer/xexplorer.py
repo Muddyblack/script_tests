@@ -10,7 +10,7 @@ from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineS
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-from src.common.config import ASSETS_DIR, XEXPLORER_DIR
+from src.common.config import X_EXPLORER_ICON_PATH, XEXPLORER_DIR
 from src.common.theme import ThemeManager, WebThemeBridge
 from src.xexplorer.bridge import XExplorerBridge
 
@@ -41,7 +41,7 @@ def get_web_profile() -> QWebEngineProfile:
     return _web_profile
 
 
-class xexplorer(QMainWindow):
+class XExplorer(QMainWindow):
     def __init__(self, initial_path: str = "") -> None:
         super().__init__()
         self.mgr = ThemeManager()
@@ -50,9 +50,8 @@ class xexplorer(QMainWindow):
         self.resize(1380, 860)
         self.setMinimumSize(900, 580)
 
-        icon_path = os.path.join(ASSETS_DIR, "xexplorer.png")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        if os.path.exists(X_EXPLORER_ICON_PATH):
+            self.setWindowIcon(QIcon(X_EXPLORER_ICON_PATH))
 
         # Create persistent profile FIRST, then create page with it
         profile = get_web_profile()
@@ -95,7 +94,7 @@ class xexplorer(QMainWindow):
         self.view.setUrl(QUrl.fromLocalFile(html_path))
 
     def _spawn_window(self, path: str) -> None:
-        win = xexplorer(initial_path=path)
+        win = XExplorer(initial_path=path)
         win.resize(self.width(), self.height())
         win.move(self.x() + 40, self.y() + 40)
         win.show()
@@ -154,8 +153,13 @@ def main() -> None:
     sys.argv.append("--disable-gpu-program-cache")
 
     app = QApplication(sys.argv)
+    app.setApplicationName("xexplorer")
+    app.setDesktopFileName("xexplorer")
+    if os.path.exists(X_EXPLORER_ICON_PATH):
+        app.setWindowIcon(QIcon(X_EXPLORER_ICON_PATH))
+
     app.setQuitOnLastWindowClosed(True)
-    win = xexplorer()
+    win = XExplorer()
     _open_windows.append(win)
     win.show()
     sys.exit(app.exec())
