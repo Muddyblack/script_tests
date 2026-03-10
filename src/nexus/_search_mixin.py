@@ -2,8 +2,10 @@
 
 import os
 import re
+import sys
 import threading
 import urllib.parse
+import urllib.request
 
 from .system_commands import update_process_cache as _update_procs
 from .utils import format_display_name, parse_chronos_input
@@ -134,32 +136,19 @@ class _SearchMixin:
         is_file_uri = False
         if raw_search.lower().startswith("file:"):
             is_file_uri = True
-            # Strip file: or file:// or file:///
-            # Handle file:///C:/path (Windows), file:///etc/passwd (Unix), file://server/share (UNC)
-            path_input = raw_search[5:]
-            if path_input.startswith("///"):
-                path_input = path_input[3:]
-                # Check for Windows drive letter: file:///C:/...
-                if len(path_input) > 2 and path_input[1] == ":" and path_input[0].isalpha():
-                    pass # Keep as is, it's a win path
-                elif path_input.startswith("/"):
-                    pass # Unix absolute path starting with double slash? No, usually it's just /path
-                else:
-                    # On Unix, file:///etc/passwd results in etc/passwd after stripping ///
-                    # We want to restore the leading slash
-                    if not (len(path_input) > 2 and path_input[1] == ":"):
-                        path_input = "/" + path_input
-            elif path_input.startswith("//"):
-                # Potential UNC: file://server/share
-                path_input = "\\\\" + path_input[2:]
-            elif path_input.startswith("/") and len(path_input) > 2 and path_input[2] == ":":
-                path_input = path_input[1:]  # /C:/... -> C:/...
+            try:
+                # url2pathname handles unc (file://host/share) and absolute (file:///path) platform-correctly
+                path_input = urllib.request.url2pathname(raw_search[5:])
+                # Cleanup: on Linux, file:///C:/Path often becomes /C:/Path
+                if sys.platform != "win32" and path_input.startswith("/") and len(path_input) > 2 and path_input[1:2] == ":":
+                    path_input = path_input[1:]
+            except Exception:
+                path_input = raw_search[5:]
 
-            # Normalize separators if it looks like a Windows path or UNC
-            if "\\" in path_input or (len(path_input) > 2 and path_input[1] == ":") or path_input.startswith("\\\\"):
-                path_input = path_input.replace("/", "\\")
-
+        # Normalize is_unc detection
         is_unc = path_input.startswith("\\\\") or path_input.startswith("//")
+        
+        # Windows-style path detection
         is_win_path = (
             len(path_input) >= 2
             and path_input[1] == ":"
@@ -167,6 +156,10 @@ class _SearchMixin:
         )
         # Unix path is absolute if it starts with / (after URI stripping)
         is_unix_path = path_input.startswith("/") and not is_unc
+
+        # Normalize slashes ONLY on Windows, or for clearly Windows paths
+        if sys.platform == "win32" or is_win_path:
+            path_input = path_input.replace("/", "\\")
 
         if path_input and (is_unc or is_win_path or is_unix_path or is_file_uri):
             # For UNC, we allow it even if not exists locally (network location)
