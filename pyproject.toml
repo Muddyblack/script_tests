@@ -27,6 +27,7 @@ port-inspector = "src.port_inspector.port_inspector:main"
 hash-tool = "src.hash_tool.hash_tool:main"
 ghost-typist = "src.ghost_typist.ghost_typist:main"
 xexplorer = "src.xexplorer.xexplorer:main"
+text-summarizer = "src.text_summarizer.gui:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

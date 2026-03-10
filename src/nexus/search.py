@@ -49,6 +49,9 @@ from .system_commands import (
     launch_ghost_typist as _launch_ghost_typist,
 )
 from .system_commands import (
+    launch_text_summarizer as _launch_text_summarizer,
+)
+from .system_commands import (
     launch_xexplorer as _launch_xexplorer,
 )
 from .system_commands import (
@@ -462,6 +465,9 @@ class NexusSearch(
 
     def start_xexplorer(self) -> None:
         _launch_xexplorer(self)
+
+    def start_text_summarizer(self) -> None:
+        _launch_text_summarizer(self)
 
     def toggle_ghost_watcher(self, enabled: bool) -> None:
         """Enable or disable the background Ghost Typist keyboard listener."""

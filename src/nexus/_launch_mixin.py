@@ -58,6 +58,9 @@ from .system_commands import (
     launch_xexplorer as _launch_xexplorer,
 )
 from .system_commands import (
+    launch_text_summarizer as _launch_text_summarizer,
+)
+from .system_commands import (
     log_to_chronos as _log_to_chronos,
 )
 
@@ -295,6 +298,7 @@ class _LaunchMixin:
                     "hash_tool": _launch_hash_tool,
                     "ghost_typist": _launch_ghost_typist,
                     "sqlite_viewer": _launch_sqlite_viewer,
+                    "text_summarizer": _launch_text_summarizer,
                 }
                 if cmd in _CMD_MAP:
                     _CMD_MAP[cmd](self)

@@ -561,6 +561,13 @@ class _SearchMixin:
                 "sqlite_viewer.png",
                 "#0ea5e9",
             ),
+            (
+                "Text Summarizer",
+                "Offline summarization · TF-IDF · TextRank · keyword highlights",
+                "text_summarizer",
+                "text_summarizer.png",
+                "#f59e0b",
+            ),
         ]
 
     def get_power_commands(self):

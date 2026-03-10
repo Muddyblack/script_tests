@@ -335,6 +335,13 @@ def launch_hash_tool(nexus) -> None:
     _launch_python_module(nexus, "🔑 Launching Hash Tool...", "src.hash_tool.hash_tool")
 
 
+def launch_text_summarizer(nexus) -> None:
+    """Launch the Text Summarizer tool."""
+    _launch_python_module(
+        nexus, "📝 Launching Text Summarizer...", "src.text_summarizer"
+    )
+
+
 def launch_ghost_typist(nexus) -> None:
     """Launch Ghost Typist text-expander UI."""
     env = os.environ.copy()
