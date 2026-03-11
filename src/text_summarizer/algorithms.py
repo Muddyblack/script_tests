@@ -55,35 +55,11 @@ import re
 from collections import Counter, defaultdict
 from typing import NamedTuple
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # STOP-WORDS  (expanded — 175 words)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_STOP_WORDS: frozenset[str] = frozenset("""
-a about above across after afterwards again against all almost alone along already
-also although always am among amongst an and another any anyhow anyone anything
-anyway anywhere are aren't around as at back be became because become becomes
-becoming been before beforehand behind being below beside besides between beyond
-both but by can can't cannot could couldn't did didn't do does doesn't doing
-don't down during each else elsewhere enough even ever every everyone everything
-everywhere except few for former formerly from further get got had hadn't has
-hasn't have haven't having he he'd he'll he's hence her here here's hereafter
-hereby herein hereupon hers herself him himself his how how's however i i'd i'll
-i'm i've if in indeed instead into is isn't it it's its itself just keep latter
-latterly least less like likely ltd made many may me meanwhile might more moreover
-most mostly much must mustn't my myself namely neither never nevertheless next no
-nobody none noone nor not nothing now nowhere of off often on once only onto or
-other others otherwise our ours ourselves out over own per perhaps please rather
-re same shan't she she'd she'll she's should shouldn't since so some somehow
-someone something sometime sometimes somewhere still such than that that's the
-their theirs them themselves then thence there there's thereafter thereby therefore
-therein thereupon these they they'd they'll they're they've this those though
-through throughout thru thus to together too toward towards under until up upon
-us very via was wasn't we we'd we'll we're we've were weren't what what's when
-when's where where's whether which while who who's whom why why's will with won't
-would wouldn't yet you you'd you'll you're you've your yours yourself yourselves
-""".split())
+_STOP_WORDS: frozenset[str] = frozenset(["a", "about", "above", "across", "after", "afterwards", "again", "against", "all", "almost", "alone", "along", "already", "also", "although", "always", "am", "among", "amongst", "an", "and", "another", "any", "anyhow", "anyone", "anything", "anyway", "anywhere", "are", "aren't", "around", "as", "at", "back", "be", "became", "because", "become", "becomes", "becoming", "been", "before", "beforehand", "behind", "being", "below", "beside", "besides", "between", "beyond", "both", "but", "by", "can", "can't", "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", "each", "else", "elsewhere", "enough", "even", "ever", "every", "everyone", "everything", "everywhere", "except", "few", "for", "former", "formerly", "from", "further", "get", "got", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "he's", "hence", "her", "here", "here's", "hereafter", "hereby", "herein", "hereupon", "hers", "herself", "him", "himself", "his", "how", "how's", "however", "i", "i'd", "i'll", "i'm", "i've", "if", "in", "indeed", "instead", "into", "is", "isn't", "it", "it's", "its", "itself", "just", "keep", "latter", "latterly", "least", "less", "like", "likely", "ltd", "made", "many", "may", "me", "meanwhile", "might", "more", "moreover", "most", "mostly", "much", "must", "mustn't", "my", "myself", "namely", "neither", "never", "nevertheless", "next", "no", "nobody", "none", "noone", "nor", "not", "nothing", "now", "nowhere", "of", "off", "often", "on", "once", "only", "onto", "or", "other", "others", "otherwise", "our", "ours", "ourselves", "out", "over", "own", "per", "perhaps", "please", "rather", "re", "same", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't", "since", "so", "some", "somehow", "someone", "something", "sometime", "sometimes", "somewhere", "still", "such", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "thence", "there", "there's", "thereafter", "thereby", "therefore", "therein", "thereupon", "these", "they", "they'd", "they'll", "they're", "they've", "this", "those", "though", "through", "throughout", "thru", "thus", "to", "together", "too", "toward", "towards", "under", "until", "up", "upon", "us", "very", "via", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", "when's", "where", "where's", "whether", "which", "while", "who", "who's", "whom", "why", "why's", "will", "with", "won't", "would", "wouldn't", "yet", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -92,9 +68,9 @@ would wouldn't yet you you'd you'll you're you've your yours yourself yourselves
 
 def _is_consonant(word: str, i: int) -> bool:
     c = word[i]
-    if c in 'aeiou':
+    if c in "aeiou":
         return False
-    if c == 'y':
+    if c == "y":
         return i == 0 or not _is_consonant(word, i - 1)
     return True
 
@@ -138,7 +114,7 @@ def _ends_cvc(word: str) -> bool:
         _is_consonant(word, len(word) - 1)
         and not _is_consonant(word, len(word) - 2)
         and _is_consonant(word, len(word) - 3)
-        and word[-1] not in 'wxy'
+        and word[-1] not in "wxy"
     )
 
 
@@ -149,52 +125,50 @@ def _stem(word: str) -> str:
     w = word.lower()
 
     # Step 1a
-    if w.endswith('sses'):
+    if w.endswith("sses") or w.endswith("ies"):
         w = w[:-2]
-    elif w.endswith('ies'):
-        w = w[:-2]
-    elif w.endswith('ss'):
+    elif w.endswith("ss"):
         pass
-    elif w.endswith('s'):
+    elif w.endswith("s"):
         w = w[:-1]
 
     # Step 1b
     step1b_flag = False
-    if w.endswith('eed'):
+    if w.endswith("eed"):
         if _measure(w[:-3]) > 0:
             w = w[:-1]
-    elif w.endswith('ed'):
+    elif w.endswith("ed"):
         stem = w[:-2]
         if _has_vowel(stem):
             w = stem
             step1b_flag = True
-    elif w.endswith('ing'):
+    elif w.endswith("ing"):
         stem = w[:-3]
         if _has_vowel(stem):
             w = stem
             step1b_flag = True
 
     if step1b_flag:
-        if w.endswith(('at', 'bl', 'iz')):
-            w += 'e'
-        elif _ends_double_consonant(w) and not w.endswith(('l', 's', 'z')):
+        if w.endswith(("at", "bl", "iz")):
+            w += "e"
+        elif _ends_double_consonant(w) and not w.endswith(("l", "s", "z")):
             w = w[:-1]
         elif _measure(w) == 1 and _ends_cvc(w):
-            w += 'e'
+            w += "e"
 
     # Step 1c
-    if w.endswith('y') and _has_vowel(w[:-1]):
-        w = w[:-1] + 'i'
+    if w.endswith("y") and _has_vowel(w[:-1]):
+        w = w[:-1] + "i"
 
     # Step 2
     step2_map = [
-        ('ational', 'ate'), ('tional', 'tion'), ('enci', 'ence'),
-        ('anci', 'ance'), ('izer', 'ize'), ('abli', 'able'),
-        ('alli', 'al'), ('entli', 'ent'), ('eli', 'e'),
-        ('ousli', 'ous'), ('ization', 'ize'), ('ation', 'ate'),
-        ('ator', 'ate'), ('alism', 'al'), ('iveness', 'ive'),
-        ('fulness', 'ful'), ('ousness', 'ous'), ('aliti', 'al'),
-        ('iviti', 'ive'), ('biliti', 'ble'),
+        ("ational", "ate"), ("tional", "tion"), ("enci", "ence"),
+        ("anci", "ance"), ("izer", "ize"), ("abli", "able"),
+        ("alli", "al"), ("entli", "ent"), ("eli", "e"),
+        ("ousli", "ous"), ("ization", "ize"), ("ation", "ate"),
+        ("ator", "ate"), ("alism", "al"), ("iveness", "ive"),
+        ("fulness", "ful"), ("ousness", "ous"), ("aliti", "al"),
+        ("iviti", "ive"), ("biliti", "ble"),
     ]
     for suffix, replacement in step2_map:
         if w.endswith(suffix) and _measure(w[:-len(suffix)]) > 0:
@@ -203,8 +177,8 @@ def _stem(word: str) -> str:
 
     # Step 3
     step3_map = [
-        ('icate', 'ic'), ('ative', ''), ('alize', 'al'),
-        ('iciti', 'ic'), ('ical', 'ic'), ('ful', ''), ('ness', ''),
+        ("icate", "ic"), ("ative", ""), ("alize", "al"),
+        ("iciti", "ic"), ("ical", "ic"), ("ful", ""), ("ness", ""),
     ]
     for suffix, replacement in step3_map:
         if w.endswith(suffix) and _measure(w[:-len(suffix)]) > 0:
@@ -213,30 +187,28 @@ def _stem(word: str) -> str:
 
     # Step 4
     step4_suffixes = [
-        'al', 'ance', 'ence', 'er', 'ic', 'able', 'ible', 'ant',
-        'ement', 'ment', 'ent', 'ion', 'ou', 'ism', 'ate',
-        'iti', 'ous', 'ive', 'ize',
+        "al", "ance", "ence", "er", "ic", "able", "ible", "ant",
+        "ement", "ment", "ent", "ion", "ou", "ism", "ate",
+        "iti", "ous", "ive", "ize",
     ]
     for suffix in step4_suffixes:
         if w.endswith(suffix):
             stem = w[:-len(suffix)]
-            if suffix == 'ion':
-                if _measure(stem) > 1 and stem and stem[-1] in 'st':
+            if suffix == "ion":
+                if _measure(stem) > 1 and stem and stem[-1] in "st":
                     w = stem
             elif _measure(stem) > 1:
                 w = stem
             break
 
     # Step 5a
-    if w.endswith('e'):
+    if w.endswith("e"):
         stem = w[:-1]
-        if _measure(stem) > 1:
-            w = stem
-        elif _measure(stem) == 1 and not _ends_cvc(stem):
+        if _measure(stem) > 1 or _measure(stem) == 1 and not _ends_cvc(stem):
             w = stem
 
     # Step 5b
-    if w.endswith('ll') and _measure(w) > 1:
+    if w.endswith("ll") and _measure(w) > 1:
         w = w[:-1]
 
     return w if len(w) >= 2 else word
@@ -247,9 +219,9 @@ def _stem(word: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _ABBREV_PAT = re.compile(
-    r'\b(Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|i\.e|e\.g|'
-    r'Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec|'
-    r'U\.S|U\.K|approx|est|fig|vol|no|pp|ch|ed|rev|dept)\.',
+    r"\b(Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|i\.e|e\.g|"
+    r"Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
+    r"U\.S|U\.K|approx|est|fig|vol|no|pp|ch|ed|rev|dept)\.",
     re.IGNORECASE,
 )
 _SENT_SPLIT_PAT = re.compile(
@@ -260,12 +232,12 @@ _SENT_SPLIT_PAT = re.compile(
 
 
 def _split_sentences(text: str) -> list[str]:
-    text = _ABBREV_PAT.sub(lambda m: m.group().replace('.', '\x00'), text)
-    text = re.sub(r'[ \t]+', ' ', text)
+    text = _ABBREV_PAT.sub(lambda m: m.group().replace(".", "\x00"), text)
+    text = re.sub(r"[ \t]+", " ", text)
     parts = _SENT_SPLIT_PAT.split(text.strip())
     result = []
     for s in parts:
-        s = s.replace('\x00', '.').strip()
+        s = s.replace("\x00", ".").strip()
         if s and len(s.split()) >= 4:
             result.append(s)
     return result
@@ -306,7 +278,7 @@ def _named_entities(sentence: str) -> set[str]:
     words = sentence.split()
     entities = set()
     for i, w in enumerate(words[1:], 1):  # skip first word
-        clean = re.sub(r'[^A-Za-z]', '', w)
+        clean = re.sub(r"[^A-Za-z]", "", w)
         if clean and clean[0].isupper() and len(clean) > 1:
             entities.add(clean.lower())
     return entities
@@ -889,7 +861,7 @@ def _yake_extract(text: str, top_n: int = 20, window: int = 3) -> list[tuple[str
         return (w not in _STOP_WORDS
                 and len(w) > 2
                 and not w.isdigit()
-                and re.search(r'[a-zA-Z]', w) is not None)
+                and re.search(r"[a-zA-Z]", w) is not None)
 
     candidates_raw = [w for w in all_words_raw if _is_candidate(w.lower())]
 
@@ -952,7 +924,7 @@ def _yake_extract(text: str, top_n: int = 20, window: int = 3) -> list[tuple[str
         if disp_coh_norm > 0:
             yake_scores[w] = pos_case / disp_coh_norm
         else:
-            yake_scores[w] = float('inf')
+            yake_scores[w] = float("inf")
 
     # Sort by score ascending (lower = more important), take top_n
     top = sorted(yake_scores.items(), key=lambda x: x[1])[:top_n]

@@ -55,10 +55,10 @@ from .system_commands import (
     launch_sqlite_viewer as _launch_sqlite_viewer,
 )
 from .system_commands import (
-    launch_xexplorer as _launch_xexplorer,
+    launch_text_summarizer as _launch_text_summarizer,
 )
 from .system_commands import (
-    launch_text_summarizer as _launch_text_summarizer,
+    launch_xexplorer as _launch_xexplorer,
 )
 from .system_commands import (
     log_to_chronos as _log_to_chronos,

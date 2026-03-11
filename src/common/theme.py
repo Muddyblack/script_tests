@@ -410,7 +410,7 @@ class WebThemeBridge:
 
     def _build_js(self) -> str:
         css = self._mgr.build_web_css(self._alpha_variants)
-        return f"document.documentElement.style.cssText = `{css}`;"
+        return f"if (document.documentElement) document.documentElement.style.cssText = `{css}`;"
 
     def _inject_script(self):
         QWebEngineScript = self._QWebEngineScript
@@ -418,7 +418,7 @@ class WebThemeBridge:
         script = QWebEngineScript()
         script.setName(self._SCRIPT_NAME)
         script.setSourceCode(js)
-        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
         script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
         page_scripts = self._view.page().scripts()
         for existing in page_scripts.toList():

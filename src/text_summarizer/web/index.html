@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Text Summarizer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+    <!-- Header -->
+    <div id="header">
+        <span id="logo">Text Summarizer</span>
+        <span class="badge">offline</span>
+        <span class="badge">no AI · pure algorithms</span>
+        
+        <!-- Search Bar -->
+        <div id="search-bar" class="hidden">
+            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>
+            <input type="text" id="search-input" placeholder="Find in page..." oninput="onSearchInput(event)" onkeydown="onSearchKeyDown(event)">
+            <span id="search-count"></span>
+            <button class="search-btn" title="Next" onclick="nextSearch()">&darr;</button>
+            <button class="search-btn" title="Previous" onclick="prevSearch()">&uarr;</button>
+            <button class="search-btn close" title="Close" onclick="closeSearch()">&times;</button>
+        </div>
+
+        <div id="header-actions">
+            <button class="btn-ghost" onclick="pasteClipboard()">Paste</button>
+            <button class="btn-ghost" onclick="clearAll()">Clear</button>
+            <button class="btn-ghost" onclick="copySummary()">Copy Summary</button>
+            <button class="btn-primary" id="run-btn" onclick="runSummarize()">Summarize</button>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controls">
+        <label class="ctrl-lbl">Algorithm</label>
+        <select id="algo-select" onchange="onAlgoChange()">
+            <option value="Hybrid">Hybrid</option>
+        </select>
+
+        <label class="ctrl-lbl">Compression</label>
+        <div class="slider-wrap">
+            <input type="range" id="ratio-slider" min="5" max="80" value="30"
+                   oninput="document.getElementById('ratio-val').textContent=this.value+'%'">
+            <span id="ratio-val">30%</span>
+        </div>
+
+        <label class="toggle-wrap">
+            <input type="checkbox" id="hi-toggle" onchange="onHighlightToggle()">
+            Highlight keywords
+        </label>
+    </div>
+
+    <!-- Algo info card -->
+    <div id="algo-card">
+        <div id="algo-card-name">Hybrid</div>
+        <div id="algo-card-body">
+            <div id="algo-card-short"></div>
+            <div id="algo-card-tip"></div>
+        </div>
+    </div>
+
+    <!-- Split editor -->
+    <div id="split">
+        <div class="pane pane-left">
+            <div class="pane-header">
+                <span class="pane-title">Input</span>
+                <span class="pane-stat" id="in-stat"></span>
+            </div>
+            <textarea id="input-area"
+                placeholder="Paste or type text here…&#10;&#10;Supports any English text — news, academic, technical, prose."
+                oninput="onInputChange()"
+                spellcheck="false"></textarea>
+        </div>
+
+        <div id="resize-handle"></div>
+
+        <div class="pane pane-right">
+            <div class="pane-header">
+                <span class="pane-title">Summary</span>
+                <span class="pane-stat" id="out-stat"></span>
+            </div>
+            <div id="output-area" class="empty"></div>
+        </div>
+    </div>
+
+    <!-- Progress -->
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+
+    <!-- Stats -->
+    <div id="stats">
+        <div class="stat-pill"><span>words</span><span class="sv" id="s-words">—</span></div>
+        <div class="stat-pill"><span>sentences</span><span class="sv" id="s-sents">—</span></div>
+        <div class="stat-pill accent"><span>reduction</span><span class="sv" id="s-ratio">—</span></div>
+        <div class="stat-pill"><span>method</span><span class="sv" id="s-algo">—</span></div>
+    </div>
+
+    <!-- Keywords -->
+    <div id="kw-row">
+        <span id="kw-label">Key Terms</span>
+        <div id="kw-chips"></div>
+    </div>
+
+</div>
+
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
