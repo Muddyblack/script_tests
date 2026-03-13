@@ -15,8 +15,10 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 
+from src.common.config import TEXT_SUMMARIZER_ICON_PATH
 from src.common.theme import ThemeManager, WebThemeBridge, WindowThemeBridge
 from src.common.theme_template import TOOL_SHEET
 
@@ -29,6 +31,8 @@ class TextSummarizerWindow(QMainWindow):
         self.setWindowTitle("Text Summarizer")
         self.setMinimumSize(900, 600)
         self.resize(1200, 760)
+        if os.path.exists(TEXT_SUMMARIZER_ICON_PATH):
+            self.setWindowIcon(QIcon(TEXT_SUMMARIZER_ICON_PATH))
 
         # Set object name for QSS targeting if needed, though TOOL_SHEET uses QMainWindow
         self.setObjectName("TextSummarizerWindow")
