@@ -71,10 +71,9 @@ def create_tray_icon(app, nexus) -> QSystemTrayIcon:
     menu.addAction(xexplorer_action)
 
     summarizer_action = QAction("Text Summarizer", menu)
-    from src.common.config import PROJECT_ROOT
-    ts_icon_path = os.path.join(PROJECT_ROOT, "assets", "text_summarizer.png")
-    if os.path.exists(ts_icon_path):
-        summarizer_action.setIcon(QIcon(ts_icon_path))
+    from src.common.config import TEXT_SUMMARIZER_ICON_PATH
+    if os.path.exists(TEXT_SUMMARIZER_ICON_PATH):
+        summarizer_action.setIcon(QIcon(TEXT_SUMMARIZER_ICON_PATH))
     summarizer_action.triggered.connect(nexus.start_text_summarizer)
     menu.addAction(summarizer_action)
 
