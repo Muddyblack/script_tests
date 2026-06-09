@@ -80,9 +80,16 @@ class SearchEngine:
         limit=3000,
     ):
         """
-        Standard Search across all databases for files/folders matching ALL query_terms (AND logic)
+        Search files/folders with OR-based recall + multi-tier relevance ranking.
+
+        Filter (never misses): at least one term must appear in name OR path.
+        Score per term (summed, higher = more relevant):
+          +20  name starts with term
+          +10  name contains term
+          +1   path contains term (but name does not)
+        Results are ordered by score DESC so best matches always surface first.
         """
-        candidates = []
+        candidates = []  # list of (score, path, is_dir, name, size)
         for db in self.db_paths:
             if not os.path.exists(db):
                 continue
@@ -90,46 +97,87 @@ class SearchEngine:
             try:
                 conn = self._get_connection(db)
                 cursor = conn.cursor()
-                f_conds, f_params = [], []
+                where_params: list = []
+                score_params: list = []
 
+                # WHERE: any term appears anywhere (OR across all terms)
                 if query_terms:
-                    f_conds.append(
-                        "(" + " AND ".join(["name LIKE ?" for _ in query_terms]) + ")"
+                    any_match = " OR ".join(
+                        ["(name LIKE ? OR path LIKE ?)" for _ in query_terms]
                     )
-                    f_params.extend([f"%{t}%" for t in query_terms])
+                    for t in query_terms:
+                        where_params.extend([f"%{t}%", f"%{t}%"])
+                    term_filter = f"({any_match})"
+                else:
+                    term_filter = "1"
 
+                # SCORE: per-term weighted match tiers
+                score_parts = []
+                for t in query_terms:
+                    score_parts.append(
+                        # starts-with bonus
+                        "CASE WHEN name LIKE ? THEN 20 "
+                        # contains-in-name bonus
+                        "WHEN name LIKE ? THEN 10 "
+                        # path-only bonus
+                        "WHEN path LIKE ? THEN 1 "
+                        "ELSE 0 END"
+                    )
+                    score_params.extend([f"{t}%", f"%{t}%", f"%{t}%"])
+                score_expr = " + ".join(score_parts) if score_parts else "0"
+
+                extra_conds = []
+                extra_params: list = []
                 if files_only:
-                    f_conds.append("is_dir = 0")
+                    extra_conds.append("is_dir = 0")
                 elif folders_only:
-                    f_conds.append("is_dir = 1")
+                    extra_conds.append("is_dir = 1")
 
                 if target_folders:
-                    path_conds = ["path LIKE ?" for _ in target_folders]
-                    f_params.extend([f"{p}%" for p in target_folders])
-                    f_conds.append(f"({' OR '.join(path_conds)})")
+                    folder_conds = ["path LIKE ?" for _ in target_folders]
+                    extra_params.extend([f"{p}%" for p in target_folders])
+                    extra_conds.append(f"({' OR '.join(folder_conds)})")
+
+                where_clause = " AND ".join(
+                    [term_filter] + extra_conds
+                ) if extra_conds else term_filter
 
                 sql = (
-                    "SELECT path, is_dir, name, size FROM files WHERE "
-                    + (" AND ".join(f_conds) if f_conds else "1")
-                    + f" LIMIT {limit}"
+                    f"SELECT path, is_dir, name, size, ({score_expr}) AS score "
+                    f"FROM files WHERE {where_clause} "
+                    f"ORDER BY score DESC LIMIT {limit}"
                 )
 
-                cursor.execute(sql, f_params)
-                candidates.extend(cursor.fetchall())
+                cursor.execute(sql, where_params + extra_params + score_params)
+                for row in cursor.fetchall():
+                    candidates.append((row[4], row[0], row[1], row[2], row[3]))
             except Exception:
                 pass
 
-        # Deduplicate candidates across databases (using path as unique key)
-        unique_cands = {}
-        for path, is_dir, name, size in candidates:
-            unique_cands[path] = (path, is_dir, name, size)
+        # Deduplicate across DBs keeping highest score, then sort
+        best: dict[str, tuple] = {}
+        for score, path, is_dir, name, size in candidates:
+            if path not in best or score > best[path][0]:
+                best[path] = (score, path, is_dir, name, size)
 
-        return list(unique_cands.values())
+        return [
+            (path, is_dir, name, size)
+            for _, path, is_dir, name, size in sorted(
+                best.values(), key=lambda x: x[0], reverse=True
+            )
+        ]
 
     def search_content(self, query_terms, target_folders=None, limit=2000):
         """
-        Content Search: searches inside text files for query_terms (AND logic)
+        Content Search: returns text files whose name/path matches the query terms.
+        The DB does not store file contents, so this scans text-extension files
+        whose name or path contains all terms.
         """
+        text_ext_cond = " OR ".join(
+            ["path LIKE ?" for _ in self.text_exts]
+        )
+        text_ext_params = [f"%{ext}" for ext in self.text_exts]
+
         candidates = []
         for db in self.db_paths:
             if not os.path.exists(db):
@@ -138,28 +186,28 @@ class SearchEngine:
             try:
                 conn = self._get_connection(db)
                 cursor = conn.cursor()
-                c_conds, c_params = [], []
+                where_conds = [f"is_dir = 0", f"({text_ext_cond})"]
+                params = list(text_ext_params)
 
                 if query_terms:
-                    c_conds.append(
-                        "("
-                        + " AND ".join(["content LIKE ?" for _ in query_terms])
-                        + ")"
-                    )
-                    c_params.extend([f"%{t}%" for t in query_terms])
+                    per_term = []
+                    for t in query_terms:
+                        per_term.append("(name LIKE ? OR path LIKE ?)")
+                        params.extend([f"%{t}%", f"%{t}%"])
+                    where_conds.append("(" + " AND ".join(per_term) + ")")
 
                 if target_folders:
                     path_conds = ["path LIKE ?" for _ in target_folders]
-                    c_params.extend([f"{p}%" for p in target_folders])
-                    c_conds.append(f"({' OR '.join(path_conds)})")
+                    params.extend([f"{p}%" for p in target_folders])
+                    where_conds.append(f"({' OR '.join(path_conds)})")
 
                 sql = (
                     "SELECT path, is_dir FROM files WHERE "
-                    + (" AND ".join(c_conds) if c_conds else "1")
+                    + " AND ".join(where_conds)
                     + f" LIMIT {limit}"
                 )
 
-                cursor.execute(sql, c_params)
+                cursor.execute(sql, params)
                 candidates.extend(cursor.fetchall())
             except Exception:
                 pass
